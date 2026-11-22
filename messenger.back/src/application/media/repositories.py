@@ -1,0 +1,19 @@
+from uuid import UUID
+
+from ddf.application.repositories import Repository
+
+from src.domain.media import MediaAsset
+
+
+class MediaAssetRepository(Repository[MediaAsset]):
+    async def link_to_message(self, *, message_id: UUID, asset_ids: list[UUID]) -> None: ...
+
+    async def get_attached_message_seq(self, asset_id: UUID) -> int | None: ...
+
+    async def claim_for_scanning(self, *, limit: int = 10) -> list[MediaAsset]: ...
+
+
+# Совместимый алиас для messaging/media use cases и API dependencies.
+MediaRepository = MediaAssetRepository
+
+__all__ = ["MediaAssetRepository", "MediaRepository"]

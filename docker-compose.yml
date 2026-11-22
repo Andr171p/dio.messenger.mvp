@@ -1,0 +1,11 @@
+name: dio-messenger
+
+include:
+  - path: docker/postgres.docker-compose.yml
+    env_file: .env
+  - path: docker/redis.docker-compose.yml
+    env_file: .env
+  - path: docker/rabbitmq.docker-compose.yml
+    env_file: .env
+  - path: docker/rustfs.docker-compose.yml
+    env_file: .env
