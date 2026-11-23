@@ -1,7 +1,16 @@
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def _split_csv(value: object) -> object:
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(",") if part.strip()]
+    return value
+
+
+CsvList = Annotated[list[str], NoDecode, BeforeValidator(_split_csv)]
 
 
 def _default_origins() -> list[str]:
@@ -18,14 +27,7 @@ class CorsConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="MESSENGER_CORS_", frozen=True)
 
-    origins: Annotated[list[str], NoDecode] = Field(default_factory=_default_origins)
+    origins: CsvList = Field(default_factory=_default_origins)
     allow_credentials: bool = Field(default=True)
-    allow_methods: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
-    allow_headers: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
-
-    @field_validator("origins", "allow_methods", "allow_headers", mode="before")
-    @classmethod
-    def _split_csv(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [part.strip() for part in value.split(",") if part.strip()]
-        return value
+    allow_methods: CsvList = Field(default_factory=lambda: ["*"])
+    allow_headers: CsvList = Field(default_factory=lambda: ["*"])
