@@ -46,6 +46,31 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     return memoryAuthStore.getSession();
   }
 
+  async restoreSession(): Promise<AuthSession | null> {
+    const session = memoryAuthStore.getSession();
+    const tokens = memoryAuthStore.getTokens();
+    if (!session || !tokens) {
+      return null;
+    }
+
+    if (Date.now() < tokens.expiresAt - 30_000) {
+      return session;
+    }
+
+    if (!tokens.refreshToken) {
+      memoryAuthStore.clear();
+      return null;
+    }
+
+    try {
+      await this.refresh();
+      return memoryAuthStore.getSession();
+    } catch {
+      memoryAuthStore.clear();
+      return null;
+    }
+  }
+
   async login(credentials: LoginCredentials): Promise<AuthSession> {
     const body = new URLSearchParams();
     body.set("username", credentials.email);
@@ -94,8 +119,8 @@ export class DioDeskAuthAdapter implements AuthAdapter {
 
   async refresh(): Promise<AuthTokens> {
     const current = memoryAuthStore.getTokens();
-    if (!current) {
-      throw new Error("No refresh token in memory");
+    if (!current?.refreshToken) {
+      throw new Error("No refresh token");
     }
 
     const data = await this.http.post<DioDeskTokenResponse>("/api/v1/auth/refresh", {
@@ -105,14 +130,17 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     const tokens: AuthTokens = {
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
-      expiresAt: data.expires_at * 1000,
+      expiresAt:
+        data.expires_at > 1_000_000_000_000
+          ? data.expires_at
+          : data.expires_at * 1000,
     };
 
     const session = memoryAuthStore.getSession();
-    if (session) {
-      memoryAuthStore.setAuth(session, tokens);
+    if (!session) {
+      throw new Error("No session to refresh");
     }
-
+    memoryAuthStore.setAuth(session, tokens);
     return tokens;
   }
 

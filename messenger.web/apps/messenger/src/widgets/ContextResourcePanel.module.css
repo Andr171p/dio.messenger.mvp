@@ -22,6 +22,12 @@
   font-size: 18px;
 }
 
+.title {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+}
+
 .eyebrow {
   margin: 0;
   font-size: 11px;
@@ -52,4 +58,9 @@
   font-size: 12px;
   color: var(--dio-text-secondary);
   line-height: 1.45;
+}
+
+.openDesk {
+  margin-top: var(--dio-space-4);
+  width: 100%;
 }

@@ -14,12 +14,13 @@ export function AppRail() {
   const { session } = useAuth();
   const active = useUiStore((s) => s.navActive);
   const setActive = useUiStore((s) => s.setNavActive);
+  const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
 
   return (
     <nav className={styles.root} aria-label="Навигация DIO Chat">
       <div className={styles.brand} aria-hidden>
-        <Icon name="logo" size={28} title="DIO" />
+        <img className={styles.mark} src="/brand/dios-mark.png" alt="" width={28} height={28} />
       </div>
       <ul className={styles.list}>
         {NAV.map((item) => (
@@ -34,7 +35,7 @@ export function AppRail() {
               aria-current={active === item.id ? "page" : undefined}
               onClick={() => setActive(item.id)}
             >
-              <Icon name={item.icon} size={22} />
+              <Icon name={item.icon} size={20} />
             </button>
           </li>
         ))}
@@ -47,7 +48,7 @@ export function AppRail() {
           aria-label="Сменить тему"
           onClick={toggleTheme}
         >
-          ◐
+          <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
         </Button>
         <Avatar name={session?.displayName ?? "User"} size="sm" />
       </div>

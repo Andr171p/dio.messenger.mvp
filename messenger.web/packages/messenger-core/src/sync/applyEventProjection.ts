@@ -137,6 +137,18 @@ export async function applyEventProjection(
       await db.messages.put({ ...row, reactions });
       break;
     }
+    case "message.pinned":
+    case "message.unpinned": {
+      const messageId = asString(payload.messageId);
+      if (!messageId) return;
+      const row = await db.messages.where("serverId").equals(messageId).first();
+      if (!row || row.accountKey !== accountKey) return;
+      await db.messages.put({
+        ...row,
+        isPinned: event.type === "message.pinned",
+      });
+      break;
+    }
     case "conversation.updated": {
       const conv = await db.conversations.get(event.conversationId);
       await db.conversations.put({

@@ -631,3 +631,19 @@ DIO Messenger должен быстро ощущаться **до** заверш
 | Подход к развитию | Основа чата без компромиссов по качеству; интеллектуальные функции после проверки UX |
 
 **Результат:** Messenger должен позволять общаться так же легко, как в привычном мессенджере, а рабочий контекст раскрывать ровно настолько, насколько он нужен в текущий момент. Без обучения ITSM-интерфейсу ради отправки сообщения и без декоративных эффектов ценой читаемости.
+
+---
+
+## 19. Reference screenshots (MVP mockups)
+
+| Screen | File |
+|---|---|
+| Light shell | [screenshots/01-light-shell.png](screenshots/01-light-shell.png) |
+| Light + context panel | [screenshots/02-light-context-panel.png](screenshots/02-light-context-panel.png) |
+| Light + ticket `#` picker | [screenshots/03-light-ticket-picker.png](screenshots/03-light-ticket-picker.png) |
+| Dark shell | [screenshots/04-dark-shell.png](screenshots/04-dark-shell.png) |
+| Dark + context panel | [screenshots/05-dark-context-panel.png](screenshots/05-dark-context-panel.png) |
+| Wallpaper (dark) | [screenshots/wallpaper-dark.jpg](screenshots/wallpaper-dark.jpg) |
+| Wallpaper source (light/dark composite) | [screenshots/wallpaper-light-dark-composite.jpg](screenshots/wallpaper-light-dark-composite.jpg) |
+
+Итерации реализации UI: [FRONTEND_PRODUCTION_ITERATIONS.md](../development/FRONTEND_PRODUCTION_ITERATIONS.md).

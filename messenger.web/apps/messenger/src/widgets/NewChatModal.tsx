@@ -1,6 +1,6 @@
 import { Button, Input, Spinner } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./NewChatModal.module.css";
@@ -34,6 +34,38 @@ export function NewChatModal() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const root = dialogRef.current;
+    if (!root) return;
+    const selector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusable = root.querySelectorAll<HTMLElement>(selector);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    first?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, setOpen]);
 
   const directory = useQuery({
     queryKey: ["directory", query],
@@ -99,8 +131,10 @@ export function NewChatModal() {
   return (
     <div className={styles.overlay} role="presentation" onClick={() => setOpen(false)}>
       <div
+        ref={dialogRef}
         className={styles.dialog}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="new-chat-title"
         onClick={(e) => e.stopPropagation()}
       >

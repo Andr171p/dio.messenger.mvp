@@ -17,12 +17,16 @@ export async function toggleReaction(
   if (!row || row.accountKey !== accountKey) {
     throw new Error("Message not found");
   }
+  if (!row.serverId) {
+    throw new Error("Message not acknowledged yet");
+  }
 
-  const messageId = row.serverId ?? row.localId;
+  const messageId = row.serverId;
   const now = Date.now();
   const reactions = { ...(row.reactions ?? {}) };
   const users = new Set(reactions[input.emoji] ?? []);
-  if (users.has(input.userId)) {
+  const removing = users.has(input.userId);
+  if (removing) {
     users.delete(input.userId);
   } else {
     users.add(input.userId);
@@ -38,19 +42,20 @@ export async function toggleReaction(
     await db.outbox.put({
       id: crypto.randomUUID(),
       accountKey,
-      type: "reaction.toggle",
+      type: removing ? "reaction.remove" : "reaction.add",
       status: "pending",
       attempts: 0,
       nextAttemptAt: now,
       createdAt: now,
-      command: {
-        type: "reaction.toggle",
-        payload: {
-          conversationId: input.conversationId,
-          messageId,
-          emoji: input.emoji,
-        },
-      },
+      command: removing
+        ? {
+            type: "reaction.remove",
+            payload: { conversationId: input.conversationId, messageId, emoji: input.emoji },
+          }
+        : {
+            type: "reaction.add",
+            payload: { conversationId: input.conversationId, messageId, emoji: input.emoji },
+          },
     });
   });
 }

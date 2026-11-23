@@ -1,25 +1,25 @@
-# Status: Frontend MVP foundation
+# Status: Frontend Messenger Core (production)
 
-- **Дата:** 2026-11-23 (обновлено: Penpot UI + CORS)
+- **Дата:** 2026-11-23
 - **Код:** `messenger.web/`
-- **Макеты:** Penpot «DIO Chat · Макеты MVP» (MCP `user-penpot`)
-- **IAM:** DioDesk `http://localhost:8001`
-- **Messenger API:** `http://127.0.0.1:8002`
-- **Frontend:** `http://127.0.0.1:5173`
+- **Макеты:** `docs/design/screenshots/` + Penpot
+- **Итерации:** [FRONTEND_PRODUCTION_ITERATIONS.md](../development/FRONTEND_PRODUCTION_ITERATIONS.md)
+- **Ревью:** [frontend-review.md](../reviews/frontend-review.md)
 
-## Что сделано
+## Scope закрыт (I0–I7)
 
-| Этап | Результат |
+| Область | Результат |
 |---|---|
-| Penpot tokens | Exact light/dark hex из sets `DIO Chat/*`; Inter 15/22; default **light** |
-| Shell UI | Rail 56 + list 320 + chat + context 352; chips Все/Личные/Группы; red send; patterned canvas; ticket cards |
-| Auth + HTTP | DioDesk form login + userinfo; memory tokens; Bearer + correlationId |
-| Offline core | Dexie + atomic outbox; edit/delete/reaction commands; read-cursor |
-| Sync + WS | Manifest + events; WS ticket; `subscription.subscribe` per conversation; typing |
-| Product UX | Ctrl+K search; new chat modal (directory + direct/group); guest banner; theme toggle |
-| Media + ITSM | Upload session/complete; resource preview panel |
-| Backend CORS | `CORSMiddleware` в `messenger.back/src/main.py` (`MESSENGER_CORS_ORIGINS`) |
-| Hardening | PWA; Vitest; Playwright smoke |
+| Assets | Лого, обои light/dark, send icon; скрины в `docs/design/screenshots/` |
+| Sync security | `access.revoked` → wipe; manifest vs local wipe; compact WS → HTTP delta; snapshot pagination; auth session unify |
+| Drafts | Черновик/reply/edit привязаны к conversationId |
+| Layout | `100dvh`, mobile list→chat→context, virtualizer `measureElement` |
+| Read cursor | Только видимые сообщения + `visibilityState` |
+| API contracts | reply=`serverId`; reactions POST/DELETE; delete ACL+rollback; `dio-desk` preview; media blocks |
+| Design | Rail logo, wallpapers, red send, bubbles/list/context |
+| Chat features | Pins, forward, mentions/`#` pickers, quotes/reply preview, context menu |
+| Presence/typing/receipts | WS ephemeral; typing indicator; ✓/✓✓ |
+| ITSM | Smart card + context panel + «Открыть в DIO Desk» |
 
 ## Как поднять
 
@@ -43,23 +43,36 @@ pnpm --filter @dio/messenger exec vite --host 127.0.0.1 --port 5173
 
 Smoke login: `admin@admin.com` / `admin`.
 
+### Demo users / chats
+
+```bash
+cd messenger.back
+uv run python scripts/seed_demo.py --reset-passwords
+```
+
+| Логин | Пароль | Роль в демо |
+|---|---|---|
+| `admin@admin.com` | `admin` | Админ, создаёт чаты |
+| `anna.smirnova@test.com` | `demo123` | Дежурная / direct |
+| `ivan.petrov@test.com` | `demo123` | Дежурная / Внедрение |
+| `maria.volkova@test.com` | `demo123` | Дежурная / Внедрение |
+
+Сиды: группы **«Дежурная смена»**, **«Внедрение»**, direct с Анной; сообщения, reply, reaction, pin.
+
 ## Проверки
 
-- `pnpm typecheck` / `pnpm build` / `pnpm test`
-- Login → список бесед (live) + статус «На связи · local-first»
-- Send / reply / reactions / delete через outbox
-- Ctrl+K search; ticket `#INC-…` → context panel
+- `pnpm --filter @dio/messenger-core test`
+- `pnpm --filter @dio/messenger typecheck` / `build`
+- Login → список → send / reply / reaction / pin / forward
+- Theme toggle + wallpaper; `#` / `@` pickers; ticket context panel
+- Kick user → local wipe of conversation projection
 
-## Остаток относительно полного Penpot / API
+## Backlog (I8–I14)
 
-- Контекстное меню 1:1 (цитата фрагмента, forward, pin) — частично (reply/edit/delete/reactions)
-- Mentions autocomplete `@` / `#` ticket picker — UI-иконки есть, полный picker ещё нет
-- Threads / polls / scheduled / members overlay — API есть, UI не закрыт
-- Mobile boards из Penpot — desktop-first
-- Media как typed `blocks: [{type:media}]` — upload есть, отправка блока упрощена
+Media lifecycle UX, members/audit overlay, threads, polls, scheduled, in-chat search polish, multi-tab hardening — см. iterations doc.
 
 ## Связанные docs
 
 - [FRONTEND_ARCHITECTURE](../architecture/FRONTEND_ARCHITECTURE.md)
 - [FRONTEND_CODE_STANDARDS](../development/FRONTEND_CODE_STANDARDS.md)
-- [STATUS-backend-pre-frontend](STATUS-backend-pre-frontend.md)
+- [UI_UX_DESIGN](../design/UI_UX_DESIGN.md)

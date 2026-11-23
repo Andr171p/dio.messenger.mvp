@@ -31,3 +31,18 @@
   display: flex;
   gap: var(--dio-space-1);
 }
+
+.backBtn {
+  display: none;
+}
+
+.typing {
+  color: var(--dio-action);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .backBtn {
+    display: inline-flex;
+  }
+}

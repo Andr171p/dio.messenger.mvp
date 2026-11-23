@@ -12,6 +12,13 @@
   margin-bottom: var(--dio-space-2);
 }
 
+.mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
 .list {
   list-style: none;
   margin: 0;

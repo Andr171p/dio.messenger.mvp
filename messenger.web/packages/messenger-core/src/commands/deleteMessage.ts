@@ -4,6 +4,8 @@ import type { MessengerDatabase } from "../storage/database.js";
 export interface DeleteMessageInput {
   conversationId: string;
   localId: string;
+  /** Current user — only own messages may be deleted client-side */
+  authorId: string;
 }
 
 export async function deleteMessage(
@@ -15,8 +17,15 @@ export async function deleteMessage(
   if (!row || row.accountKey !== accountKey) {
     throw new Error("Message not found");
   }
+  if (row.authorId !== input.authorId) {
+    throw new Error("Cannot delete another user's message");
+  }
+  if (!row.serverId) {
+    throw new Error("Message not acknowledged yet");
+  }
 
-  const messageId = row.serverId ?? row.localId;
+  const messageId = row.serverId;
+  const previousContent = row.content;
   const now = Date.now();
 
   await db.transaction("rw", db.messages, db.outbox, async () => {
@@ -38,6 +47,8 @@ export async function deleteMessage(
         payload: {
           conversationId: input.conversationId,
           messageId,
+          localId: input.localId,
+          previousContent,
         },
       },
     });

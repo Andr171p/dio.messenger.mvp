@@ -1,11 +1,11 @@
-import { Button, Icon, Input } from "@dio/messenger-ui";
+import { Button, Input } from "@dio/messenger-ui";
 import { useEffect, useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import styles from "./LoginPage.module.css";
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, ready } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -14,6 +14,10 @@ export function LoginPage() {
   useEffect(() => {
     document.documentElement.setAttribute("data-dio-theme", "light");
   }, []);
+
+  if (!ready) {
+    return null;
+  }
 
   if (isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -35,7 +39,13 @@ export function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.brand}>
-        <Icon name="logo" size={40} />
+        <img
+          src="/brand/dios-mark.png"
+          alt="DIO"
+          width={40}
+          height={40}
+          className={styles.logo}
+        />
         <span>DIO</span>
       </div>
       <form className={styles.card} onSubmit={onSubmit}>

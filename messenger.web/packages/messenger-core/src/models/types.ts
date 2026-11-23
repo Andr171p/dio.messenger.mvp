@@ -13,7 +13,17 @@ export type OutboxOperationType =
   | "message.send"
   | "message.edit"
   | "message.delete"
+  | "reaction.add"
+  | "reaction.remove"
+  | "message.pin"
+  | "message.unpin"
   | "reaction.toggle";
+
+export interface ForwardedFrom {
+  conversationId: string;
+  messageId: string;
+  text?: string;
+}
 
 export interface LocalMessage {
   accountKey: AccountKey;
@@ -22,11 +32,20 @@ export interface LocalMessage {
   conversationId: string;
   serverId?: string;
   content: string;
+  /** Serialized content blocks JSON when richer than plain text */
+  contentBlocks?: string;
   createdAt: number;
   createdSeq?: number;
   revision: number;
   replyToId?: string;
+  replyPreview?: string;
+  quoteText?: string;
+  forwardedFrom?: ForwardedFrom;
+  mentions?: string[];
+  mentionAll?: boolean;
+  isPinned?: boolean;
   sendStatus: MessageSendStatus;
+  deliveryStatus?: "sent" | "delivered" | "read";
   isOutgoing: boolean;
   authorId: string;
   authorDisplayName?: string;
@@ -57,6 +76,7 @@ export interface Draft {
   conversationId: string;
   content: string;
   replyToId?: string;
+  editingMessageId?: string;
   updatedAt: number;
 }
 
@@ -77,14 +97,25 @@ export interface SendMessageOutboxCommand {
   conversationId: string;
   clientMessageId: string;
   content: string;
+  /** Server message UUID; may be unresolved until parent ACK */
   replyToId?: string;
+  replyToLocalId?: string;
+  mentions?: string[];
+  mentionAll?: boolean;
+  forwardedFrom?: ForwardedFrom;
+  quoteText?: string;
+  blocksJson?: string;
 }
 
 export type OutboxCommandPayload =
   | { type: "message.send"; payload: SendMessageOutboxCommand }
   | { type: "message.edit"; payload: { conversationId: string; messageId: string; content: string; expectedRevision: number } }
-  | { type: "message.delete"; payload: { conversationId: string; messageId: string } }
-  | { type: "reaction.toggle"; payload: { conversationId: string; messageId: string; emoji: string } };
+  | { type: "message.delete"; payload: { conversationId: string; messageId: string; localId: string; previousContent: string } }
+  | { type: "reaction.toggle"; payload: { conversationId: string; messageId: string; emoji: string; remove?: boolean } }
+  | { type: "reaction.add"; payload: { conversationId: string; messageId: string; emoji: string } }
+  | { type: "reaction.remove"; payload: { conversationId: string; messageId: string; emoji: string } }
+  | { type: "message.pin"; payload: { conversationId: string; messageId: string } }
+  | { type: "message.unpin"; payload: { conversationId: string; messageId: string } };
 
 export interface SyncCursor {
   accountKey: AccountKey;
@@ -98,7 +129,12 @@ export type ConversationEventType =
   | "message.deleted"
   | "reaction.added"
   | "reaction.removed"
-  | "conversation.updated";
+  | "message.pinned"
+  | "message.unpinned"
+  | "member.joined"
+  | "member.removed"
+  | "conversation.updated"
+  | string;
 
 export interface ConversationEvent {
   conversationId: string;
@@ -106,6 +142,20 @@ export interface ConversationEvent {
   eventId: string;
   type: ConversationEventType;
   payload: Record<string, unknown>;
+  /** Compact WS notify — pull HTTP delta before advancing cursor */
+  compact?: boolean;
+}
+
+export interface PresenceState {
+  userId: string;
+  status: "online" | "offline";
+  lastSeenAt?: number;
+}
+
+export interface TypingState {
+  conversationId: string;
+  userIds: string[];
+  updatedAt: number;
 }
 
 export interface SendMessageAck {

@@ -1,5 +1,5 @@
 import type { AccountKey, SendMessageAck } from "../models/types.js";
-import { textBlocks } from "../content/blocks.js";
+import { parseComposerContent, textBlocks } from "../content/blocks.js";
 import type { MessengerDatabase } from "../storage/database.js";
 import { HttpClient, HttpError } from "../transport/httpClient.js";
 import { reconcileSendAck } from "../sync/reconcileAck.js";
@@ -94,6 +94,21 @@ export class OutboxProcessor {
     }
   }
 
+  private async resolveReplyServerId(
+    replyToId: string | undefined,
+    replyToLocalId: string | undefined,
+  ): Promise<string | undefined> {
+    if (replyToId && looksLikeUuid(replyToId)) {
+      return replyToId;
+    }
+    const localKey = replyToLocalId ?? replyToId;
+    if (!localKey) return undefined;
+    const parent = await this.deps.db.messages.get(localKey);
+    if (parent?.serverId) return parent.serverId;
+    // Still pending ACK — defer
+    return undefined;
+  }
+
   private async processItem(id: string, now: number): Promise<void> {
     const item = await this.deps.db.outbox.get(id);
     if (!item || item.accountKey !== this.deps.accountKey) return;
@@ -112,21 +127,58 @@ export class OutboxProcessor {
 
     try {
       if (item.type === "message.send" && item.command.type === "message.send") {
-        const { conversationId, clientMessageId, content, replyToId } =
-          item.command.payload;
+        const {
+          conversationId,
+          clientMessageId,
+          content,
+          replyToId,
+          replyToLocalId,
+          mentions,
+          mentionAll,
+          forwardedFrom,
+          quoteText,
+          blocksJson,
+        } = item.command.payload;
+
+        const resolvedReply = await this.resolveReplyServerId(replyToId, replyToLocalId);
+        if ((replyToId || replyToLocalId) && !resolvedReply) {
+          // Wait for parent ACK
+          await this.deps.db.outbox.update(id, {
+            status: "pending",
+            nextAttemptAt: Date.now() + 1_500,
+            leaseUntil: undefined,
+            lastError: "waiting_reply_ack",
+          });
+          return;
+        }
 
         await this.deps.db.messages
           .where("[accountKey+clientMessageId]")
           .equals([this.deps.accountKey, clientMessageId])
           .modify({ sendStatus: "sending" });
 
+        const blocks = blocksJson
+          ? (JSON.parse(blocksJson) as unknown[])
+          : parseComposerContent(content);
+
+        const body: Record<string, unknown> = {
+          clientMessageId,
+          blocks,
+        };
+        if (resolvedReply) body.replyToId = resolvedReply;
+        if (mentions?.length) body.mentions = mentions;
+        if (mentionAll) body.mentionAll = true;
+        if (forwardedFrom) body.forwardedFrom = forwardedFrom;
+        if (quoteText) {
+          body.blocks = [
+            { type: "quote", text: quoteText },
+            ...((body.blocks as unknown[]) ?? textBlocks(content)),
+          ];
+        }
+
         const dto = await this.deps.http.post<ServerMessageDTO>(
           `/v1/conversations/${conversationId}/messages`,
-          {
-            clientMessageId,
-            blocks: textBlocks(content),
-            ...(replyToId !== undefined ? { replyToId } : {}),
-          },
+          body,
         );
 
         const ack: SendMessageAck = {
@@ -143,25 +195,67 @@ export class OutboxProcessor {
           `/v1/conversations/${conversationId}/messages/${messageId}`,
           {
             method: "PATCH",
-            json: { blocks: textBlocks(content) },
+            json: { blocks: parseComposerContent(content) },
           },
         );
         await this.deps.db.outbox.delete(id);
       } else if (item.type === "message.delete" && item.command.type === "message.delete") {
-        const { conversationId, messageId } = item.command.payload;
-        await this.deps.http.request(
-          `/v1/conversations/${conversationId}/messages/${messageId}`,
-          { method: "DELETE" },
-        );
-        await this.deps.db.outbox.delete(id);
+        const { conversationId, messageId, localId, previousContent } = item.command.payload;
+        try {
+          await this.deps.http.request(
+            `/v1/conversations/${conversationId}/messages/${messageId}`,
+            { method: "DELETE" },
+          );
+          await this.deps.db.outbox.delete(id);
+        } catch (error) {
+          if (error instanceof HttpError && (error.status === 403 || error.status === 404)) {
+            await this.deps.db.messages.update(localId, {
+              deletedAt: undefined,
+              content: previousContent,
+            });
+            await this.deps.db.outbox.delete(id);
+            return;
+          }
+          throw error;
+        }
       } else if (
-        item.type === "reaction.toggle" &&
-        item.command.type === "reaction.toggle"
+        (item.type === "reaction.toggle" ||
+          item.type === "reaction.add" ||
+          item.type === "reaction.remove") &&
+        (item.command.type === "reaction.toggle" ||
+          item.command.type === "reaction.add" ||
+          item.command.type === "reaction.remove")
       ) {
         const { conversationId, messageId, emoji } = item.command.payload;
-        await this.deps.http.post(
-          `/v1/conversations/${conversationId}/messages/${messageId}/reactions`,
-          { emoji },
+        const remove =
+          item.command.type === "reaction.remove" ||
+          (item.command.type === "reaction.toggle" &&
+            "remove" in item.command.payload &&
+            item.command.payload.remove);
+
+        if (remove) {
+          await this.deps.http.request(
+            `/v1/conversations/${conversationId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+            { method: "DELETE" },
+          );
+        } else {
+          await this.deps.http.post(`/v1/conversations/${conversationId}/reactions`, {
+            messageId,
+            emoji,
+          });
+        }
+        await this.deps.db.outbox.delete(id);
+      } else if (item.type === "message.pin" && item.command.type === "message.pin") {
+        const { conversationId, messageId } = item.command.payload;
+        await this.deps.http.post(`/v1/conversations/${conversationId}/pins`, {
+          messageId,
+        });
+        await this.deps.db.outbox.delete(id);
+      } else if (item.type === "message.unpin" && item.command.type === "message.unpin") {
+        const { conversationId, messageId } = item.command.payload;
+        await this.deps.http.request(
+          `/v1/conversations/${conversationId}/messages/${messageId}/pins`,
+          { method: "DELETE" },
         );
         await this.deps.db.outbox.delete(id);
       } else {
@@ -193,6 +287,12 @@ export class OutboxProcessor {
             .equals([this.deps.accountKey, item.command.payload.clientMessageId])
             .modify({ sendStatus: "failed" });
         }
+        if (item.command.type === "message.delete") {
+          await this.deps.db.messages.update(item.command.payload.localId, {
+            deletedAt: undefined,
+            content: item.command.payload.previousContent,
+          });
+        }
         await this.deps.db.outbox.update(id, {
           status: "failed",
           attempts,
@@ -218,4 +318,10 @@ export class OutboxProcessor {
       });
     }
   }
+}
+
+function looksLikeUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }

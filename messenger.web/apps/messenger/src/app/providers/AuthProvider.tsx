@@ -8,6 +8,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -18,8 +19,11 @@ const dioDeskBase = import.meta.env.VITE_DIODESK_API_URL;
 interface AuthContextValue {
   adapter: AuthAdapter;
   session: AuthSession | null;
+  /** False until restoreSession finishes — avoid flashing /login on reload */
+  ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  onSessionExpired: () => void;
   isAuthenticated: boolean;
 }
 
@@ -27,9 +31,30 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const adapter = useMemo(() => new DioDeskAuthAdapter(dioDeskBase), []);
-  const [session, setSession] = useState<AuthSession | null>(
-    memoryAuthStore.getSession(),
-  );
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const restored = await adapter.restoreSession();
+        if (!cancelled) {
+          setSession(restored);
+        }
+      } catch {
+        if (!cancelled) {
+          memoryAuthStore.clear();
+          setSession(null);
+        }
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [adapter]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -44,15 +69,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
   }, [adapter]);
 
+  const onSessionExpired = useCallback(() => {
+    memoryAuthStore.clear();
+    setSession(null);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       adapter,
       session,
+      ready,
       login,
       logout,
+      onSessionExpired,
       isAuthenticated: !!session,
     }),
-    [adapter, session, login, logout],
+    [adapter, session, ready, login, logout, onSessionExpired],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

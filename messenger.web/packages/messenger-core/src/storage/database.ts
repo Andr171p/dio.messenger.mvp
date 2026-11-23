@@ -34,7 +34,11 @@ const dbCache = new Map<AccountKey, MessengerDatabase>();
 
 export function openMessengerDatabase(accountKey: AccountKey): MessengerDatabase {
   let db = dbCache.get(accountKey);
-  if (!db) {
+  // React Strict Mode may close the DB while useMemo still holds a stale instance.
+  if (!db || !db.isOpen()) {
+    if (db && !db.isOpen()) {
+      dbCache.delete(accountKey);
+    }
     db = new MessengerDatabase(accountKey);
     dbCache.set(accountKey, db);
   }

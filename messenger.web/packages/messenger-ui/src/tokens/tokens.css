@@ -116,6 +116,25 @@ body {
   background-size: 20px 20px;
 }
 
+.dio-chat-canvas {
+  background-color: var(--dio-canvas);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+[data-dio-theme="light"] .dio-chat-canvas {
+  background-image:
+    linear-gradient(rgba(245, 245, 242, 0.72), rgba(245, 245, 242, 0.82)),
+    url("/wallpapers/chat-light.jpg");
+}
+
+[data-dio-theme="dark"] .dio-chat-canvas {
+  background-image:
+    linear-gradient(rgba(32, 35, 32, 0.78), rgba(32, 35, 32, 0.88)),
+    url("/wallpapers/chat-dark.jpg");
+}
+
 .dio-message-text {
   font-size: var(--dio-font-message-size);
   line-height: var(--dio-font-message-line);

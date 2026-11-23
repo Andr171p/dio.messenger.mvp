@@ -12,13 +12,14 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthProvider.js";
 
-const messengerApi = import.meta.env.VITE_MESSENGER_API_URL;
+const messengerApi =
+  import.meta.env.VITE_MESSENGER_API_URL ?? "http://127.0.0.1:8002";
 
 interface RuntimeContextValue {
   db: MessengerDatabase | null;
@@ -31,68 +32,82 @@ interface RuntimeContextValue {
 
 const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 
-export function RuntimeProvider({ children }: { children: ReactNode }) {
-  const { session, adapter, isAuthenticated } = useAuth();
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>({
-    runtime: "idle",
-    wsConnected: false,
-  });
+const idleStatus: SyncStatus = { runtime: "idle", wsConnected: false };
 
-  const runtime = useMemo(() => {
-    if (!session) {
-      return {
+export function RuntimeProvider({ children }: { children: ReactNode }) {
+  const { session, adapter, isAuthenticated, onSessionExpired } = useAuth();
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(idleStatus);
+  const [runtime, setRuntime] = useState<{
+    db: MessengerDatabase | null;
+    sync: SyncEngine | null;
+    http: HttpClient | null;
+    media: MediaUploadManager | null;
+    accountKey: string | null;
+  }>({
+    db: null,
+    sync: null,
+    http: null,
+    media: null,
+    accountKey: null,
+  });
+  const activeAccountRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isAuthenticated || !session) {
+      const prev = activeAccountRef.current;
+      activeAccountRef.current = null;
+      setRuntime({
         db: null,
         sync: null,
         http: null,
         media: null,
         accountKey: null,
-      };
+      });
+      setSyncStatus(idleStatus);
+      if (prev) {
+        void closeMessengerDatabase(prev);
+      }
+      return;
     }
 
-    const db = openMessengerDatabase(session.accountKey);
+    const accountKey = session.accountKey;
+    activeAccountRef.current = accountKey;
+    const db = openMessengerDatabase(accountKey);
     const http = new HttpClient({
       baseUrl: messengerApi,
       getAccessToken: () => adapter.getAccessToken(),
       onUnauthorized: () => {
-        void adapter.refresh().catch(() => adapter.logout());
+        void adapter.refresh().catch(() => {
+          onSessionExpired();
+        });
       },
     });
-
     const wsBase = messengerApi.replace(/^http/, "ws") + "/v1/ws";
     const sync = createSyncEngine({
       db,
-      accountKey: session.accountKey,
+      accountKey,
       http,
       wsBaseUrl: wsBase,
     });
     const media = new MediaUploadManager(http);
 
-    return { db, sync, http, media, accountKey: session.accountKey };
-  }, [session, adapter]);
+    setRuntime({ db, sync, http, media, accountKey });
 
-  useEffect(() => {
-    if (!isAuthenticated || !runtime.sync) {
-      setSyncStatus({ runtime: "idle", wsConnected: false });
-      return;
-    }
-
-    const unsub = runtime.sync.subscribe(setSyncStatus);
-    void runtime.sync.start().catch(() => {
-      setSyncStatus((prev: SyncStatus) => ({
+    const unsub = sync.subscribe(setSyncStatus);
+    void sync.start().catch((error) => {
+      setSyncStatus((prev) => ({
         ...prev,
         runtime: "error",
-        lastError: "Sync start failed",
+        lastError: error instanceof Error ? error.message : "Sync start failed",
       }));
     });
 
     return () => {
       unsub();
-      void runtime.sync?.stop();
-      if (runtime.accountKey) {
-        void closeMessengerDatabase(runtime.accountKey);
-      }
+      void sync.stop();
+      // Keep IndexedDB open across Strict Mode remount; close only on logout.
     };
-  }, [isAuthenticated, runtime]);
+  }, [isAuthenticated, session, adapter, onSessionExpired]);
 
   const value: RuntimeContextValue = {
     db: runtime.db,

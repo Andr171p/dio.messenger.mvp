@@ -9,11 +9,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
+import { MentionTicketPicker } from "./MentionTicketPicker.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import styles from "./MessageComposer.module.css";
 
 export function MessageComposer() {
-  const { db, sync, accountKey, media } = useRuntime();
+  const { db, sync, accountKey, media, http } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const reply = useUiStore((s) => s.replyTarget);
@@ -22,23 +23,37 @@ export function MessageComposer() {
   const setEditing = useUiStore((s) => s.setEditingMessageId);
   const [text, setText] = useState("");
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const draftConvRef = useRef<string | null>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const draft = useLiveQuery(async () => {
     if (!db || !accountKey || !conversationId) return null;
     return db.drafts.get(`${accountKey}::${conversationId}`);
   }, [db, accountKey, conversationId]);
 
+  // Load draft only for the conversation being entered
   useEffect(() => {
-    if (draft?.content && !text && !editingId) {
-      setText(draft.content);
+    if (!conversationId) {
+      setText("");
+      draftConvRef.current = null;
+      return;
     }
-  }, [draft?.content, text, editingId]);
+    if (draftConvRef.current === conversationId) return;
+    draftConvRef.current = conversationId;
+    setText(draft?.content ?? "");
+  }, [conversationId, draft?.content]);
 
+  // Persist draft bound to the conversation that owned the debounce start
   useEffect(() => {
     if (!db || !accountKey || !conversationId || editingId) return;
+    const boundConversationId = conversationId;
+    const boundText = text;
+    const boundReply = reply?.localId;
     const timer = setTimeout(() => {
-      void upsertDraft(db, accountKey, conversationId, text, reply?.localId);
+      if (draftConvRef.current !== boundConversationId) return;
+      void upsertDraft(db, accountKey, boundConversationId, boundText, boundReply);
     }, 300);
     return () => clearTimeout(timer);
   }, [db, accountKey, conversationId, text, reply?.localId, editingId]);
@@ -50,12 +65,25 @@ export function MessageComposer() {
     });
   }, [editingId, db]);
 
+  useEffect(() => {
+    if (!conversationId || !sync || !text) return;
+    sync.sendTyping(conversationId, true);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      sync.sendTyping(conversationId, false);
+    }, 2_500);
+    return () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+    };
+  }, [text, conversationId, sync]);
+
   const onSend = async () => {
     if (!db || !accountKey || !conversationId || !session || !text.trim()) return;
+    const boundConversationId = conversationId;
 
     if (editingId) {
       await editMessage(db, accountKey, {
-        conversationId,
+        conversationId: boundConversationId,
         localId: editingId,
         content: text.trim(),
       });
@@ -66,14 +94,24 @@ export function MessageComposer() {
     }
 
     await sendMessage(db, accountKey, {
-      conversationId,
+      conversationId: boundConversationId,
       content: text.trim(),
       authorId: session.userId,
-      ...(reply?.localId ? { replyToId: reply.localId } : {}),
+      ...(reply
+        ? {
+            replyToLocalId: reply.localId,
+            replyToId: reply.serverId,
+            replyPreview: reply.preview,
+            quoteText: reply.quoteText,
+          }
+        : {}),
     });
-    await clearDraft(db, accountKey, conversationId);
-    setText("");
-    clearReply(null);
+    if (draftConvRef.current === boundConversationId) {
+      await clearDraft(db, accountKey, boundConversationId);
+      setText("");
+      clearReply(null);
+    }
+    sync?.sendTyping(boundConversationId, false);
     sync?.requestFlush();
   };
 
@@ -84,37 +122,28 @@ export function MessageComposer() {
     setUploadNote(`Загрузка ${file.name}…`);
     try {
       const jobId = await media.enqueue(file, conversationId);
-      const waitReady = async () => {
-        for (let i = 0; i < 60; i += 1) {
-          const job = media.getJobs().find((j) => j.id === jobId);
-          if (!job) break;
-          if (job.status === "ready" && job.assetId) {
-            setUploadNote(`Вложение: ${file.name}`);
-            setText((prev) =>
-              prev.trim()
-                ? `${prev}\n[media:${job.assetId}]`
-                : `[media:${job.assetId}]`,
-            );
-            return;
-          }
-          if (job.status === "failed") {
-            setUploadNote(job.error ?? "Ошибка загрузки");
-            return;
-          }
-          await new Promise((r) => setTimeout(r, 500));
+      for (let i = 0; i < 60; i += 1) {
+        const job = media.getJobs().find((j) => j.id === jobId);
+        if (!job) break;
+        if (job.status === "ready" && job.assetId) {
+          setUploadNote(`Вложение: ${file.name}`);
+          setText((prev) =>
+            prev.trim() ? `${prev}\n[media:${job.assetId}]` : `[media:${job.assetId}]`,
+          );
+          return;
         }
-        setUploadNote("Таймаут загрузки");
-      };
-      void waitReady();
+        if (job.status === "failed") {
+          setUploadNote(job.error ?? "Ошибка загрузки");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      setUploadNote("Таймаут загрузки");
     } catch (error) {
       setUploadNote(error instanceof Error ? error.message : "Ошибка загрузки");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
-
-  const insertToken = (token: string) => {
-    setText((prev) => (prev.endsWith(" ") || !prev ? prev + token : `${prev} ${token}`));
   };
 
   if (!conversationId) return null;
@@ -124,7 +153,9 @@ export function MessageComposer() {
       {reply ? (
         <div className={styles.replyBar}>
           <Icon name="reply" size={16} />
-          <span className={styles.replyText}>{reply.preview}</span>
+          <span className={styles.replyText}>
+            {reply.quoteText ? `«${reply.quoteText}»` : reply.preview}
+          </span>
           <button type="button" onClick={() => clearReply(null)}>
             Отмена
           </button>
@@ -133,10 +164,34 @@ export function MessageComposer() {
       {editingId ? (
         <div className={styles.editBar}>
           <Icon name="edit" size={14} /> Редактирование
-          <button type="button" onClick={() => { setEditing(null); setText(""); }}>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null);
+              setText("");
+            }}
+          >
             Отмена
           </button>
         </div>
+      ) : null}
+      {pickerMode ? (
+        <MentionTicketPicker
+          mode={pickerMode}
+          conversationId={conversationId}
+          http={http}
+          query={text}
+          onPick={(token) => {
+            setText((prev) => {
+              if (pickerMode === "mention") {
+                return prev.replace(/@[\w.-]*$/, token + " ");
+              }
+              return prev.replace(/#[\w-]*$/, token + " ");
+            });
+            setPickerMode(null);
+          }}
+          onClose={() => setPickerMode(null)}
+        />
       ) : null}
       <div className={styles.composerRow}>
         <textarea
@@ -144,22 +199,46 @@ export function MessageComposer() {
           value={text}
           rows={2}
           placeholder="Написать сообщение…"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setText(value);
+            if (/@[\w.-]*$/.test(value)) setPickerMode("mention");
+            else if (/#[\w-]*$/.test(value)) setPickerMode("ticket");
+            else setPickerMode(null);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.nativeEvent.isComposing) return;
+            if (pickerMode && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")) {
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey && !pickerMode) {
               e.preventDefault();
               void onSend();
             }
           }}
         />
         <div className={styles.tools}>
-          <button type="button" aria-label="Эмодзи" onClick={() => insertToken("😊 ")}>
+          <button type="button" aria-label="Эмодзи" onClick={() => setText((p) => p + "😊 ")}>
             <Icon name="emoji" size={18} />
           </button>
-          <button type="button" aria-label="Упоминание" onClick={() => insertToken("@")}>
+          <button
+            type="button"
+            aria-label="Упоминание"
+            onClick={() => {
+              setText((p) => (p.endsWith(" ") || !p ? p + "@" : `${p} @`));
+              setPickerMode("mention");
+            }}
+          >
             <Icon name="mention" size={18} />
           </button>
-          <button type="button" aria-label="Хештег" onClick={() => insertToken("#")}>
+          <button
+            type="button"
+            aria-label="Заявка"
+            onClick={() => {
+              setText((p) => (p.endsWith(" ") || !p ? p + "#" : `${p} #`));
+              setPickerMode("ticket");
+            }}
+          >
             <Icon name="hash" size={18} />
           </button>
           <input

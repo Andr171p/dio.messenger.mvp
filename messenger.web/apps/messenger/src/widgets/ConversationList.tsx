@@ -28,7 +28,7 @@ function formatTime(ts?: number): string {
 }
 
 export function ConversationList() {
-  const { db, accountKey, sync } = useRuntime();
+  const { db, accountKey, sync, syncStatus } = useRuntime();
   const search = useUiStore((s) => s.listSearch);
   const setSearch = useUiStore((s) => s.setListSearch);
   const category = useUiStore((s) => s.listCategory);
@@ -40,9 +40,14 @@ export function ConversationList() {
 
   const conversations = useLiveQuery(async () => {
     if (!db || !accountKey) return [] as Conversation[];
-    const rows = await db.conversations.where("accountKey").equals(accountKey).toArray();
-    return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-  }, [db, accountKey]);
+    try {
+      if (!db.isOpen()) return [] as Conversation[];
+      const rows = await db.conversations.where("accountKey").equals(accountKey).toArray();
+      return rows.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+    } catch {
+      return [] as Conversation[];
+    }
+  }, [db, accountKey, syncStatus.lastSyncAt, syncStatus.runtime]);
 
   const visible =
     conversations?.filter((c) => {
@@ -51,6 +56,11 @@ export function ConversationList() {
       if (!search.trim()) return true;
       return c.title.toLowerCase().includes(search.toLowerCase());
     }) ?? [];
+
+  const loading =
+    conversations === undefined ||
+    syncStatus.runtime === "starting" ||
+    syncStatus.runtime === "syncing";
 
   return (
     <div className={styles.root}>
@@ -130,6 +140,15 @@ export function ConversationList() {
           </li>
         ))}
       </ul>
+      {visible.length === 0 ? (
+        <p className={styles.empty}>
+          {loading
+            ? "Загрузка бесед…"
+            : syncStatus.runtime === "error"
+              ? "Не удалось загрузить беседы. Проверьте соединение и обновите страницу."
+              : "Пока нет бесед — создайте новый чат."}
+        </p>
+      ) : null}
     </div>
   );
 }

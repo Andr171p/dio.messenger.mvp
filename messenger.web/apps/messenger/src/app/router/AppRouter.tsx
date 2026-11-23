@@ -4,8 +4,28 @@ import { LoginPage } from "../../pages/LoginPage.js";
 import { useAuth } from "../providers/AuthProvider.js";
 import type { ReactNode } from "react";
 
+function AuthGate({ children }: { children: ReactNode }) {
+  const { ready } = useAuth();
+  if (!ready) {
+    return (
+      <div
+        style={{
+          minHeight: "100dvh",
+          display: "grid",
+          placeItems: "center",
+          color: "var(--dio-text-secondary)",
+        }}
+      >
+        Восстановление сессии…
+      </div>
+    );
+  }
+  return children;
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, ready } = useAuth();
+  if (!ready) return null;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
@@ -15,17 +35,19 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export function AppRouter() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <MessengerShellPage />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+      <AuthGate>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <MessengerShellPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </AuthGate>
     </BrowserRouter>
   );
 }

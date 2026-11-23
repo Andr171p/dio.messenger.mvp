@@ -1,0 +1,37 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dio-space-1);
+  padding: var(--dio-space-2) var(--dio-space-4);
+  background: var(--dio-glass-bg);
+  backdrop-filter: blur(var(--dio-glass-blur));
+  border-bottom: 1px solid var(--dio-border-subtle);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--dio-space-2);
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+  padding: var(--dio-space-1) var(--dio-space-2);
+  border-radius: var(--dio-radius-md);
+  background: var(--dio-field);
+}
+
+.text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unpin {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--dio-text-secondary);
+  padding: 0 4px;
+}

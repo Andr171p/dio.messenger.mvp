@@ -44,6 +44,24 @@ export class MessengerAuthAdapter implements AuthAdapter {
     return memoryAuthStore.getSession();
   }
 
+  async restoreSession(): Promise<AuthSession | null> {
+    const session = memoryAuthStore.getSession();
+    const tokens = memoryAuthStore.getTokens();
+    if (!session || !tokens) return null;
+    if (Date.now() < tokens.expiresAt - 30_000) return session;
+    if (!tokens.refreshToken) {
+      memoryAuthStore.clear();
+      return null;
+    }
+    try {
+      await this.refresh();
+      return memoryAuthStore.getSession();
+    } catch {
+      memoryAuthStore.clear();
+      return null;
+    }
+  }
+
   async login(credentials: LoginCredentials): Promise<AuthSession> {
     const data = await this.http.post<MessengerLoginResponse>("/v1/auth/login", {
       email: credentials.email,

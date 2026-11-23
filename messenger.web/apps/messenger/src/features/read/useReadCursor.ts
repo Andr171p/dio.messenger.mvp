@@ -1,32 +1,55 @@
 import { markConversationRead, type LocalMessage } from "@dio/messenger-core";
+import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 
 export function useReadCursor(
   conversationId: string | null,
   messages: LocalMessage[] | undefined,
+  scrollerRef: RefObject<HTMLElement | null>,
 ) {
   const { db, http, accountKey } = useRuntime();
-  const lastSent = useRef<string | null>(null);
+  const lastSent = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!conversationId || !db || !http || !accountKey || !messages?.length) {
+    lastSent.current = null;
+  }, [conversationId]);
+
+  useEffect(() => {
+    const root = scrollerRef.current;
+    if (!root || !conversationId || !messages?.length || !db || !http || !accountKey) {
       return;
     }
-    const latest = messages.reduce((best, row) => {
-      const seq = row.createdSeq ?? row.createdAt;
-      const bestSeq = best.createdSeq ?? best.createdAt;
-      return seq > bestSeq ? row : best;
-    });
-    const seq = latest.createdSeq;
-    if (seq === undefined) return;
-    const key = `${conversationId}:${seq}`;
-    if (lastSent.current === key) return;
-    lastSent.current = key;
-    void markConversationRead(db, http, accountKey, conversationId, seq).catch(
-      () => {
-        lastSent.current = null;
-      },
-    );
-  }, [conversationId, db, http, accountKey, messages]);
+
+    const markVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const rootRect = root.getBoundingClientRect();
+      let maxSeq = 0;
+      root.querySelectorAll("[data-read-seq]").forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        const visible =
+          rect.bottom > rootRect.top + 8 && rect.top < rootRect.bottom - 8;
+        if (!visible) return;
+        const seq = Number(el.getAttribute("data-read-seq") ?? 0);
+        if (seq > maxSeq) maxSeq = seq;
+      });
+      if (maxSeq <= 0 || lastSent.current === maxSeq) return;
+      lastSent.current = maxSeq;
+      void markConversationRead(db, http, accountKey, conversationId, maxSeq).catch(
+        () => {
+          lastSent.current = null;
+        },
+      );
+    };
+
+    const onScroll = () => markVisible();
+    root.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("visibilitychange", markVisible);
+    markVisible();
+
+    return () => {
+      root.removeEventListener("scroll", onScroll);
+      document.removeEventListener("visibilitychange", markVisible);
+    };
+  }, [conversationId, messages, scrollerRef, db, http, accountKey]);
 }

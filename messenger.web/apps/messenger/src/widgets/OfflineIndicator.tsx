@@ -20,20 +20,45 @@ export function OfflineIndicator() {
   const online = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
   const { syncStatus } = useRuntime();
 
-  if (online && syncStatus.wsConnected && syncStatus.runtime !== "error") {
+  if (!online) {
+    return (
+      <Badge tone="error">
+        <Icon name="offline" size={14} />
+        Нет сети — сообщения сохраняются локально
+      </Badge>
+    );
+  }
+
+  if (syncStatus.runtime === "syncing" || syncStatus.runtime === "starting") {
+    return (
+      <Badge tone="info">
+        <Icon name="offline" size={14} />
+        Синхронизация…
+      </Badge>
+    );
+  }
+
+  if (syncStatus.runtime === "error") {
+    return (
+      <Badge tone="warning">
+        <Icon name="offline" size={14} />
+        Не удалось обновить данные — показан локальный кэш
+      </Badge>
+    );
+  }
+
+  if (syncStatus.wsConnected) {
     return (
       <span className={styles.ok}>
-        <Icon name="check" size={14} /> На связи · local-first
+        <Icon name="check" size={14} /> В сети
       </span>
     );
   }
 
   return (
-    <Badge tone={online ? "warning" : "error"}>
-      <Icon name="offline" size={14} />
-      {online
-        ? "Переподключение к realtime…"
-        : "Офлайн — сообщения остаются в локальной очереди"}
+    <Badge tone="info">
+      <Icon name="check" size={14} />
+      В сети · обновления с небольшой задержкой
     </Badge>
   );
 }

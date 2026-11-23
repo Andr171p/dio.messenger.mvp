@@ -140,3 +140,11 @@
   white-space: nowrap;
   margin-top: 2px;
 }
+
+.empty {
+  margin: var(--dio-space-5) var(--dio-space-4);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--dio-text-secondary);
+  text-align: center;
+}

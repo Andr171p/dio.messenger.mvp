@@ -9,10 +9,21 @@ interface WsTicketResponse {
 
 export type WsEventHandler = (event: ConversationEvent) => void;
 
+export type WsEphemeralHandler = (event: {
+  type: string;
+  payload: Record<string, unknown>;
+}) => void;
+
+export type WsAccessRevokedHandler = (payload: {
+  conversationId: string;
+}) => void;
+
 export interface WebSocketClientOptions {
   http: HttpClient;
   wsBaseUrl: string;
   onConnectionChange?: (connected: boolean) => void;
+  onEphemeral?: WsEphemeralHandler;
+  onAccessRevoked?: WsAccessRevokedHandler;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -21,41 +32,60 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function normalizeEvent(raw: Record<string, unknown>): ConversationEvent | null {
-  const nested = asRecord(raw.payload);
-  const conversationId =
-    (typeof raw.conversationId === "string" && raw.conversationId) ||
-    (nested && typeof nested.conversationId === "string" && nested.conversationId) ||
-    null;
+function pickConversationId(
+  envelope: Record<string, unknown>,
+  payload: Record<string, unknown> | null,
+): string | null {
+  if (typeof envelope.conversationId === "string") return envelope.conversationId;
+  if (payload && typeof payload.conversationId === "string") {
+    return payload.conversationId;
+  }
+  return null;
+}
 
-  const eventSeqRaw = raw.eventSeq ?? raw.seq ?? nested?.eventSeq ?? nested?.seq;
-  const eventSeq =
-    typeof eventSeqRaw === "number"
-      ? eventSeqRaw
-      : typeof eventSeqRaw === "string"
-        ? Number(eventSeqRaw)
-        : NaN;
+function pickEventSeq(
+  envelope: Record<string, unknown>,
+  payload: Record<string, unknown> | null,
+): number | null {
+  const raw = envelope.eventSeq ?? envelope.seq ?? payload?.eventSeq ?? payload?.seq;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && Number.isFinite(Number(raw))) return Number(raw);
+  return null;
+}
 
-  if (!conversationId || !Number.isFinite(eventSeq)) {
+/**
+ * Normalize durable WS frames. Keeps outer envelope `type` (never default to message.created).
+ * Compact fanout payloads live in envelope.payload.
+ */
+export function normalizeDurableEvent(
+  envelope: Record<string, unknown>,
+): ConversationEvent | null {
+  const type = typeof envelope.type === "string" ? envelope.type : "";
+  if (!type || type.startsWith("subscription.") || type === "access.revoked") {
+    return null;
+  }
+  if (type.startsWith("typing.") || type.startsWith("presence.") || type.startsWith("receipt.")) {
     return null;
   }
 
-  const type =
-    (typeof raw.type === "string" && raw.type !== "event" ? raw.type : null) ||
-    (nested && typeof nested.type === "string" ? nested.type : null) ||
-    "message.created";
-
-  const payload =
-    nested && (nested.payload === undefined || typeof nested.payload === "object")
-      ? ((nested.payload as Record<string, unknown> | undefined) ?? nested)
-      : raw;
+  const payload = asRecord(envelope.payload) ?? {};
+  const conversationId = pickConversationId(envelope, payload);
+  const eventSeq = pickEventSeq(envelope, payload);
+  if (!conversationId || eventSeq === null) {
+    return null;
+  }
 
   return {
     conversationId,
     eventSeq,
-    eventId: String(raw.eventId ?? raw.id ?? nested?.id ?? crypto.randomUUID()),
+    eventId: String(envelope.id ?? envelope.eventId ?? payload.id ?? crypto.randomUUID()),
     type: type as ConversationEvent["type"],
-    payload,
+    payload: {
+      ...payload,
+      conversationId,
+      eventSeq,
+    },
+    compact: true,
   };
 }
 
@@ -65,6 +95,8 @@ export class WebSocketClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = true;
   private conversationKeys = new Set<string>();
+  private presencePingTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectAttempt = 0;
 
   constructor(private readonly options: WebSocketClientOptions) {}
 
@@ -101,20 +133,50 @@ export class WebSocketClient {
     );
   }
 
+  sendPresencePing(): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        type: "presence.ping",
+        payload: {},
+      }),
+    );
+  }
+
   async connect(): Promise<void> {
     this.stopped = false;
+    this.reconnectAttempt = 0;
     await this.openSocket();
   }
 
   disconnect(): void {
     this.stopped = true;
+    this.reconnectAttempt = 0;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.presencePingTimer) {
+      clearInterval(this.presencePingTimer);
+      this.presencePingTimer = null;
+    }
     this.socket?.close();
     this.socket = null;
     this.options.onConnectionChange?.(false);
+  }
+
+  private scheduleReconnect(): void {
+    if (this.stopped || this.reconnectTimer) return;
+    const attempt = this.reconnectAttempt;
+    this.reconnectAttempt = Math.min(attempt + 1, 8);
+    const delay = Math.min(30_000, 1_000 * 2 ** attempt);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.openSocket().catch(() => {
+        this.scheduleReconnect();
+      });
+    }, delay);
   }
 
   private sendSubscribe(conversationId: string): void {
@@ -137,7 +199,15 @@ export class WebSocketClient {
   private async openSocket(): Promise<void> {
     if (this.stopped) return;
 
-    const { ticket } = await this.options.http.post<WsTicketResponse>("/v1/ws/tickets");
+    let ticket: string;
+    try {
+      const response = await this.options.http.post<WsTicketResponse>("/v1/ws/tickets");
+      ticket = response.ticket;
+    } catch {
+      this.options.onConnectionChange?.(false);
+      this.scheduleReconnect();
+      return;
+    }
 
     const url = new URL(this.options.wsBaseUrl);
     url.searchParams.set("ticket", ticket);
@@ -146,46 +216,65 @@ export class WebSocketClient {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
+      this.reconnectAttempt = 0;
       this.options.onConnectionChange?.(true);
       this.resubscribeAll();
+      this.sendPresencePing();
+      if (this.presencePingTimer) clearInterval(this.presencePingTimer);
+      this.presencePingTimer = setInterval(() => this.sendPresencePing(), 30_000);
     });
 
     socket.addEventListener("message", (message) => {
       try {
         const envelope = JSON.parse(String(message.data)) as Record<string, unknown>;
         const type = typeof envelope.type === "string" ? envelope.type : "";
-        if (
-          type.startsWith("subscription.") ||
-          type.startsWith("typing.") ||
-          type.startsWith("presence.")
-        ) {
+        const payload = asRecord(envelope.payload) ?? {};
+
+        if (type.startsWith("subscription.") || type === "typing.ack" || type === "presence.pong") {
           return;
         }
 
-        const candidates: Record<string, unknown>[] = [envelope];
-        const payload = asRecord(envelope.payload);
-        if (payload) candidates.unshift(payload);
-
-        for (const candidate of candidates) {
-          const event = normalizeEvent(candidate);
-          if (!event) continue;
-          for (const handler of this.handlers) {
-            handler(event);
+        if (type === "access.revoked") {
+          const conversationId = pickConversationId(envelope, payload);
+          if (conversationId) {
+            this.options.onAccessRevoked?.({ conversationId });
           }
-          break;
+          return;
+        }
+
+        if (
+          type === "typing.updated" ||
+          type === "presence.changed" ||
+          type === "receipt.delivered_updated" ||
+          type.startsWith("typing.") ||
+          type.startsWith("presence.") ||
+          type.startsWith("receipt.")
+        ) {
+          this.options.onEphemeral?.({ type, payload: { ...payload, type } });
+          return;
+        }
+
+        const event = normalizeDurableEvent(envelope);
+        if (!event) return;
+        for (const handler of this.handlers) {
+          handler(event);
         }
       } catch {
-        // ignore malformed frames in MVP
+        // ignore malformed frames
       }
     });
 
     socket.addEventListener("close", () => {
       this.options.onConnectionChange?.(false);
-      if (!this.stopped) {
-        this.reconnectTimer = setTimeout(() => {
-          void this.openSocket();
-        }, 2_000);
+      if (this.presencePingTimer) {
+        clearInterval(this.presencePingTimer);
+        this.presencePingTimer = null;
       }
+      this.scheduleReconnect();
+    });
+
+    socket.addEventListener("error", () => {
+      // close handler schedules reconnect
     });
   }
 }
