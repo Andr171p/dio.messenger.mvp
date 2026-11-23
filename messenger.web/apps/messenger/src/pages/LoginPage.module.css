@@ -1,0 +1,53 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dio-space-5);
+  padding: var(--dio-space-5);
+  background: var(--dio-canvas);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--dio-space-2);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dio-text);
+}
+
+.card {
+  width: min(400px, 100%);
+  background: var(--dio-sidebar);
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-lg);
+  padding: var(--dio-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dio-space-3);
+  box-shadow: var(--dio-shadow-sm);
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+}
+
+.subtitle {
+  margin: 0 0 var(--dio-space-2);
+  color: var(--dio-text-secondary);
+  font-size: 14px;
+}
+
+.error {
+  margin: 0;
+  color: var(--dio-action);
+  font-size: 13px;
+}
+
+.submit {
+  width: 100%;
+  margin-top: var(--dio-space-2);
+}

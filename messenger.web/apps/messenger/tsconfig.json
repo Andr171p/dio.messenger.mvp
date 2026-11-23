@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "noPropertyAccessFromIndexSignature": false,
+    "baseUrl": ".",
+    "paths": {
+      "@dio/messenger-core": ["../../packages/messenger-core/src/index.ts"],
+      "@dio/messenger-ui": ["../../packages/messenger-ui/src/index.ts"]
+    }
+  },
+  "include": ["src"],
+  "references": []
+}

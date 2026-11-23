@@ -3,7 +3,9 @@
 import logging
 
 from fastapi import FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.config import CorsConfig
 from src.api.exception_handlers import register_exception_handlers
 from src.api.lifespan import lifespan
 from src.api.middleware import WsContainerMiddleware
@@ -16,6 +18,15 @@ app = FastAPI(
     title="DIO Messenger",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+cors = CorsConfig()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors.origins,
+    allow_credentials=cors.allow_credentials,
+    allow_methods=cors.allow_methods,
+    allow_headers=cors.allow_headers,
 )
 app.add_middleware(WsContainerMiddleware, container=ws_container)
 app.include_router(router)

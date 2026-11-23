@@ -1,0 +1,23 @@
+.root {
+  display: inline-block;
+  border-radius: 50%;
+  border: 2px solid var(--dio-border);
+  border-top-color: var(--dio-action);
+  animation: spin 0.75s linear infinite;
+}
+
+.sm {
+  width: 16px;
+  height: 16px;
+}
+
+.md {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

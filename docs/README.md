@@ -10,6 +10,8 @@
 3. [**development/TEST_PLAN.md**](development/TEST_PLAN.md) — integration/e2e/load/security и показатели SLO.
 4. [**development/CODE_STANDARDS.md**](development/CODE_STANDARDS.md) — как писать код и контракты MVP.
 5. [**design/UI_UX_DESIGN.md**](design/UI_UX_DESIGN.md) — UI/UX спецификация.
+5a. [**architecture/FRONTEND_ARCHITECTURE.md**](architecture/FRONTEND_ARCHITECTURE.md) · [**development/FRONTEND_CODE_STANDARDS.md**](development/FRONTEND_CODE_STANDARDS.md) — frontend.
+5b. [**status/STATUS-frontend-mvp.md**](status/STATUS-frontend-mvp.md) — статус frontend MVP.
 6. [**adr/**](adr/) — Architecture Decision Records (устойчивые решения с trade-offs).
 7. [**decisions/**](decisions/) — рабочие решения итераций (не ADR).
 8. [**status/**](status/) — отчёты о реализации и проверках по итерациям.

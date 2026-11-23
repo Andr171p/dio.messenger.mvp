@@ -1,0 +1,128 @@
+openapi: 3.1.0
+info:
+  title: DIO Messenger API (stub)
+  version: 0.1.0
+paths:
+  /v1/sync/manifest:
+    get:
+      operationId: getSyncManifest
+      responses:
+        "200":
+          description: Sync manifest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyncManifest"
+  /v1/conversations/{conversationId}/events:
+    get:
+      operationId: getConversationEvents
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: afterSeq
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Conversation events delta
+        "409":
+          description: snapshot_required
+  /v1/conversations/{conversationId}/messages:
+    post:
+      operationId: sendMessage
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "201":
+          description: Message committed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMessageResponse"
+  /v1/ws/tickets:
+    post:
+      operationId: createWsTicket
+      responses:
+        "201":
+          description: WebSocket ticket
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WsTicket"
+components:
+  schemas:
+    SyncManifest:
+      type: object
+      required: [conversations]
+      properties:
+        conversations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManifestConversation"
+    ManifestConversation:
+      type: object
+      required: [id, lastEventSeq]
+      properties:
+        id:
+          type: string
+          format: uuid
+        lastEventSeq:
+          type: integer
+          minimum: 0
+        title:
+          type: string
+        isGuest:
+          type: boolean
+    SendMessageRequest:
+      type: object
+      required: [clientMessageId, content]
+      properties:
+        clientMessageId:
+          type: string
+          format: uuid
+        content:
+          type: string
+        replyToId:
+          type: string
+          format: uuid
+    SendMessageResponse:
+      type: object
+      required: [messageId, clientMessageId, createdSeq, eventSeq]
+      properties:
+        messageId:
+          type: string
+          format: uuid
+        clientMessageId:
+          type: string
+          format: uuid
+        createdSeq:
+          type: integer
+        eventSeq:
+          type: integer
+    WsTicket:
+      type: object
+      required: [ticket, expiresAt]
+      properties:
+        ticket:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time

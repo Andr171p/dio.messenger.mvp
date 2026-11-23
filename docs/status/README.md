@@ -19,5 +19,6 @@
 | [STATUS-threads-polls-scheduled.md](STATUS-threads-polls-scheduled.md) | Threads, polls, scheduled |
 | [STATUS-hardening.md](STATUS-hardening.md) | Observability, load/fault checklist |
 | [STATUS-verification.md](STATUS-verification.md) | P0–P8 verification report |
+| [STATUS-frontend-mvp.md](STATUS-frontend-mvp.md) | Frontend MVP foundation (`messenger.web`) |
 
 **Правило:** новый `STATUS-*.md` добавлять сюда в таблицу; ссылку на связанный DEC — относительную (`../decisions/...`).

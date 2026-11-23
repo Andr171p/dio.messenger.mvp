@@ -1,0 +1,142 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.header {
+  padding: var(--dio-space-4) var(--dio-space-4) var(--dio-space-3);
+  border-bottom: 1px solid var(--dio-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dio-space-3);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  color: var(--dio-text-secondary);
+  pointer-events: none;
+}
+
+.searchField input {
+  padding-left: 36px;
+  padding-right: 72px;
+}
+
+.kbdHint {
+  position: absolute;
+  right: 8px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-sm);
+  background: var(--dio-sidebar);
+  color: var(--dio-text-secondary);
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.chips {
+  display: flex;
+  gap: var(--dio-space-2);
+}
+
+.chip {
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-full);
+  background: var(--dio-field);
+  color: var(--dio-text-secondary);
+  font-size: 13px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.chipActive {
+  background: var(--dio-accent-muted);
+  color: var(--dio-action);
+  border-color: transparent;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: var(--dio-space-2);
+  overflow: auto;
+  flex: 1;
+}
+
+.item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--dio-space-3);
+  border: none;
+  background: transparent;
+  border-radius: var(--dio-radius-md);
+  padding: var(--dio-space-2) var(--dio-space-3);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.item:hover {
+  background: var(--dio-field);
+}
+
+.selected {
+  background: var(--dio-selection);
+}
+
+.meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dio-space-2);
+}
+
+.name {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time {
+  font-size: 12px;
+  color: var(--dio-text-secondary);
+  flex-shrink: 0;
+}
+
+.preview {
+  display: block;
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}

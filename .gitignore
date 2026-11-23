@@ -13,6 +13,16 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# Node / frontend
+node_modules/
+messenger.web/**/dist/
+messenger.web/**/dev-dist/
+messenger.web/**/coverage/
+messenger.web/**/test-results/
+messenger.web/**/playwright-report/
+**/.vite/
+*.tsbuildinfo
+
 # VirtualEnv
 venv/
 .env/

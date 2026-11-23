@@ -1,0 +1,132 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Light theme (default) */
+:root,
+[data-dio-theme="light"] {
+  --dio-canvas: #f5f5f2;
+  --dio-sidebar: #ffffff;
+  --dio-rail: #f7f7f4;
+  --dio-surface: #ffffff;
+  --dio-action: #b62437;
+  --dio-on-action: #ffffff;
+  --dio-text: #182230;
+  --dio-text-secondary: #626c7b;
+  --dio-border: #e4e8e3;
+  --dio-border-subtle: #e4e8e3;
+  --dio-field: #f2f3ef;
+  --dio-selection: #f6e8e7;
+  --dio-bright: #182230;
+  --dio-bubble-incoming: #fcfdfb;
+  --dio-bubble-outgoing: #eaf4ee;
+  --dio-status-success: #366148;
+  --dio-pale: #e6efe3;
+  --dio-warm: #785223;
+  --dio-status-warning: #faedd5;
+  --dio-warm-text: #785223;
+  --dio-status-error: #b62437;
+  --dio-status-info: #626c7b;
+  --dio-pattern: #e2e5dc;
+  --dio-details: #f7f8f6;
+  --dio-accent-muted: rgba(182, 36, 55, 0.12);
+  --dio-focus-ring: #b62437;
+  --dio-overlay: rgba(24, 34, 48, 0.35);
+  --dio-glass-bg: rgba(255, 255, 255, 0.78);
+  --dio-glass-blur: 12px;
+  --dio-shadow-sm: 0 1px 2px rgba(24, 34, 48, 0.06);
+  --dio-radius-sm: 6px;
+  --dio-radius-md: 10px;
+  --dio-radius-lg: 16px;
+  --dio-radius-xl: 20px;
+  --dio-radius-full: 9999px;
+  --dio-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --dio-font-message-size: 15px;
+  --dio-font-message-line: 22px;
+  --dio-space-1: 4px;
+  --dio-space-2: 8px;
+  --dio-space-3: 12px;
+  --dio-space-4: 16px;
+  --dio-space-5: 24px;
+  --dio-rail-width: 56px;
+  --dio-list-width: 320px;
+  --dio-context-width: 352px;
+  color-scheme: light;
+}
+
+[data-dio-theme="dark"] {
+  --dio-canvas: #202320;
+  --dio-sidebar: #242624;
+  --dio-rail: #1c1c1c;
+  --dio-surface: #31322f;
+  --dio-action: #bb252d;
+  --dio-on-action: #ffffff;
+  --dio-text: #f2f3f0;
+  --dio-text-secondary: #c1cbc3;
+  --dio-border: #454c45;
+  --dio-border-subtle: #454c45;
+  --dio-field: #31322f;
+  --dio-selection: #462d31;
+  --dio-bright: #ffa5af;
+  --dio-bubble-incoming: #303430;
+  --dio-bubble-outgoing: #304438;
+  --dio-status-success: #c1ddbb;
+  --dio-pale: #334536;
+  --dio-warm: #f3d7a6;
+  --dio-status-warning: #493d2b;
+  --dio-warm-text: #f3d7a6;
+  --dio-status-error: #ffa5af;
+  --dio-status-info: #c1cbc3;
+  --dio-pattern: #2b2c28;
+  --dio-details: #252925;
+  --dio-accent-muted: rgba(187, 37, 45, 0.22);
+  --dio-focus-ring: #ffa5af;
+  --dio-overlay: rgba(0, 0, 0, 0.55);
+  --dio-glass-bg: rgba(36, 38, 36, 0.82);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--dio-font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--dio-text);
+  background: var(--dio-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+.dio-glass {
+  background: var(--dio-glass-bg);
+  backdrop-filter: blur(var(--dio-glass-blur));
+  -webkit-backdrop-filter: blur(var(--dio-glass-blur));
+}
+
+.dio-chat-pattern {
+  background-color: var(--dio-canvas);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    var(--dio-pattern) 1px,
+    transparent 0
+  );
+  background-size: 20px 20px;
+}
+
+.dio-message-text {
+  font-size: var(--dio-font-message-size);
+  line-height: var(--dio-font-message-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
