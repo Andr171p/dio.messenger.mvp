@@ -1,7 +1,7 @@
 # Status: Presence / typing / reactions
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0005](decisions/DEC-0005-presence-typing-reactions.md)
+- **Решение:** [DEC-0005](../decisions/DEC-0005-presence-typing-reactions.md)
 - **Миграция:** `c3d4e5f6a7b8` (`message_reactions`)
 
 ## Typing / presence (ephemeral)

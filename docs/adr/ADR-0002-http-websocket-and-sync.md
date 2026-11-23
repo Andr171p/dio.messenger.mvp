@@ -2,7 +2,7 @@
 
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
-- **Контекст:** [ARCHITECTURE.md](../ARCHITECTURE.md), разделы 7–11
+- **Контекст:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md), разделы 7–11
 
 ## Контекст
 

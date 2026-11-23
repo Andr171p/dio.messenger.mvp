@@ -3,7 +3,7 @@
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
 - **Тип:** working decision
-- **Контекст:** [ARCHITECTURE.md](../ARCHITECTURE.md) §2; запрос продукта перенести MVP+ в Core
+- **Контекст:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) §2; запрос продукта перенести MVP+ в Core
 
 ## Решение
 

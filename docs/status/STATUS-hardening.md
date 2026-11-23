@@ -1,7 +1,7 @@
 # Status: Hardening / observability (Session 8)
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0016](decisions/DEC-0016-hardening-observability.md)
+- **Решение:** [DEC-0016](../decisions/DEC-0016-hardening-observability.md)
 
 ## Observability
 

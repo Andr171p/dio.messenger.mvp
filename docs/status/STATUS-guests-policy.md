@@ -1,7 +1,7 @@
 # Status: Guests / ConversationPolicy / IAM adapter
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0009](decisions/DEC-0009-guests-and-conversation-policy.md)
+- **Решение:** [DEC-0009](../decisions/DEC-0009-guests-and-conversation-policy.md)
 
 ## API
 

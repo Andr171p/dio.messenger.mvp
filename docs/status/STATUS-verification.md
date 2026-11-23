@@ -68,7 +68,7 @@ pytest tests/integration -q
 
 ## P3 — Multi-instance
 
-Runbook: [`messenger.back/scripts/verification/multi_instance.md`](../messenger.back/scripts/verification/multi_instance.md)
+Runbook: [`messenger.back/scripts/verification/multi_instance.md`](../../messenger.back/scripts/verification/multi_instance.md)
 
 Verified this session:
 
@@ -93,7 +93,7 @@ k6 thresholds: `send_1to1` / `search` `p(95)<500` — **pass**; busy `error rate
 
 ## P5 — Fault drills
 
-Runbook: [`messenger.back/scripts/verification/fault_drills.md`](../messenger.back/scripts/verification/fault_drills.md)
+Runbook: [`messenger.back/scripts/verification/fault_drills.md`](../../messenger.back/scripts/verification/fault_drills.md)
 
 | Drill | Status |
 |-------|--------|
@@ -110,7 +110,7 @@ Runbook: [`messenger.back/scripts/verification/fault_drills.md`](../messenger.ba
 
 **Rate limiting:** **gap** — no API/WS rate limits in code; documented as open risk for pilot (WAF/proxy recommended).
 
-**Logging hygiene:** checklist in [`backup_restore.md`](../messenger.back/scripts/verification/backup_restore.md) — sample before pilot.
+**Logging hygiene:** checklist in [`backup_restore.md`](../../messenger.back/scripts/verification/backup_restore.md) — sample before pilot.
 
 **Backup/restore:** runbook ready (`pg_dump` / `pg_restore`).
 

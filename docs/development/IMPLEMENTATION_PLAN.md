@@ -1,7 +1,7 @@
 # DIO Messenger — Implementation Plan (MVP)
 
 > **Статус:** проектный план. Не содержит календарных обещаний.  
-> **Основная спецификация:** [ARCHITECTURE.md](ARCHITECTURE.md)
+> **Основная спецификация:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md)
 
 ## Принцип работы
 

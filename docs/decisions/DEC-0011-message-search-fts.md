@@ -3,7 +3,7 @@
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
 - **Тип:** working decision
-- **Контекст:** [ARCHITECTURE.md](../ARCHITECTURE.md) §14; MVP Session 3
+- **Контекст:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) §14; MVP Session 3
 
 ## Решение
 

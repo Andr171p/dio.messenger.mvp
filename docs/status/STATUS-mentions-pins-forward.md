@@ -1,7 +1,7 @@
 # Status: Mentions / pins / forward
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0010](decisions/DEC-0010-mentions-pins-forward.md)
+- **Решение:** [DEC-0010](../decisions/DEC-0010-mentions-pins-forward.md)
 - **Миграция:** `f6a7b8c9d0e1` (`message_pins`)
 
 ## Mentions (send path)

@@ -1,7 +1,7 @@
 # Status: ITSM / DioDesk tickets integration
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0007](decisions/DEC-0007-itsm-tickets-integration.md)
+- **Решение:** [DEC-0007](../decisions/DEC-0007-itsm-tickets-integration.md)
 
 ## Сделано (срезы 1–4)
 

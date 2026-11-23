@@ -3,7 +3,7 @@
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
 - **Тип:** working decision (не ADR)
-- **Контекст:** [IMPLEMENTATION_PLAN.md](../IMPLEMENTATION_PLAN.md) Этап 2; [ADR-0002](../adr/ADR-0002-http-websocket-and-sync.md); [ADR-0003](../adr/ADR-0003-transactional-outbox-and-realtime.md)
+- **Контекст:** [IMPLEMENTATION_PLAN.md](../development/IMPLEMENTATION_PLAN.md) Этап 2; [ADR-0002](../adr/ADR-0002-http-websocket-and-sync.md); [ADR-0003](../adr/ADR-0003-transactional-outbox-and-realtime.md)
 
 ## Решение
 

@@ -1,7 +1,7 @@
 # DIO Messenger — Testing & SLO Verification Plan
 
 > **Цель:** доказать durability, ACL isolation, offline correctness и latency на нескольких инстансах.  
-> **Спецификация:** [ARCHITECTURE.md](ARCHITECTURE.md) · [Outbox ADR](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0003-transactional-outbox-and-realtime.md)
+> **Спецификация:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) · [Outbox ADR](../adr/ADR-0003-transactional-outbox-and-realtime.md)
 
 ## 1. Категории
 

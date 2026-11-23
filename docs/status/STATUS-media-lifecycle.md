@@ -1,7 +1,7 @@
 # Status: Media lifecycle (Session 4)
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0012](decisions/DEC-0012-media-lifecycle-worker.md)
+- **Решение:** [DEC-0012](../decisions/DEC-0012-media-lifecycle-worker.md)
 
 ## Сделано
 

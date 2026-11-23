@@ -4,7 +4,7 @@
 > **Дата:** 2026-11-22  
 > **Назначение:** единый документ продукта и технического дизайна  
 > **Система:** DIO Messenger — коммуникационная платформа экосистемы DIOS, интегрированная с DIO Service-Desk  
-> **Ссылки:** [Реестр документов](../../../../Downloads/DIO_Messenger_docs/docs/README.md) · [ADR-0003: Outbox](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0003-transactional-outbox-and-realtime.md) · [План](../../../../Downloads/DIO_Messenger_docs/docs/IMPLEMENTATION_PLAN.md) · [Тестирование](../../../../Downloads/DIO_Messenger_docs/docs/TEST_PLAN.md)
+> **Ссылки:** [Реестр документов](../README.md) · [ADR-0003: Outbox](../adr/ADR-0003-transactional-outbox-and-realtime.md) · [План](../development/IMPLEMENTATION_PLAN.md) · [Тестирование](../development/TEST_PLAN.md)
 
 ## 1. Контекст и продуктовая идея
 
@@ -301,7 +301,7 @@ sequenceDiagram
 
 Альтернатива **Broker-first** (`API → RabbitMQ ACK → async persist`) не выбрана: усложняет момент, когда сообщение становится доступным в истории, стабильный порядок, idempotency и бизнес-инварианты. Корректный broker-first возможен при иной архитектуре, где durable broker log и protocol of record явно определены; просто вернуть `200` после TCP publish недостаточно.
 
-**Будущая опция:** fast path после commit (`Redis Pub/Sub` best-effort + durable outbox path), только если замеры показывают несоответствие recipient delivery p95. Дубли и reorder в fast/reliable путях допускаются и устраняются на клиенте. Подробности и риски: [ADR-0003](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0003-transactional-outbox-and-realtime.md).
+**Будущая опция:** fast path после commit (`Redis Pub/Sub` best-effort + durable outbox path), только если замеры показывают несоответствие recipient delivery p95. Дубли и reorder в fast/reliable путях допускаются и устраняются на клиенте. Подробности и риски: [ADR-0003](../adr/ADR-0003-transactional-outbox-and-realtime.md).
 
 ### 8.3. Ordering across workers
 

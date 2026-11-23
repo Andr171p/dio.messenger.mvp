@@ -1,7 +1,7 @@
 # Status: Stage 2 — Outbox + WebSocket + Sync
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0004](decisions/DEC-0004-stage2-outbox-ws-sync.md)
+- **Решение:** [DEC-0004](../decisions/DEC-0004-stage2-outbox-ws-sync.md)
 
 ## Что сделано
 

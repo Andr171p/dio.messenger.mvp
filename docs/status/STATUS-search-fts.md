@@ -1,7 +1,7 @@
 # Status: PostgreSQL FTS search
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0011](decisions/DEC-0011-message-search-fts.md)
+- **Решение:** [DEC-0011](../decisions/DEC-0011-message-search-fts.md)
 - **Миграция:** `g7a8b9c0d1e2` (`2026_11_22_0006-message_search_fts.py`)
 
 ## HTTP

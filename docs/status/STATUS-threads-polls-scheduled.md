@@ -1,7 +1,7 @@
 # Status: Threads / polls / scheduled
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0015](decisions/DEC-0015-threads-polls-scheduled.md)
+- **Решение:** [DEC-0015](../decisions/DEC-0015-threads-polls-scheduled.md)
 - **Миграция:** `h8b9c0d1e2f3` (`0008-threads-polls-scheduled`)
 
 ## Threads

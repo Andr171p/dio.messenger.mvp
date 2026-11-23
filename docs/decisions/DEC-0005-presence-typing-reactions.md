@@ -3,7 +3,7 @@
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
 - **Тип:** working decision
-- **Контекст:** [ARCHITECTURE.md](../ARCHITECTURE.md) §9–10; хвост Этапа 1–2 перед фронтом
+- **Контекст:** [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) §9–10; хвост Этапа 1–2 перед фронтом
 
 ## Решение
 

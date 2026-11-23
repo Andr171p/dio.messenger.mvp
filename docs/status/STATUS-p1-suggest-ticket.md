@@ -1,7 +1,7 @@
 # Status: P1 autoprovision + ticket suggestion
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0014](decisions/DEC-0014-p1-provision-ticket-suggest.md)
+- **Решение:** [DEC-0014](../decisions/DEC-0014-p1-provision-ticket-suggest.md)
 
 ## Service (P1 incident room)
 

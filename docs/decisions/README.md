@@ -14,8 +14,11 @@
 | [DEC-0008](DEC-0008-mvp-scope-expansion.md) | MVP scope expansion | 2026-11-22 |
 | [DEC-0009](DEC-0009-guests-and-conversation-policy.md) | Guests + conversation policy | 2026-11-22 |
 | [DEC-0010](DEC-0010-mentions-pins-forward.md) | Mentions, pins, forward ACL | 2026-11-22 |
+| [DEC-0011](DEC-0011-message-search-fts.md) | Message search FTS | 2026-11-22 |
+| [DEC-0012](DEC-0012-media-lifecycle-worker.md) | Media lifecycle worker | 2026-11-22 |
+| [DEC-0013](DEC-0013-receipts-audit-retention.md) | Receipts, audit, retention | 2026-11-22 |
 | [DEC-0014](DEC-0014-p1-provision-ticket-suggest.md) | P1 autoprovision + ticket suggestion | 2026-11-22 |
 | [DEC-0015](DEC-0015-threads-polls-scheduled.md) | Threads, polls, scheduled messages | 2026-11-22 |
 | [DEC-0016](DEC-0016-hardening-observability.md) | Hardening metrics + ACL test suite | 2026-11-22 |
 
-**Правило:** сюда — pragmatic/local/iteration choices. В `docs/adr/` — устойчивые архитектурные решения с trade-offs.
+**Правило:** сюда — pragmatic/local/iteration choices. В `docs/adr/` — устойчивые архитектурные решения с trade-offs. Новый DEC — следующий номер + строка в этой таблице.

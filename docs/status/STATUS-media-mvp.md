@@ -1,7 +1,7 @@
 # Status: Media MVP (ручное тестирование)
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0003](decisions/DEC-0003-media-module.md)
+- **Решение:** [DEC-0003](../decisions/DEC-0003-media-module.md)
 - **Миграция:** `b2c3d4e5f6a7` (`attachments` → `media_*`)
 - **Бакет S3:** `messenger-media` (RustFS :9010)
 

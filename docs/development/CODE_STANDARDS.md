@@ -3,7 +3,7 @@
 > **Статус:** нормативный engineering guide для реализации MVP · редакция 1.1  
 > **Дата:** 2026-11-22  
 > **Аудитория:** backend, frontend, review, QA, разработчики интеграций  
-> **Связанные документы:** [Architecture](ARCHITECTURE.md) · [Implementation Plan](IMPLEMENTATION_PLAN.md) · [Test Plan](TEST_PLAN.md) · [ADR-0002: HTTP/WS/Sync](adr/ADR-0002-http-websocket-and-sync.md) · [ADR-0003: Outbox](adr/ADR-0003-transactional-outbox-and-realtime.md)
+> **Связанные документы:** [Architecture](../architecture/ARCHITECTURE.md) · [Implementation Plan](IMPLEMENTATION_PLAN.md) · [Test Plan](TEST_PLAN.md) · [ADR-0002: HTTP/WS/Sync](../adr/ADR-0002-http-websocket-and-sync.md) · [ADR-0003: Outbox](../adr/ADR-0003-transactional-outbox-and-realtime.md)
 
 Этот документ отвечает на вопрос **«как писать DIO Messenger, а не только что реализовывать»**. Code style адаптирован по реальным примерам `kb.back` из [Andr171p/dio.kb](https://github.com/Andr171p/dio.kb): `application/auth/dtos.py`, `application/auth/exceptions.py`, `api/dependencies/auth.py`, `api/dependencies/db.py`. Это **ориентир по стилю**, а не зависимость от кода KB: Messenger реализует собственные модули. Его цель — качественный, поддерживаемый MVP: явные границы и гарантии при разумной сложности, без преждевременного абстрагирования.
 
@@ -845,7 +845,7 @@ WS online: client sees event_seq=105, local cursor=103
 
 ## 9. Outbox, workers и интеграции
 
-**Решение:** `Message + ConversationEvent + Outbox` атомарно в PostgreSQL; `pg_notify` в той же транзакции; `LISTEN/NOTIFY` будит worker, polling остаётся fallback; RabbitMQ — надёжный путь событий; Redis — быстрый best-effort fan-out. Подробности — [ADR-0003](adr/ADR-0003-transactional-outbox-and-realtime.md).
+**Решение:** `Message + ConversationEvent + Outbox` атомарно в PostgreSQL; `pg_notify` в той же транзакции; `LISTEN/NOTIFY` будит worker, polling остаётся fallback; RabbitMQ — надёжный путь событий; Redis — быстрый best-effort fan-out. Подробности — [ADR-0003](../adr/ADR-0003-transactional-outbox-and-realtime.md).
 
 ### Правила реализации
 

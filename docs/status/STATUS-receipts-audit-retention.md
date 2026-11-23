@@ -1,7 +1,7 @@
 # Status: Receipts, audit, retention (Session 5)
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0013](decisions/DEC-0013-receipts-audit-retention.md)
+- **Решение:** [DEC-0013](../decisions/DEC-0013-receipts-audit-retention.md)
 
 ## Сделано
 

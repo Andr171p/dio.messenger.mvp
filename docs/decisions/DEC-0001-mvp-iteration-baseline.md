@@ -3,7 +3,7 @@
 - **Статус:** Accepted
 - **Дата:** 2026-11-22
 - **Тип:** working decision (не ADR)
-- **Контекст:** ответы на уточнения перед Этапом 1; [ARCHITECTURE.md](../ARCHITECTURE.md) §17
+- **Контекст:** ответы на уточнения перед Этапом 1; [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) §17
 
 ## Решение
 

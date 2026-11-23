@@ -1,7 +1,7 @@
 # Status: Snapshot body + WS revoke on kick
 
 - **Дата:** 2026-11-22
-- **Решение:** [DEC-0006](decisions/DEC-0006-snapshot-and-access-revoke.md)
+- **Решение:** [DEC-0006](../decisions/DEC-0006-snapshot-and-access-revoke.md)
 
 ## Сделано
 

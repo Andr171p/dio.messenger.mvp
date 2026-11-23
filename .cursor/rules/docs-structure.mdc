@@ -1,0 +1,29 @@
+---
+description: Structure and maintenance rules for project documentation under docs/
+globs: docs/**/*.md
+alwaysApply: false
+---
+
+# Documentation structure
+
+Keep docs in this tree; do not dump new `.md` files into `docs/` root (except `README.md`).
+
+| Kind | Path | Name |
+|---|---|---|
+| System design SSOT | `docs/architecture/` | `ARCHITECTURE.md` |
+| UI/UX | `docs/design/` | thematic files |
+| Plans, standards, tests | `docs/development/` | `UPPER_SNAKE.md` |
+| Long-lived architecture choice | `docs/adr/` | `ADR-NNNN-slug.md` |
+| Iteration / local choice | `docs/decisions/` | `DEC-NNNN-slug.md` |
+| What shipped + how to verify | `docs/status/` | `STATUS-topic.md` |
+| API/event contracts | `docs/contracts/` | only when stable |
+| Ops runbooks | `docs/operations/` | only with real content |
+
+## Rules
+
+- Prefer updating `architecture/ARCHITECTURE.md` over inventing parallel design docs.
+- ADR: context → decision → alternatives → consequences; never rewrite accepted ADR in place — supersede.
+- DEC for pragmatic iteration choices; link related `STATUS-*.md`.
+- After add/move: update `docs/README.md` and folder indexes (`status/README.md`, `decisions/README.md`).
+- Use relative links inside the repo; never `Downloads/` or absolute machine paths.
+- Do not create empty “future” folders; create the folder with the first real file.

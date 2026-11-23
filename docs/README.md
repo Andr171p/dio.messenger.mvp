@@ -5,86 +5,84 @@
 
 ## С чего начать
 
-1. [**ARCHITECTURE.md**](ARCHITECTURE.md) — **единый полный документ**: идея продукта, scope, стек, схема данных, DDD, realtime, sync, offline-first, outbox, безопасность, ITSM, масштабирование и открытые вопросы.
-2. [**IMPLEMENTATION_PLAN.md**](../../../../Downloads/DIO_Messenger_docs/docs/IMPLEMENTATION_PLAN.md) — порядок работ, контрактные вехи и критерии готовности.
-3. [**TEST_PLAN.md**](../../../../Downloads/DIO_Messenger_docs/docs/TEST_PLAN.md) — integration/e2e/load/security и показатели SLO.
-4. [**ADR/**](adr/) — короткие записи принятых архитектурных решений с причиной и trade-offs.
-5. [**decisions/**](decisions/) — рабочие решения итераций (не ADR).
-6. [**STATUS-media-mvp.md**](STATUS-media-mvp.md) — что реализовано в media MVP и как руками проверить.
-7. [**STATUS-stage2.md**](STATUS-stage2.md) — Outbox relay + WebSocket + Sync (Этап 2).
-8. [**STATUS-backend-pre-frontend.md**](STATUS-backend-pre-frontend.md) — smoke перед фронтом (IAM + API + WS + media).
-9. [**STATUS-presence-typing-reactions.md**](STATUS-presence-typing-reactions.md) — presence/typing + reactions.
-10. [**STATUS-mentions-pins-forward.md**](STATUS-mentions-pins-forward.md) — mentions, pins, forward ACL.
-11. [**STATUS-guests-policy.md**](STATUS-guests-policy.md) — guests, ConversationPolicy, IAM principal kind.
-12. [**STATUS-search-fts.md**](STATUS-search-fts.md) — message search FTS.
-13. [**STATUS-media-lifecycle.md**](STATUS-media-lifecycle.md) — media worker scan/validate.
-14. [**STATUS-receipts-audit-retention.md**](STATUS-receipts-audit-retention.md) — receipts, audit, retention worker.
-15. [**STATUS-p1-suggest-ticket.md**](STATUS-p1-suggest-ticket.md) — P1 provision + ticket suggestion.
-16. [**STATUS-threads-polls-scheduled.md**](STATUS-threads-polls-scheduled.md) — threads, polls, scheduled.
-17. [**STATUS-hardening.md**](STATUS-hardening.md) — observability, load/fault checklist (Session 8).
-18. [**STATUS-verification.md**](STATUS-verification.md) — P0–P8 verification report (smoke, ACL, CI, load/fault runbooks).
+1. [**architecture/ARCHITECTURE.md**](architecture/ARCHITECTURE.md) — единый полный документ: идея продукта, scope, стек, схема данных, DDD, realtime, sync, offline-first, outbox, безопасность, ITSM, масштабирование и открытые вопросы.
+2. [**development/IMPLEMENTATION_PLAN.md**](development/IMPLEMENTATION_PLAN.md) — порядок работ, контрактные вехи и критерии готовности.
+3. [**development/TEST_PLAN.md**](development/TEST_PLAN.md) — integration/e2e/load/security и показатели SLO.
+4. [**development/CODE_STANDARDS.md**](development/CODE_STANDARDS.md) — как писать код и контракты MVP.
+5. [**design/UI_UX_DESIGN.md**](design/UI_UX_DESIGN.md) — UI/UX спецификация.
+6. [**adr/**](adr/) — Architecture Decision Records (устойчивые решения с trade-offs).
+7. [**decisions/**](decisions/) — рабочие решения итераций (не ADR).
+8. [**status/**](status/) — отчёты о реализации и проверках по итерациям.
 
 ## Структура docs/
 
 ```text
 docs/
-├── README.md
-├── ARCHITECTURE.md
-├── IMPLEMENTATION_PLAN.md
-├── TEST_PLAN.md
-├── CODE_STANDARDS.md
-├── decisions/
-│   ├── DEC-0001-mvp-iteration-baseline.md
-│   ├── DEC-0002-message-content-and-attachments.md
-│   ├── DEC-0003-media-module.md
-│   └── DEC-0004-stage2-outbox-ws-sync.md
-└── adr/
-    ├── ADR-0001-service-boundary-and-storage.md
-    ├── ADR-0002-http-websocket-and-sync.md
-    ├── ADR-0003-transactional-outbox-and-realtime.md
-    ├── ADR-0004-offline-first-client.md
-    └── ADR-0005-tenancy-and-security.md
+├── README.md                 # этот навигатор + правила ведения
+├── architecture/             # системный дизайн (SSOT)
+│   └── ARCHITECTURE.md
+├── design/                   # продуктовый / UI UX дизайн
+│   └── UI_UX_DESIGN.md
+├── development/              # план, стандарты, тестирование
+│   ├── CODE_STANDARDS.md
+│   ├── IMPLEMENTATION_PLAN.md
+│   └── TEST_PLAN.md
+├── status/                   # статус реализации по итерациям
+│   ├── README.md
+│   └── STATUS-*.md
+├── adr/                      # Architecture Decision Records
+│   └── ADR-NNNN-*.md
+└── decisions/                # рабочие решения итераций
+    ├── README.md
+    └── DEC-NNNN-*.md
+```
+
+Планируемые каталоги (заводить только при появлении содержимого):
+
+```text
+docs/
+  contracts/      # OpenAPI, WS/event schemas
+  backend/        # data-model, deployment specifics
+  frontend/       # IndexedDB, sync-engine
+  operations/     # runbooks, dashboards
 ```
 
 ## Архитектурные решения
 
 | ADR | Решение | Статус |
 |---|---|---|
-| [0001](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0001-service-boundary-and-storage.md) | Independent Service + PostgreSQL | Accepted |
-| [0002](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0002-http-websocket-and-sync.md) | HTTP + WS + durable Sync | Accepted |
-| [0003](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0003-transactional-outbox-and-realtime.md) | Transactional Outbox + LISTEN/NOTIFY + fallback polling | Accepted |
-| [0004](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0004-offline-first-client.md) | Dexie/IndexedDB + local Outbox | Accepted |
-| [0005](../../../../Downloads/DIO_Messenger_docs/docs/adr/ADR-0005-tenancy-and-security.md) | Organization ownership, guests, no E2EE | Accepted |
+| [0001](adr/ADR-0001-service-boundary-and-storage.md) | Independent Service + PostgreSQL | Accepted |
+| [0002](adr/ADR-0002-http-websocket-and-sync.md) | HTTP + WS + durable Sync | Accepted |
+| [0003](adr/ADR-0003-transactional-outbox-and-realtime.md) | Transactional Outbox + LISTEN/NOTIFY + fallback polling | Accepted |
+| [0004](adr/ADR-0004-offline-first-client.md) | Dexie/IndexedDB + local Outbox | Accepted |
+| [0005](adr/ADR-0005-tenancy-and-security.md) | Organization ownership, guests, no E2EE | Accepted |
 
-## Правила сопровождения документации
+## Правила ведения документации
 
-- `ARCHITECTURE.md` — актуальное целостное представление MVP (single source of truth по системному дизайну).
-- Значимые решения оформлять ADR: *контекст → решение → альтернативы → последствия*; существующие ADR не переписывать задним числом без фиксации новой записи superseding decision.
-- Если архитектура меняется — обновлять и ARCHITECTURE, и связанные ADR/TEST_PLAN.
-- Форматы публичных HTTP/WS contracts при стабилизации можно выделить в `contracts/` (OpenAPI, JSON Schema, event schemas).
-- Детальные планы backend/frontend можно позже выделить в `backend/` и `frontend/`; не заводить множество пустых файлов заранее.
-- Нефиксированные вопросы перечислены в `ARCHITECTURE.md`, раздел 17. Они не считаются утверждёнными решениями.
-- Рабочие решения итераций (scope, порты, tenancy fallback и т.п.) — в `decisions/`, не в ADR.
+### Куда класть новый документ
 
-## Рекомендуемое развитие дерева
+| Тип | Папка | Именование |
+|---|---|---|
+| Системный дизайн / инварианты продукта | `architecture/` | `ARCHITECTURE.md` — единый SSOT; отдельные файлы только при явном дроблении |
+| UI/UX, продуктовый визуал | `design/` | `UI_UX_*.md` или тематические файлы |
+| План работ, стандарты кода, тест-план | `development/` | говорящие `UPPER_SNAKE.md` |
+| Долгоживущее архитектурное решение | `adr/` | `ADR-NNNN-short-slug.md` (следующий свободный номер) |
+| Локальное / итерационное решение | `decisions/` | `DEC-NNNN-short-slug.md` |
+| Что сделано / как проверить | `status/` | `STATUS-<topic>.md` |
+| Контракты API/событий | `contracts/` | только когда payloads стабилизированы |
+| Runbooks / ops | `operations/` | только при реальных операционных процедурах |
 
-Когда появится рабочий API и первые реальные payloads, можно расширить структуру, **не меняя текущий навигатор**:
+### ADR vs DEC
 
-```text
-docs/
-  contracts/
-    http-api.yaml
-    websocket-events.md
-    synchronization.md
-  backend/
-    data-model.md
-    deployment.md
-  frontend/
-    indexeddb-schema.md
-    sync-engine.md
-  operations/
-    runbooks.md
-    dashboards.md
-```
+- **ADR** — устойчивый выбор с контекстом, альтернативами и последствиями. Не переписывать задним числом: supersede новой записью.
+- **DEC** — pragmatic/local/iteration choices (scope, порты, fallback, порядок внедрения). Не дублировать ADR.
 
-Это **планируемые**, а не уже реализованные директории.
+### Сопровождение
+
+1. `architecture/ARCHITECTURE.md` — single source of truth по системному дизайну.
+2. Изменение архитектуры → обновить ARCHITECTURE и связанные ADR / `TEST_PLAN` / `CODE_STANDARDS`.
+3. Новая итерация реализации → DEC (если нужно) + `STATUS-*.md` с критериями проверки; индекс в `status/README.md` и `decisions/README.md`.
+4. Относительные ссылки между документами — только внутри `docs/` (или в код/скрипты репозитория); не ссылаться на локальные `Downloads/` и внешние копии.
+5. Не создавать пустые каталоги «на будущее»; заводить папку вместе с первым файлом.
+6. Открытые вопросы живут в `ARCHITECTURE.md` (§17) и не считаются утверждёнными решениями.
+7. Корневой `docs/README.md` — единственный навигатор верхнего уровня; при переносе файлов обновлять его и индексы подпапок.
