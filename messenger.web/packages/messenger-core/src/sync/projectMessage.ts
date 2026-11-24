@@ -12,6 +12,7 @@ export interface ServerMessage {
   content?: unknown;
   replyToId?: string | null;
   senderDisplayName?: string;
+  reactions?: Record<string, string[]> | null;
 }
 
 function timestamp(value?: string | number | null) {
@@ -63,5 +64,6 @@ export function projectMessage(
     isOutgoing: message.senderId === userId,
     authorId: message.senderId,
     authorDisplayName: message.senderDisplayName,
+    ...(message.reactions ? { reactions: message.reactions } : {}),
   };
 }

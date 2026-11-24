@@ -42,7 +42,15 @@ export class HttpClient {
 
   async request<T>(
     path: string,
-    { timeoutMs, ...init }: RequestInit & { json?: unknown; timeoutMs?: number } = {},
+    {
+      timeoutMs,
+      responseType,
+      ...init
+    }: RequestInit & {
+      json?: unknown;
+      timeoutMs?: number;
+      responseType?: "blob";
+    } = {},
   ): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("X-Correlation-Id", this.correlationId());
@@ -116,7 +124,7 @@ export class HttpClient {
       return undefined as T;
     }
 
-    return (await response.json()) as T;
+    return (await (responseType === "blob" ? response.blob() : response.json())) as T;
   }
 
   get<T>(path: string): Promise<T> {

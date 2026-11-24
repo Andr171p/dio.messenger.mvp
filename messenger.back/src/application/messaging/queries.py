@@ -3,7 +3,8 @@ from uuid import UUID
 from src.application.auth import AuthUser
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.application.messaging.builders import build_conversation_event_dto, build_message_dto
+from src.application.messaging.builders import build_conversation_event_dto, build_history_message_dtos
+from src.application.reactions.repositories import ReactionRepository
 from src.application.messaging.dtos import ConversationEventDTO, MessageDTO
 from src.application.messaging.exceptions import MessageNotFoundError, SnapshotRequiredError
 from src.infra.observability.metrics import inc_sync_gap
@@ -23,6 +24,7 @@ async def get_history(
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
     message_repository: MessageRepository,
+    reaction_repository: ReactionRepository | None = None,
 ) -> list[MessageDTO]:
     _, membership = await require_active_membership(
         conversation_id=conversation_id,
@@ -48,7 +50,7 @@ async def get_history(
         history_from_seq=membership.history_from_seq,
         limit=page_limit,
     )
-    return [build_message_dto(item) for item in items]
+    return await build_history_message_dtos(items, reaction_repository)
 
 
 async def get_events(

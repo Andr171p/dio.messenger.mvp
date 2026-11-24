@@ -30,7 +30,7 @@ function formatTime(ts?: number): string {
 }
 
 export function ConversationList() {
-  const { db, accountKey, sync, syncStatus } = useRuntime();
+  const { db, accountKey, syncStatus } = useRuntime();
   const { logout } = useAuth();
   const category = useUiStore((s) => s.listCategory);
   const setCategory = useUiStore((s) => s.setListCategory);
@@ -141,7 +141,6 @@ export function ConversationList() {
                 .join(" ")}
               onClick={() => {
                 setSelected(conv.id);
-                sync?.watchConversation(conv.id);
               }}
             >
               <Avatar name={conv.title} size="md" />

@@ -163,9 +163,20 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const onSend = async () => {
     if (!db || !accountKey || !session || !hydrated || sendLock.current) return;
     if (!text.trim() && (!attachments.length || editingId)) return;
+    inputRef.current?.focus({ preventScroll: true });
     sendLock.current = true;
     setSending(true);
     setSendError(null);
+    if (!editingId) {
+      setText("");
+      setDraftText("");
+      setPickerMode(null);
+      if (typingTimer.current) {
+        clearTimeout(typingTimer.current);
+        typingTimer.current = null;
+        sync?.sendTyping(conversationId, false);
+      }
+    }
 
     try {
       if (editingId) {
@@ -207,16 +218,18 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             }
           : {}),
       });
-      setDraftText("");
       setAttachments([]);
       setMentions({});
       if (useUiStore.getState().selectedConversationId === conversationId) {
-        setText("");
         clearReply(null);
       }
-      sync?.sendTyping(conversationId, false);
       sync?.requestFlush();
     } catch {
+      if (!editingId) {
+        const restore = (current: string) => (current ? text + "\n" + current : text);
+        setText(restore);
+        setDraftText(restore);
+      }
       setSendError("Не удалось сохранить сообщение для отправки");
     } finally {
       sendLock.current = false;
@@ -526,7 +539,8 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             className={[styles.input, "dio-scroll"].join(" ")}
             value={text}
             rows={1}
-            disabled={!hydrated || sending}
+            disabled={!hydrated}
+            readOnly={sending && !!editingId}
             aria-label="Текст сообщения"
             placeholder="Написать сообщение…"
             onChange={(e) => {
@@ -620,6 +634,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         <div className={styles.sendSlot}>
           <IconButton
             label="Отправить"
+            onMouseDown={(event) => event.preventDefault()}
             icon="send"
             variant="send"
             iconSize={18}
@@ -674,7 +689,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       ) : null}
       {tool === "format" ? (
         <div
-          className={styles.emojiPicker}
+          className={styles.formatPicker}
           role="group"
           aria-label="Формат текста"
           {...popupHover}

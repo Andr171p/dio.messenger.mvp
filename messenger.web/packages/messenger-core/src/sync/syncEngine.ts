@@ -11,7 +11,7 @@ import { OutboxProcessor } from "../outbox/outboxProcessor.js";
 import { HttpClient, HttpError } from "../transport/httpClient.js";
 import { WebSocketClient } from "../transport/websocketClient.js";
 import { applyEvent } from "./applyEvent.js";
-import { SnapshotRequiredError } from "./errors.js";
+import { SnapshotRequiredError, SyncGapError } from "./errors.js";
 import { wipeConversation } from "./wipeConversation.js";
 import { projectMessage, type ServerMessage } from "./projectMessage.js";
 
@@ -32,10 +32,14 @@ export interface SyncEngine {
   requestFlush(): void;
   synchronize(): Promise<void>;
   pauseSending(): void;
-  watchConversation(conversationId: string): void;
+  watchConversation(conversationId: string): () => void;
   loadHistory(
     conversationId: string,
-    options?: { beforeSeq?: number; aroundMessageId?: string },
+    options?: {
+      beforeSeq?: number;
+      aroundMessageId?: string;
+      refreshReactions?: boolean;
+    },
   ): Promise<ServerMessage[]>;
   sendTyping(conversationId: string, started: boolean): void;
   getStatus(): SyncStatus;
@@ -111,7 +115,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const typingByConversation = new Map<string, TypingState>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const delivered = new Map<string, number>();
-  const pulling = new Set<string>();
+  const pulling = new Map<string, Promise<void>>();
+  const pendingPulls = new Map<string, number>();
   let syncing: Promise<void> | null = null;
   let stopped = false;
   let accessVerified = false;
@@ -284,13 +289,15 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   });
 
   /** Compact WS hints: pull HTTP delta; never apply incomplete projection / advance cursor. */
-  const handleWsEvent = (event: ConversationEvent) => {
-    void pullConversationUntilCaughtUp(event.conversationId).catch((error) => {
+  const refreshConversation = (conversationId: string, through?: number) => {
+    void pullConversationUntilCaughtUp(conversationId, through).catch((error) => {
       if (error instanceof SnapshotRequiredError) {
-        void applySnapshot(event.conversationId).catch(() => undefined);
+        void applySnapshot(conversationId).catch(() => undefined);
       }
     });
   };
+  const handleWsEvent = (event: ConversationEvent) =>
+    refreshConversation(event.conversationId, event.eventSeq);
 
   async function getConversationDirectory(): Promise<Map<string, ApiConversation>> {
     const list = await options.http.get<ApiConversation[]>("/v1/conversations");
@@ -315,6 +322,11 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           !(await options.db.conversations.get(conversationId))
         )
           return;
+        const cursor = await options.db.syncCursors.get([
+          options.accountKey,
+          conversationId,
+        ]);
+        if ((cursor?.eventSeq ?? 0) > snap.snapshotEventSeq) return;
         // Replace projection messages; keep outbox intact
         await options.db.messages
           .where("[accountKey+conversationId]")
@@ -393,7 +405,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       0,
     );
     void acknowledgeDelivery(conversationId, newestIncoming);
-    await pullConversationDelta(conversationId, snap.snapshotEventSeq);
+    await pullConversationUntilCaughtUp(conversationId);
   }
 
   async function applyManifest(
@@ -545,12 +557,38 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     return lastApplied;
   }
 
-  async function pullConversationUntilCaughtUp(
+  function pullConversationUntilCaughtUp(
     conversationId: string,
     targetSeq?: number,
   ): Promise<void> {
-    if (pulling.has(conversationId)) return;
-    pulling.add(conversationId);
+    if (stopped || revoked.has(conversationId)) return Promise.resolve();
+    pendingPulls.set(
+      conversationId,
+      Math.max(pendingPulls.get(conversationId) ?? 0, targetSeq ?? 0),
+    );
+    const active = pulling.get(conversationId);
+    if (active) return active;
+    const task = Promise.resolve().then(async () => {
+      try {
+        while (
+          pendingPulls.has(conversationId) &&
+          !stopped &&
+          !revoked.has(conversationId)
+        ) {
+          const through = pendingPulls.get(conversationId);
+          pendingPulls.delete(conversationId);
+          await pullConversationPages(conversationId, through || undefined);
+        }
+      } finally {
+        pendingPulls.delete(conversationId);
+        pulling.delete(conversationId);
+      }
+    });
+    pulling.set(conversationId, task);
+    return task;
+  }
+
+  async function pullConversationPages(conversationId: string, targetSeq?: number) {
     try {
       for (let guard = 0; guard < 100; guard += 1) {
         const cursor = await options.db.syncCursors.get([
@@ -560,15 +598,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         const afterSeq = cursor?.eventSeq ?? 0;
         if (targetSeq !== undefined && afterSeq >= targetSeq) return;
 
-        let lastApplied: number;
-        try {
-          lastApplied = await pullConversationDelta(conversationId, afterSeq);
-        } catch (error) {
-          if (error instanceof HttpError && error.status === 409) {
-            throw new SnapshotRequiredError(conversationId);
-          }
-          throw error;
-        }
+        const lastApplied = await pullConversationDelta(conversationId, afterSeq);
 
         if (lastApplied <= afterSeq) {
           // empty page
@@ -578,8 +608,13 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         // if we got a full page, continue
         if (lastApplied - afterSeq < EVENTS_PAGE_LIMIT) return;
       }
-    } finally {
-      pulling.delete(conversationId);
+    } catch (error) {
+      if (
+        error instanceof SyncGapError ||
+        (error instanceof HttpError && error.status === 409)
+      )
+        throw new SnapshotRequiredError(conversationId);
+      throw error;
     }
   }
 
@@ -656,8 +691,25 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     },
     watchConversation(conversationId: string) {
       ws.subscribeConversation(conversationId);
+      const refresh = () => {
+        if (
+          !stopped &&
+          !revoked.has(conversationId) &&
+          (typeof document === "undefined" || document.visibilityState === "visible") &&
+          (typeof navigator === "undefined" || navigator.onLine)
+        )
+          refreshConversation(conversationId);
+      };
+      refresh();
+      const timer = setInterval(refresh, 5_000);
+      return () => clearInterval(timer);
     },
-    async loadHistory(conversationId, { beforeSeq, aroundMessageId } = {}) {
+    async loadHistory(
+      conversationId,
+      { beforeSeq, aroundMessageId, refreshReactions } = {},
+    ) {
+      const cursorKey = [options.accountKey, conversationId] as [AccountKey, string];
+      const startCursor = (await options.db.syncCursors.get(cursorKey))?.eventSeq;
       const params = new URLSearchParams({ limit: "50" });
       if (beforeSeq !== undefined) params.set("beforeSeq", String(beforeSeq));
       if (aroundMessageId) params.set("aroundMessageId", aroundMessageId);
@@ -668,8 +720,23 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         "rw",
         options.db.messages,
         options.db.conversations,
+        options.db.syncCursors,
+        options.db.outbox,
         async () => {
           if (!(await options.db.conversations.get(conversationId))) return;
+          const currentCursor = (await options.db.syncCursors.get(cursorKey))?.eventSeq;
+          const pendingReactions = new Set<string>();
+          const pending = await options.db.outbox
+            .where("accountKey")
+            .equals(options.accountKey)
+            .toArray();
+          for (const { command } of pending) {
+            if (
+              (command.type === "reaction.add" || command.type === "reaction.remove") &&
+              command.payload.conversationId === conversationId
+            )
+              pendingReactions.add(command.payload.messageId);
+          }
           for (const entry of messages) {
             const message = projectMessage(
               entry,
@@ -678,8 +745,26 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
               options.userId,
             );
             const existing = await options.db.messages.get(message.localId);
-            if (!existing || existing.revision < message.revision) {
-              await options.db.messages.put({ ...existing, ...message });
+            if (
+              !refreshReactions &&
+              (!existing || existing.revision < message.revision)
+            ) {
+              const reactions =
+                existing &&
+                (startCursor !== currentCursor || pendingReactions.has(entry.id ?? ""))
+                  ? existing.reactions
+                  : (message.reactions ?? existing?.reactions);
+              await options.db.messages.put({ ...existing, ...message, reactions });
+            } else if (
+              existing &&
+              startCursor === currentCursor &&
+              !pendingReactions.has(entry.id ?? "") &&
+              message.reactions !== undefined &&
+              JSON.stringify(existing.reactions) !== JSON.stringify(message.reactions)
+            ) {
+              await options.db.messages.update(existing.localId, {
+                reactions: message.reactions,
+              });
             }
           }
         },

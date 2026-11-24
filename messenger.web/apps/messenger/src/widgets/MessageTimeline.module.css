@@ -4,6 +4,7 @@
   min-height: 0;
   padding: 12px 16px 8px;
   background: transparent;
+  overflow-anchor: none;
 }
 
 .inner {
@@ -34,6 +35,8 @@
 
 .bubbleWrap {
   display: flex;
+  align-items: flex-end;
+  gap: 7px;
   width: 100%;
 }
 
@@ -42,7 +45,21 @@
 }
 
 .alignOut {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+}
+
+.avatarSlot {
+  display: grid;
+  place-items: end center;
+  flex: 0 0 28px;
+}
+
+.bubbleEnd.alignIn .bubble {
+  border-end-start-radius: 5px;
+}
+
+.bubbleEnd.alignOut .bubble {
+  border-end-end-radius: 5px;
 }
 
 .bubble {
@@ -235,9 +252,81 @@
 }
 
 .mediaImg {
-  max-width: min(100%, 320px);
+  display: block;
+  inline-size: auto;
+  block-size: auto;
+  max-inline-size: 100%;
+  max-block-size: 360px;
+  object-fit: contain;
   border-radius: var(--dio-radius-md);
   border: 1px solid var(--dio-border-subtle);
+}
+
+.imageLink {
+  display: block;
+  width: fit-content;
+  max-width: min(100%, 320px);
+}
+
+.fileBadge {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--dio-action);
+  color: white;
+}
+
+.fileDetails {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+
+.fileDetails strong {
+  color: var(--dio-text);
+  font-size: 14px;
+}
+
+.fileDetails small {
+  font-size: 12px;
+}
+
+.mediaDialog {
+  width: min(900px, calc(100% - 24px));
+  max-height: 92dvh;
+  border: 1px solid var(--dio-border);
+  border-radius: 16px;
+  color: var(--dio-text);
+  background: var(--dio-sidebar);
+  padding: 12px;
+}
+
+.mediaDialog::backdrop {
+  background: rgb(0 0 0 / 0.65);
+}
+
+.mediaDialog header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.mediaDialog header strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mediaDialog :is(img, video, audio) {
+  display: block;
+  margin-inline: auto;
+  max-width: 100%;
+  max-height: 73dvh;
+  object-fit: contain;
 }
 
 .contextPopover {

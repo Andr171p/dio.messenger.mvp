@@ -813,4 +813,184 @@ test("открывает заявку по номеру и запрашивае�
   const popup = page.waitForEvent("popup");
   await panel.getByRole("button", { name: /vpn.log/ }).click();
   await expect(await popup).toHaveURL(externalUrl);
+  await context.route("**/tickets/INC-228", (route) =>
+    route.fulfill({ body: "Заявка INC-228" }),
+  );
+  const deskTab = page.waitForEvent("popup");
+  await panel.getByRole("button", { name: /Открыть в DIO Desk/ }).click();
+  await expect(await deskTab).toHaveURL(/\/tickets\/INC-228$/);
+});
+
+test("получает новое сообщение и реакцию, пришедшую во время загрузки событий", async ({
+  page,
+}) => {
+  let socket: WebSocketRoute | undefined;
+  await page.routeWebSocket("**/v1/ws?*", (route) => {
+    socket = route;
+  });
+  let live = false;
+  let pulse!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    pulse = resolve;
+  });
+  const newId = "01000000-0000-4000-8000-000000000082";
+  const created = {
+    id: newId,
+    conversationId: chatId,
+    seq: 82,
+    type: "message.created",
+    payload: {
+      messageId: newId,
+      senderId: source.senderId,
+      createdSeq: 82,
+      createdAt: new Date().toISOString(),
+      content: { blocks: [{ type: "text", text: "Проверка realtime" }] },
+    },
+  };
+  const reaction = {
+    id: resourceId,
+    conversationId: chatId,
+    seq: 83,
+    type: "reaction.added",
+    payload: {
+      messageId: newId,
+      actorId: source.senderId,
+      emoji: "🔥",
+    },
+  };
+  await page.route("**/v1/conversations/" + chatId + "/events?*", async (route) => {
+    if (!live) return route.fulfill({ json: [] });
+    const after = new URL(route.request().url()).searchParams.get("afterSeq");
+    if (after === "81") {
+      await gate;
+      return route.fulfill({ json: [created] });
+    }
+    return route.fulfill({ json: after === "82" ? [reaction] : [] });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(page.getByText("Уже есть заявка.", { exact: true })).toBeVisible();
+  await expect.poll(() => !!socket).toBe(true);
+  live = true;
+  const requested = page.waitForRequest((request) =>
+    request.url().includes("/events?afterSeq=81"),
+  );
+  socket!.send(
+    JSON.stringify({
+      type: created.type,
+      payload: { conversationId: chatId, eventSeq: 82 },
+    }),
+  );
+  try {
+    await requested;
+    socket!.send(
+      JSON.stringify({
+        type: reaction.type,
+        payload: { conversationId: chatId, eventSeq: 83 },
+      }),
+    );
+    await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 30)));
+  } finally {
+    pulse();
+  }
+  await expect(
+    page.getByRole("main").getByText("Проверка realtime", { exact: true }),
+  ).toBeVisible({
+    timeout: 2000,
+  });
+  await expect(page.getByRole("button", { name: "🔥 1", exact: true })).toBeVisible({
+    timeout: 2000,
+  });
+});
+
+test("оставляет фокус в редакторе после отправки и показывает оформление столбцом", async ({
+  page,
+}) => {
+  await page.route("**/v1/conversations/" + chatId + "/messages", (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    return route.fulfill({
+      status: 201,
+      json: {
+        id: crypto.randomUUID(),
+        clientMessageId: route.request().postDataJSON().clientMessageId,
+        createdSeq: 82,
+        eventSeq: 82,
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const editor = page.getByRole("textbox", { name: "Текст сообщения" });
+  await editor.fill("Первое сообщение");
+  await page.getByRole("button", { name: "Отправить" }).click();
+  await expect(editor).toHaveValue("");
+  await expect(editor).toBeFocused();
+  await page.keyboard.type("Второе");
+  await expect(editor).toHaveValue("Второе");
+  const formatting = page.getByRole("button", { name: "Форматирование" });
+  await expect(formatting).toBeEnabled();
+  await editor.hover();
+  await formatting.hover();
+  await expect(page.getByRole("group", { name: "Формат текста" })).toHaveCSS(
+    "flex-direction",
+    "column",
+  );
+});
+
+test("открывает изображение внутри чата и возвращает фокус к вложению", async ({
+  page,
+}) => {
+  const assetId = "fedcba98-7654-4000-8000-abcdef123456";
+  const imageUrl = "http://localhost:9010/preview.png";
+  await page.route("**/v1/conversations/" + chatId + "/snapshot?*", (route) =>
+    route.fulfill({
+      json: {
+        conversation: chat,
+        membership: { historyFromSeq: 1 },
+        messages: [
+          {
+            ...source,
+            reactions: { "👍": [userId] },
+            content: { blocks: [{ type: "media", assetId }] },
+          },
+        ],
+        snapshotEventSeq: 81,
+      },
+    }),
+  );
+  await page.route("**/v1/media/" + assetId, (route) =>
+    route.fulfill({
+      json: {
+        id: assetId,
+        filename: "preview.png",
+        size: 68,
+        contentType: "image/png",
+        status: "ready",
+      },
+    }),
+  );
+  await page.route("**/v1/media/" + assetId + "/access", (route) =>
+    route.fulfill({
+      json: { url: imageUrl, expiresAt: new Date(Date.now() + 60_000).toISOString() },
+    }),
+  );
+  await page.route("**/v1/media/" + assetId + "/content", (route) =>
+    route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(page.getByRole("button", { name: "👍 1", exact: true })).toBeVisible();
+  const opener = page.getByRole("button", { name: /preview\.png/ });
+  await opener.click();
+  const viewer = page.getByRole("dialog", { name: "Предпросмотр preview.png" });
+  await expect(viewer.getByRole("img")).toHaveAttribute("src", /^blob:/);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+  await expect(opener).toBeFocused();
 });

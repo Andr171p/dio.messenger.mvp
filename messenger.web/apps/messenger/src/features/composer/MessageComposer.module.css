@@ -175,6 +175,39 @@
   box-shadow: var(--dio-shadow-sm);
 }
 
+.formatPicker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 174px;
+  max-height: min(300px, 50vh);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-lg);
+  background: var(--dio-sidebar);
+  box-shadow: var(--dio-shadow-sm);
+}
+
+.formatPicker button {
+  min-height: 36px;
+  padding-inline: 10px;
+  border: 0;
+  border-radius: 8px;
+  text-align: start;
+  font: inherit;
+  color: var(--dio-text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.formatPicker button:hover {
+  background: var(--dio-field);
+}
+
 .filePicker {
   right: auto;
   left: 0;

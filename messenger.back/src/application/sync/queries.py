@@ -3,7 +3,8 @@ from uuid import UUID
 from src.application.auth import AuthUser
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.application.messaging.builders import build_message_dto
+from src.application.messaging.builders import build_history_message_dtos
+from src.application.reactions.repositories import ReactionRepository
 from src.application.messaging.queries import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from src.application.messaging.repositories import MessageRepository
 from src.application.sync.dtos import (
@@ -58,6 +59,7 @@ async def get_conversation_snapshot(
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
     message_repository: MessageRepository,
+    reaction_repository: ReactionRepository | None = None,
 ) -> ConversationSnapshotDTO:
     conversation, membership = await require_active_membership(
         conversation_id=conversation_id,
@@ -95,7 +97,7 @@ async def get_conversation_snapshot(
             last_delivered_message_seq=membership.last_delivered_message_seq,
         ),
         snapshot_event_seq=conversation.last_event_seq,
-        messages=[build_message_dto(item) for item in messages],
+        messages=await build_history_message_dtos(messages, reaction_repository),
         messages_truncated=truncated,
         message_limit=page_limit,
     )

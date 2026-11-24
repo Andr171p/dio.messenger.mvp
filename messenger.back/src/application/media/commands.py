@@ -213,19 +213,15 @@ async def cancel_upload(
     await uow.commit()
 
 
-async def create_access_url(
+async def require_accessible_object(
     asset_id: UUID,
-    dto: MediaAccessRequestDTO | None = None,
     *,
     actor: AuthUser,
     media_repository: MediaRepository,
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
-    storage: S3Client,
-    config: MediaConfig | None = None,
-) -> MediaAccessDTO:
-    settings = config or MediaConfig()
-    request = dto or MediaAccessRequestDTO()
+    role: MediaObjectRole = MediaObjectRole.ORIGINAL,
+) -> tuple[MediaAsset, MediaObject]:
     asset = await media_repository.read(asset_id)
     if asset is None or asset.organization_id != actor.user.organization_id:
         raise MediaNotFoundError("Media asset not found.")
@@ -247,11 +243,30 @@ async def create_access_url(
         ):
             raise MediaAccessDeniedError("Media is outside guest history visibility.")
 
-    role = MediaObjectRole(request.role)
     media_object = asset.object_for(role) or asset.primary_object()
     if media_object is None:
         raise MediaNotFoundError("Media object not found.")
+    return asset, media_object
 
+
+async def create_access_url(
+    asset_id: UUID,
+    dto: MediaAccessRequestDTO | None = None,
+    *,
+    actor: AuthUser,
+    media_repository: MediaRepository,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    storage: S3Client,
+    config: MediaConfig | None = None,
+) -> MediaAccessDTO:
+    settings = config or MediaConfig()
+    request = dto or MediaAccessRequestDTO()
+    asset, media_object = await require_accessible_object(
+        asset_id, actor=actor, media_repository=media_repository,
+        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        role=MediaObjectRole(request.role),
+    )
     expires_in = settings.download_url_expires_in
     url = await storage.create_download_url(media_object.key, expires_in=expires_in)
     return MediaAccessDTO(

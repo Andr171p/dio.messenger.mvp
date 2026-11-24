@@ -71,6 +71,7 @@ class MessageDTO(BaseModel):
     event_seq: PositiveInt
     revision: PositiveInt
     content: dict[str, Any]
+    reactions: dict[str, list[UUID]] | None = None
     reply_to_id: UUID | None
     thread_id: UUID | None = None
     created_at: datetime

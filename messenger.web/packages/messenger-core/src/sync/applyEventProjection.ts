@@ -98,7 +98,10 @@ export async function applyEventProjection(
     case "reaction.removed": {
       const messageId = asString(payload.messageId);
       const emoji = asString(payload.emoji);
-      const userId = asString(payload.userId) ?? asString(payload.principalId);
+      const userId =
+        asString(payload.actorId) ??
+        asString(payload.userId) ??
+        asString(payload.principalId);
       if (!messageId || !emoji || !userId) return;
       const row = await db.messages.where("serverId").equals(messageId).first();
       if (!row || row.accountKey !== accountKey) return;

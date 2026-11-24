@@ -14,6 +14,7 @@ from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.threads import ThreadRepositoryDep
 from src.api.dependencies.realtime import EphemeralStoreDep
+from src.api.dependencies.reactions import ReactionRepositoryDep
 from src.application.messaging import commands, queries
 from src.application.messaging.dtos import (
     ConversationEventDTO,
@@ -190,6 +191,7 @@ async def get_messages(
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
     message_repository: MessageRepositoryDep,
+    reaction_repository: ReactionRepositoryDep,
     before_seq: Annotated[int | None, Query(alias="beforeSeq")] = None,
     around_message_id: Annotated[UUID | None, Query(alias="aroundMessageId")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -199,6 +201,7 @@ async def get_messages(
         actor=auth,
         before_seq=before_seq,
         around_message_id=around_message_id,
+        reaction_repository=reaction_repository,
         limit=limit,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,

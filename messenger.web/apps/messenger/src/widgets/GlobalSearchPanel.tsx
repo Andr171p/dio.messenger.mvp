@@ -13,7 +13,7 @@ export function GlobalSearchPanel() {
   const setSelected = useUiStore((s) => s.setSelectedConversation);
   const [query, setQuery] = useState("");
   const target = useUiStore((s) => s.setMessageTarget);
-  const { db, accountKey, sync } = useRuntime();
+  const { db, accountKey } = useRuntime();
   const [debounced, setDebounced] = useState("");
   const search = useMessageSearch(debounced, scope);
   const conversations =
@@ -41,7 +41,6 @@ export function GlobalSearchPanel() {
     setSelected(id);
     setOpen(false);
     if (message) target(message);
-    sync?.watchConversation(id);
   }
 
   return (

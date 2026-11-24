@@ -12,6 +12,7 @@ import {
   DotsThree,
   DotsThreeVertical,
   ExclamationMark,
+  File,
   GearSix,
   Hash,
   List,
@@ -73,6 +74,7 @@ export const icons = {
   // Composer
   send: PaperPlaneRight,
   attach: Paperclip,
+  file: File,
   mention: At,
   hash: Hash,
   emoji: Smiley,

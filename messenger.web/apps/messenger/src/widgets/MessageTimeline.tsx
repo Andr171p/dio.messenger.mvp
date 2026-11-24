@@ -1,4 +1,5 @@
 import { readMessageBlocks, type LocalMessage } from "@dio/messenger-core";
+import { Avatar } from "@dio/messenger-ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -49,6 +50,14 @@ export function MessageTimeline() {
   const { db, accountKey, sync } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
+  useEffect(() => {
+    if (!conversationId || !sync) return;
+    const unwatch = sync.watchConversation(conversationId);
+    void sync
+      .loadHistory(conversationId, { refreshReactions: true })
+      .catch(() => undefined);
+    return unwatch;
+  }, [conversationId, sync]);
   const members = useConversationMembers(conversationId);
   const profiles = useDirectoryProfiles(!!conversationId);
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -135,6 +144,15 @@ export function MessageTimeline() {
   );
   const nearBottom = useRef(true);
   const previous = useRef<{ conversationId: string; lastId?: string } | null>(null);
+  const [positionedConversation, setPositionedConversation] = useState<string | null>(
+    null,
+  );
+  const initialPositionFrame = useRef(0);
+  useLayoutEffect(() => {
+    previous.current = null;
+    setPositionedConversation(null);
+    return () => cancelAnimationFrame(initialPositionFrame.current);
+  }, [conversationId]);
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -157,12 +175,21 @@ export function MessageTimeline() {
       const index = saved
         ? items.findIndex((message) => message.localId === saved.id)
         : -1;
-      if (!nearBottom.current && index >= 0) {
-        const offset = virtualizer.getOffsetForIndex(index, "start");
-        if (offset) virtualizer.scrollToOffset(offset[0] + (saved?.offset ?? 0));
-      } else {
-        virtualizer.scrollToIndex(items.length - 1, { align: "end" });
-      }
+      const restore = () => {
+        const root = parentRef.current;
+        if (!root) return;
+        if (!nearBottom.current && index >= 0) {
+          const offset = virtualizer.getOffsetForIndex(index, "start");
+          if (offset) virtualizer.scrollToOffset(offset[0] + (saved?.offset ?? 0));
+        } else root.scrollTop = root.scrollHeight - root.clientHeight;
+      };
+      restore();
+      initialPositionFrame.current = requestAnimationFrame(() => {
+        initialPositionFrame.current = requestAnimationFrame(() => {
+          if (!useUiStore.getState().messageTarget && !target) restore();
+          setPositionedConversation(conversationId);
+        });
+      });
     } else if (prior.lastId !== last?.localId && !target) {
       const previousIndex = items.findIndex(
         (message) => message.localId === prior.lastId,
@@ -284,6 +311,7 @@ export function MessageTimeline() {
         ref={parentRef}
         className={[styles.scroller, "dio-scroll"].join(" ")}
         onScroll={(event) => {
+          if (positionedConversation !== conversationId) return;
           const root = event.currentTarget;
           nearBottom.current =
             root.scrollHeight - root.clientHeight - root.scrollTop < 48;
@@ -302,7 +330,12 @@ export function MessageTimeline() {
       >
         <div
           className={styles.inner}
-          style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
+          style={{
+            height: `${virtualizer.getTotalSize()}px`,
+            position: "relative",
+            visibility:
+              positionedConversation === conversationId ? undefined : "hidden",
+          }}
         >
           {virtualItems.map((row) => {
             const entry = items[row.index];
@@ -323,6 +356,7 @@ export function MessageTimeline() {
             const authorBreak =
               !next ||
               next.authorId !== message.authorId ||
+              next.createdAt - message.createdAt >= 5 * 60_000 ||
               !sameDay(message.createdAt, next.createdAt);
             const status = statusLabel(message.sendStatus);
             const readSeq = message.createdSeq ?? 0;
@@ -356,8 +390,20 @@ export function MessageTimeline() {
                   className={[
                     styles.bubbleWrap,
                     message.isOutgoing ? styles.alignOut : styles.alignIn,
+                    authorBreak ? styles.bubbleEnd : "",
                   ].join(" ")}
                 >
+                  <div className={styles.avatarSlot} aria-hidden="true">
+                    {authorBreak && !message.deletedAt ? (
+                      <Avatar
+                        size="sm"
+                        name={
+                          message.authorDisplayName ??
+                          (message.isOutgoing ? "Вы" : "Участник")
+                        }
+                      />
+                    ) : null}
+                  </div>
                   <MessageBubble
                     message={message}
                     status={status}
@@ -441,6 +487,7 @@ export function MessageTimeline() {
                 [conversationId]: { limit: RECENT_MESSAGES },
               }));
               previous.current = null;
+              setPositionedConversation(null);
               positions.current.delete(conversationId);
             } else {
               virtualizer.scrollToIndex(items.length - 1, { align: "end" });

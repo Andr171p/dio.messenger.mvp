@@ -349,6 +349,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/media/{asset_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Media Content */
+        get: operations["get_media_content_v1_media__asset_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/media/{asset_id}/access": {
         parameters: {
             query?: never;
@@ -1388,6 +1405,10 @@ export interface components {
             content: {
                 [key: string]: unknown;
             };
+            /** Reactions */
+            reactions?: {
+                [key: string]: string[];
+            } | null;
             /** Replytoid */
             replyToId: string | null;
             /** Threadid */
@@ -2781,6 +2802,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MediaAssetDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_media_content_v1_media__asset_id__content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

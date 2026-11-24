@@ -10,6 +10,7 @@ from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.policies import ConversationPolicyRepositoryDep
 from src.api.dependencies.realtime import EphemeralStoreDep
+from src.api.dependencies.reactions import ReactionRepositoryDep
 from src.application.conversations import commands, queries
 from src.application.conversations.dtos import (
     AddMemberDTO,
@@ -104,12 +105,14 @@ async def get_conversation_snapshot(
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
     message_repository: MessageRepositoryDep,
+    reaction_repository: ReactionRepositoryDep,
     message_limit: Annotated[int, Query(alias="messageLimit", ge=1, le=100)] = 50,
 ) -> ConversationSnapshotDTO:
     return await sync_queries.get_conversation_snapshot(
         conversation_id,
         actor=auth,
         message_limit=message_limit,
+        reaction_repository=reaction_repository,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
         message_repository=message_repository,

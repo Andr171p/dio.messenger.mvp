@@ -257,10 +257,9 @@ export function ContextResourcePanel() {
             className={styles.openDesk}
             onClick={() => {
               const desk = getRuntimeConfig().deskWeb;
-              const id = preview.data?.ref?.resourceId ?? apiResourceId;
-              const number = preview.data?.number ?? resourceId;
+              const number = data.number || resourceId;
               window.open(
-                `${desk.replace(/\/$/, "")}/tickets/${encodeURIComponent(String(id ?? number))}`,
+                `${desk.replace(/\/$/, "")}/tickets/${encodeURIComponent(number)}`,
                 "_blank",
                 "noopener,noreferrer",
               );

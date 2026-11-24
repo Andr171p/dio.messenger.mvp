@@ -63,8 +63,21 @@
 }
 
 .typing {
+  animation: typingPulse 1.6s ease-in-out infinite;
   color: var(--dio-action);
   font-weight: 500;
+}
+
+@keyframes typingPulse {
+  50% {
+    opacity: 0.66;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing {
+    animation: none;
+  }
 }
 
 .guest {

@@ -77,10 +77,15 @@ class SqlAlchemyReactionRepository:
         return existing
 
     async def list_for_message(self, message_id: UUID) -> list[MessageReaction]:
+        return await self.list_for_messages([message_id])
+
+    async def list_for_messages(self, message_ids: list[UUID]) -> list[MessageReaction]:
+        if not message_ids:
+            return []
         stmt = (
             select(MessageReactionOrm)
             .where(
-                MessageReactionOrm.message_id == message_id,
+                MessageReactionOrm.message_id.in_(message_ids),
                 MessageReactionOrm.deleted_at.is_(None),
             )
             .order_by(MessageReactionOrm.created_at.asc())

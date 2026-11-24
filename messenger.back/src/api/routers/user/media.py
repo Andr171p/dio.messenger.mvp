@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Request, Response, status
+from fastapi.responses import StreamingResponse
 
 from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
@@ -127,6 +128,30 @@ async def get_media_asset(
         media_repository=media_repository,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
+    )
+
+
+@router.get("/{asset_id}/content", response_class=StreamingResponse)
+async def get_media_content(
+    asset_id: UUID,
+    auth: CurrentUser,
+    media_repository: MediaRepositoryDep,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    storage: S3ClientDep,
+) -> StreamingResponse:
+    asset, media_object = await commands.require_accessible_object(
+        asset_id, actor=auth, media_repository=media_repository,
+        conversation_repository=conversation_repository, membership_repository=membership_repository,
+    )
+    return StreamingResponse(
+        storage.download_stream(media_object.key),
+        media_type=asset.content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": "attachment",
+        },
     )
 
 
