@@ -10,6 +10,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
+import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import styles from "./MessageComposer.module.css";
@@ -28,6 +29,7 @@ export function MessageComposer() {
 
 function ConversationComposer({ conversationId }: { conversationId: string }) {
   const { db, sync, accountKey, media, http } = useRuntime();
+  const { data: policy } = useConversationPolicy(conversationId);
   const { session } = useAuth();
   const reply = useUiStore((s) => s.replyTarget);
   const clearReply = useUiStore((s) => s.setReplyTarget);
@@ -223,9 +225,16 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   };
 
   const onAttach = async (fileList: FileList | null) => {
+    if (policy?.allowAttachments === false) return;
     if (!fileList?.length || !conversationId || !media) return;
     const file = fileList.item(0);
     if (!file) return;
+    if (policy && file.size > policy.maxAttachmentBytes) {
+      setFailedUpload(null);
+      setUploadNote("Размер файла превышает лимит беседы");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     setUploadNote(`Загрузка ${file.name}…`);
     try {
       await media.enqueue(file, conversationId);
@@ -255,7 +264,11 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
           setFailedUpload((current) => (current === job.id ? null : current));
         } else if (job.status === "failed") {
           setUploadNote(job.error ?? "Ошибка загрузки");
-          setFailedUpload(job.id);
+          setFailedUpload(job.retryable ? job.id : null);
+        } else if (job.status === "scanning" || job.status === "completing") {
+          setUploadNote(`Проверка файла ${job.file.name}…`);
+        } else if (job.status === "uploading") {
+          setUploadNote(`Загрузка ${job.file.name}…`);
         }
       }
     };
@@ -419,11 +432,20 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
               onChange={(e) => void onAttach(e.target.files)}
             />
             <IconButton
-              label="Вложение"
+              label={
+                policy?.allowAttachments === false
+                  ? "Вложения запрещены правилами беседы"
+                  : "Вложение"
+              }
               icon="attach"
               size="sm"
               iconSize={20}
-              disabled={!!editingId || sending || !hydrated}
+              disabled={
+                !!editingId ||
+                sending ||
+                !hydrated ||
+                policy?.allowAttachments === false
+              }
               onClick={() => fileInputRef.current?.click()}
             />
           </div>

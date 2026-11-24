@@ -12,6 +12,9 @@ export interface OutboxProcessorDeps {
   accountKey: AccountKey;
   http: HttpClient;
   onFlush?: () => void;
+  canFlush?: () => boolean;
+  onFailure?: (kind: "outbox_retry" | "outbox_rejected") => void;
+  onSendAck?: (durationMs: number) => void;
 }
 
 interface ServerMessageDTO {
@@ -33,9 +36,9 @@ export class OutboxProcessor {
     if (this.timer) return;
     this.stopRequested = false;
     this.timer = setInterval(() => {
-      void this.flush();
+      this.requestFlush();
     }, intervalMs);
-    void this.flush();
+    this.requestFlush();
   }
 
   stop(): void {
@@ -47,13 +50,14 @@ export class OutboxProcessor {
   }
 
   requestFlush(): void {
-    void this.flush();
+    void this.flush().catch(() => undefined);
   }
 
   async flush(): Promise<void> {
-    if (this.running || this.stopRequested) return;
+    if (this.running || this.stopRequested || this.deps.canFlush?.() === false) return;
 
     const run = async () => {
+      if (this.running || this.stopRequested) return;
       this.running = true;
       try {
         await this.processDueItems();
@@ -85,11 +89,13 @@ export class OutboxProcessor {
       .filter(
         (item) =>
           (item.status === "pending" || item.status === "processing") &&
+          (item.leaseUntil ?? 0) <= now &&
           item.nextAttemptAt <= now,
       )
       .toArray();
 
     for (const item of items.slice(0, 5)) {
+      if (this.stopRequested || this.deps.canFlush?.() === false) break;
       await this.processItem(item.id, now);
     }
   }
@@ -110,20 +116,24 @@ export class OutboxProcessor {
   }
 
   private async processItem(id: string, now: number): Promise<void> {
-    const item = await this.deps.db.outbox.get(id);
-    if (!item || item.accountKey !== this.deps.accountKey) return;
-    if (item.status !== "pending" && item.status !== "processing") return;
-    if (item.nextAttemptAt > now) return;
-
-    if (item.status === "processing" && item.leaseUntil && item.leaseUntil > now) {
-      return;
-    }
-
-    const leaseUntil = now + 30_000;
-    await this.deps.db.outbox.update(id, {
-      status: "processing",
-      leaseUntil,
+    const item = await this.deps.db.transaction("rw", this.deps.db.outbox, async () => {
+      const entry = await this.deps.db.outbox.get(id);
+      if (
+        !entry ||
+        entry.accountKey !== this.deps.accountKey ||
+        (entry.status !== "pending" && entry.status !== "processing") ||
+        entry.nextAttemptAt > now ||
+        (entry.leaseUntil ?? 0) > now
+      )
+        return undefined;
+      // Covers both HTTP attempts and one refresh request in the runtime.
+      await this.deps.db.outbox.update(id, {
+        status: "processing",
+        leaseUntil: Date.now() + 60_000,
+      });
+      return entry;
     });
+    if (!item) return;
 
     try {
       if (item.type === "message.send" && item.command.type === "message.send") {
@@ -176,10 +186,12 @@ export class OutboxProcessor {
           body.quoteText = quoteText;
         }
 
+        const started = performance.now();
         const dto = await this.deps.http.post<ServerMessageDTO>(
           `/v1/conversations/${conversationId}/messages`,
           body,
         );
+        this.deps.onSendAck?.(performance.now() - started);
 
         const ack: SendMessageAck = {
           messageId: dto.id,
@@ -295,6 +307,7 @@ export class OutboxProcessor {
         error instanceof HttpError &&
         [400, 403, 404, 409, 410, 413, 422].includes(error.status)
       ) {
+        this.deps.onFailure?.("outbox_rejected");
         if (item.command.type === "message.send") {
           await this.deps.db.messages
             .where("[accountKey+clientMessageId]")
@@ -324,6 +337,7 @@ export class OutboxProcessor {
         return;
       }
 
+      this.deps.onFailure?.("outbox_retry");
       if (item.command.type === "message.send") {
         await this.deps.db.messages
           .where("[accountKey+clientMessageId]")

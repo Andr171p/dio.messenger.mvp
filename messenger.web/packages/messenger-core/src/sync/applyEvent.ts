@@ -8,6 +8,7 @@ export async function applyEvent(
   accountKey: AccountKey,
   event: ConversationEvent,
   userId?: string,
+  requireConversation = false,
 ): Promise<void> {
   await db.transaction(
     "rw",
@@ -15,6 +16,8 @@ export async function applyEvent(
     db.syncCursors,
     db.conversations,
     async () => {
+      if (requireConversation && !(await db.conversations.get(event.conversationId)))
+        return;
       const cursor = await db.syncCursors.get([accountKey, event.conversationId]);
       const last = cursor?.eventSeq ?? 0;
 

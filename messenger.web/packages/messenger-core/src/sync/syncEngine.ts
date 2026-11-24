@@ -16,6 +16,8 @@ import { wipeConversation } from "./wipeConversation.js";
 import { projectMessage, type ServerMessage } from "./projectMessage.js";
 
 export interface SyncEngineOptions {
+  onFailure?: (kind: "sync_failed" | "outbox_retry" | "outbox_rejected") => void;
+  onTiming?: (kind: "send_ack" | "sync_recovery", durationMs: number) => void;
   db: MessengerDatabase;
   accountKey: AccountKey;
   userId?: string;
@@ -29,6 +31,7 @@ export interface SyncEngine {
   stop(): Promise<void>;
   requestFlush(): void;
   synchronize(): Promise<void>;
+  pauseSending(): void;
   watchConversation(conversationId: string): void;
   loadHistory(
     conversationId: string,
@@ -107,6 +110,10 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const presenceByUser = new Map<string, PresenceState>();
   const typingByConversation = new Map<string, TypingState>();
   const pulling = new Set<string>();
+  let syncing: Promise<void> | null = null;
+  let stopped = false;
+  let accessVerified = false;
+  const revoked = new Set<string>();
 
   const notify = (patch: Partial<SyncStatus>) => {
     Object.assign(status, patch);
@@ -123,6 +130,10 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     db: options.db,
     accountKey: options.accountKey,
     http: options.http,
+    canFlush: () =>
+      accessVerified && (typeof navigator === "undefined" || navigator.onLine),
+    onFailure: options.onFailure,
+    onSendAck: (durationMs) => options.onTiming?.("send_ack", durationMs),
   });
 
   const ws = new WebSocketClient({
@@ -131,18 +142,24 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     onConnectionChange: (connected) => {
       notify({
         wsConnected: connected,
-        runtime: connected ? "connected" : "disconnected",
+        runtime:
+          !connected && (status.runtime === "error" || syncing)
+            ? status.runtime
+            : connected
+              ? "connected"
+              : "disconnected",
       });
       if (connected) {
-        void synchronize();
+        void synchronize().catch(() => undefined);
       }
     },
     onAccessRevoked: ({ conversationId }) => {
+      revoked.add(conversationId);
       options.onAccessRevoked?.(conversationId);
       void (async () => {
         ws.unsubscribeConversation(conversationId);
         await wipeConversation(options.db, options.accountKey, conversationId);
-      })();
+      })().catch(() => undefined);
     },
     onEphemeral: ({ type, payload }) => {
       if (type === "typing.updated") {
@@ -229,30 +246,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     });
   };
 
-  async function upsertConversationsFromDirectory(): Promise<
-    Map<string, ApiConversation>
-  > {
+  async function getConversationDirectory(): Promise<Map<string, ApiConversation>> {
     const list = await options.http.get<ApiConversation[]>("/v1/conversations");
-    const map = new Map<string, ApiConversation>();
-    for (const row of list) {
-      map.set(row.id, row);
-      const existing = await options.db.conversations.get(row.id);
-      await options.db.conversations.put({
-        accountKey: options.accountKey,
-        id: row.id,
-        title: row.title?.trim() || existing?.title || row.id,
-        lastMessagePreview: existing?.lastMessagePreview,
-        lastMessageAt: existing?.lastMessageAt,
-        unreadCount: existing?.unreadCount ?? 0,
-        isGuest: row.hasExternalMembers ?? existing?.isGuest ?? false,
-        hasExternalMembers: row.hasExternalMembers ?? existing?.hasExternalMembers,
-        kind: mapConversationKind(row.type) ?? existing?.kind,
-        memberCount: row.memberCount ?? existing?.memberCount,
-        isPinned: existing?.isPinned ?? false,
-        updatedAt: existing?.updatedAt ?? Date.now(),
-      });
-    }
-    return map;
+    return new Map(list.map((row) => [row.id, row]));
   }
 
   async function applySnapshot(conversationId: string): Promise<void> {
@@ -268,6 +264,11 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       options.db.conversations,
       options.db.syncCursors,
       async () => {
+        if (
+          revoked.has(conversationId) ||
+          !(await options.db.conversations.get(conversationId))
+        )
+          return;
         // Replace projection messages; keep outbox intact
         await options.db.messages
           .where("[accountKey+conversationId]")
@@ -332,10 +333,11 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     await pullConversationDelta(conversationId, snap.snapshotEventSeq);
   }
 
-  async function applyManifest(manifest: SyncManifest): Promise<void> {
-    const directory = await upsertConversationsFromDirectory();
+  async function applyManifest(
+    manifest: SyncManifest,
+    previouslyRevoked: Set<string>,
+  ): Promise<void> {
     const allowed = new Set(manifest.conversations.map((c) => c.conversationId));
-    for (const id of directory.keys()) allowed.add(id);
 
     const localConversations = await options.db.conversations
       .where("accountKey")
@@ -350,8 +352,11 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       }
     }
 
+    const directory = await getConversationDirectory();
     for (const entry of manifest.conversations) {
       const conversationId = entry.conversationId;
+      if (previouslyRevoked.has(conversationId)) revoked.delete(conversationId);
+      if (revoked.has(conversationId)) continue;
       const meta = directory.get(conversationId);
       const existing = await options.db.conversations.get(conversationId);
       await options.db.conversations.put({
@@ -431,11 +436,13 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
 
     let lastApplied = afterSeq;
     for (const raw of events) {
+      if (stopped || revoked.has(conversationId)) break;
       await applyEvent(
         options.db,
         options.accountKey,
         toConversationEvent(raw),
         options.userId,
+        true,
       );
       lastApplied = raw.seq;
     }
@@ -480,13 +487,22 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     }
   }
 
-  async function synchronize(): Promise<void> {
+  async function runSync(): Promise<void> {
+    const started = performance.now();
+    accessVerified = false;
+    const previouslyRevoked = new Set(revoked);
     notify({ runtime: "syncing" });
     try {
       const manifest = await options.http.get<SyncManifest>("/v1/sync/manifest");
-      await applyManifest(manifest);
+      await applyManifest(manifest, previouslyRevoked);
+      if (stopped) return;
+      accessVerified = true;
+      options.onTiming?.("sync_recovery", performance.now() - started);
+      outbox.requestFlush();
       notify({ runtime: "connected", lastSyncAt: Date.now(), lastError: undefined });
     } catch (error) {
+      if (!stopped && (typeof navigator === "undefined" || navigator.onLine))
+        options.onFailure?.("sync_failed");
       notify({
         runtime: "error",
         lastError: error instanceof Error ? error.message : String(error),
@@ -495,8 +511,17 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     }
   }
 
+  function synchronize(): Promise<void> {
+    if (stopped) return Promise.resolve();
+    syncing ??= runSync().finally(() => {
+      syncing = null;
+    });
+    return syncing;
+  }
+
   return {
     async start() {
+      stopped = false;
       notify({ runtime: "starting" });
       ws.subscribe(handleWsEvent);
       outbox.start();
@@ -509,6 +534,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           lastError: error instanceof Error ? error.message : String(error),
         });
       }
+      if (stopped) return;
       void ws.connect().catch((error) => {
         notify({
           lastError: error instanceof Error ? error.message : String(error),
@@ -518,6 +544,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       });
     },
     async stop() {
+      stopped = true;
+      accessVerified = false;
       ws.disconnect();
       outbox.stop();
       notify({ runtime: "idle", wsConnected: false });
@@ -526,6 +554,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       outbox.requestFlush();
     },
     synchronize,
+    pauseSending() {
+      accessVerified = false;
+    },
     watchConversation(conversationId: string) {
       ws.subscribeConversation(conversationId);
     },

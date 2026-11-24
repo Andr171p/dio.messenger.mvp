@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore, type ListCategory } from "../stores/uiStore.js";
 import styles from "./ConversationList.module.css";
+import { useAuth } from "../app/providers/AuthProvider.js";
 
 const CHIPS: { id: ListCategory; label: string }[] = [
   { id: "all", label: "Все" },
@@ -29,6 +30,7 @@ function formatTime(ts?: number): string {
 
 export function ConversationList() {
   const { db, accountKey, sync, syncStatus } = useRuntime();
+  const { logout } = useAuth();
   const category = useUiStore((s) => s.listCategory);
   const setCategory = useUiStore((s) => s.setListCategory);
   const selectedId = useUiStore((s) => s.selectedConversationId);
@@ -41,7 +43,6 @@ export function ConversationList() {
   const conversations = useLiveQuery(async () => {
     if (!db || !accountKey) return [] as Conversation[];
     try {
-      if (!db.isOpen()) return [] as Conversation[];
       const rows = await db.conversations
         .where("accountKey")
         .equals(accountKey)
@@ -78,6 +79,15 @@ export function ConversationList() {
               onClick={toggleTheme}
             >
               <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+            </Button>
+            <Button
+              className={styles.mobileTheme}
+              variant="ghost"
+              size="sm"
+              aria-label="Выйти из аккаунта"
+              onClick={() => void logout()}
+            >
+              <Icon name="logout" size={18} />
             </Button>
             <Button
               variant="ghost"

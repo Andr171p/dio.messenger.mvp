@@ -2,6 +2,7 @@ import { DIODESK_PROVIDER, type components } from "@dio/messenger-core";
 import { Badge, Button, Icon, Spinner } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
+import { getRuntimeConfig } from "../app/runtimeConfig.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./ContextResourcePanel.module.css";
 
@@ -153,8 +154,7 @@ export function ContextResourcePanel() {
             variant="primary"
             className={styles.openDesk}
             onClick={() => {
-              const desk =
-                import.meta.env.VITE_DIODESK_WEB_URL ?? "http://localhost:3000";
+              const desk = getRuntimeConfig().deskWeb;
               const id = preview.data?.ref?.resourceId ?? apiResourceId;
               const number = preview.data?.number ?? resourceId;
               window.open(

@@ -10,6 +10,7 @@ import {
   useDirectoryProfiles,
 } from "../features/read/useConversationMembers.js";
 import styles from "./ChatHeader.module.css";
+import { ConversationPolicyDialog } from "./ConversationPolicyDialog.js";
 
 function presenceLabel(
   kind: Conversation["kind"] | undefined,
@@ -35,6 +36,11 @@ export function ChatHeader() {
   const setMobilePane = useUiStore((s) => s.setMobilePane);
   const setSearchOpen = useUiStore((s) => s.setSearchPanelOpen);
   const [, bump] = useState(0);
+  const [policyFor, setPolicyFor] = useState<string | null>(null);
+  const role = members.data?.find(
+    (member) => member.principalId === session?.userId,
+  )?.role;
+  const canManage = role === "owner" || role === "admin";
 
   useEffect(() => {
     if (!sync) return;
@@ -119,6 +125,14 @@ export function ChatHeader() {
         </div>
       </div>
       <div className={styles.actions}>
+        {canManage ? (
+          <IconButton
+            label="Настройки беседы"
+            icon="settings"
+            size="sm"
+            onClick={() => setPolicyFor(conversationId)}
+          />
+        ) : null}
         <details className={styles.members}>
           <summary aria-label="Участники беседы">
             <Icon name="people" size={20} />
@@ -149,6 +163,13 @@ export function ChatHeader() {
           onClick={() => setSearchOpen(true, conversationId)}
         />
       </div>
+      {canManage && policyFor === conversationId ? (
+        <ConversationPolicyDialog
+          key={conversationId}
+          conversationId={conversationId}
+          onClose={() => setPolicyFor(null)}
+        />
+      ) : null}
     </header>
   );
 }

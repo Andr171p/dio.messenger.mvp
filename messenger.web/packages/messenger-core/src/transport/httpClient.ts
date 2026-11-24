@@ -15,6 +15,9 @@ export interface HttpClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null;
   onUnauthorized?: () => void;
+  refreshAccessToken?: (rejectedToken: string | null) => Promise<string | null>;
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export class HttpClient {
@@ -32,7 +35,9 @@ export class HttpClient {
   }
 
   private token(): string | null {
-    return this.options.getAccessToken?.() ?? memoryAuthStore.getAccessToken();
+    return this.options.getAccessToken
+      ? this.options.getAccessToken()
+      : memoryAuthStore.getAccessToken();
   }
 
   async request<T>(
@@ -44,7 +49,7 @@ export class HttpClient {
     headers.set("Accept", "application/json");
 
     const token = this.token();
-    if (token) {
+    if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
     }
 
@@ -57,11 +62,33 @@ export class HttpClient {
       body = JSON.stringify(init.json);
     }
 
-    const response = await fetch(`${this.options.baseUrl}${path}`, {
-      ...init,
-      headers,
-      body,
-    });
+    const signals = [init.signal, this.options.signal].filter(
+      (value): value is AbortSignal => !!value,
+    );
+    const timeout = this.options.timeoutMs;
+    const fetchAttempt = () =>
+      fetch(`${this.options.baseUrl}${path}`, {
+        ...init,
+        headers,
+        body,
+        signal: AbortSignal.any(
+          timeout ? [...signals, AbortSignal.timeout(timeout)] : signals,
+        ),
+      });
+    let response = await fetchAttempt();
+    if (
+      response.status === 401 &&
+      this.options.refreshAccessToken &&
+      !(body instanceof ReadableStream)
+    ) {
+      await response.body?.cancel();
+      for (const signal of signals) signal.throwIfAborted();
+      const renewed = await this.options.refreshAccessToken(token);
+      if (renewed) {
+        headers.set("Authorization", `Bearer ${renewed}`);
+        response = await fetchAttempt();
+      }
+    }
 
     if (response.status === 401) {
       this.options.onUnauthorized?.();
@@ -72,13 +99,17 @@ export class HttpClient {
     }
 
     if (!response.ok) {
-      let body: unknown;
+      let detail: unknown;
       try {
-        body = await response.json();
+        const raw = await response.text();
+        detail = raw;
+        if (raw && response.headers.get("Content-Type")?.includes("json")) {
+          detail = JSON.parse(raw);
+        }
       } catch {
-        body = await response.text();
+        // Preserve the status for empty, malformed, or interrupted bodies.
       }
-      throw new HttpError(response.status, response.statusText, body);
+      throw new HttpError(response.status, response.statusText, detail);
     }
 
     if (response.status === 204) {

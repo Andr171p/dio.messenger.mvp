@@ -8,7 +8,7 @@ const NAV: { id: NavItem; icon: IconName; label: string }[] = [
 ];
 
 export function AppRail() {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
   const active = useUiStore((s) => s.navActive);
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
@@ -57,6 +57,14 @@ export function AppRail() {
           <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
         </Button>
         <Avatar name={session?.displayName ?? "User"} size="sm" />
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Выйти из аккаунта"
+          onClick={() => void logout()}
+        >
+          <Icon name="logout" size={18} />
+        </Button>
       </div>
     </nav>
   );

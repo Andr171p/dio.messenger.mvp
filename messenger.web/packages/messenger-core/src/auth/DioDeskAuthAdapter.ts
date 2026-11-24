@@ -1,5 +1,5 @@
 import type { AuthSession, AuthTokens } from "../models/types.js";
-import { HttpClient } from "../transport/httpClient.js";
+import { HttpClient, HttpError } from "../transport/httpClient.js";
 import { memoryAuthStore } from "./memoryAuthStore.js";
 import type { AuthAdapter, LoginCredentials } from "./types.js";
 
@@ -20,11 +20,13 @@ interface DioDeskUserInfo {
 export class DioDeskAuthAdapter implements AuthAdapter {
   private readonly http: HttpClient;
   private unauthorized = new Set<() => void>();
+  private refreshing: Promise<AuthTokens> | null = null;
 
   constructor(baseUrl: string) {
     this.http = new HttpClient({
       baseUrl,
-      getAccessToken: () => memoryAuthStore.getAccessToken(),
+      getAccessToken: () => null,
+      timeoutMs: 10_000,
       onUnauthorized: () => {
         for (const handler of this.unauthorized) {
           handler();
@@ -47,6 +49,7 @@ export class DioDeskAuthAdapter implements AuthAdapter {
   }
 
   async restoreSession(): Promise<AuthSession | null> {
+    memoryAuthStore.syncFromStorage();
     const session = memoryAuthStore.getSession();
     const tokens = memoryAuthStore.getTokens();
     if (!session || !tokens) {
@@ -56,6 +59,7 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     if (Date.now() < tokens.expiresAt - 30_000) {
       return session;
     }
+    if (typeof navigator !== "undefined" && !navigator.onLine) return session;
 
     if (!tokens.refreshToken) {
       memoryAuthStore.clear();
@@ -66,8 +70,7 @@ export class DioDeskAuthAdapter implements AuthAdapter {
       await this.refresh();
       return memoryAuthStore.getSession();
     } catch {
-      memoryAuthStore.clear();
-      return null;
+      return memoryAuthStore.getSession();
     }
   }
 
@@ -90,19 +93,12 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     const tokens: AuthTokens = {
       accessToken: tokensRaw.access_token,
       refreshToken: tokensRaw.refresh_token,
-      expiresAt: tokensRaw.expires_at * 1000,
+      expiresAt: normalizeExpiry(tokensRaw.expires_at),
     };
 
-    // Temporarily place access token so userinfo can authenticate.
-    memoryAuthStore.setAuth(
-      {
-        userId: "pending",
-        accountKey: "pending",
-      },
-      tokens,
-    );
-
-    const user = await this.http.get<DioDeskUserInfo>("/api/v1/auth/userinfo");
+    const user = await this.http.request<DioDeskUserInfo>("/api/v1/auth/userinfo", {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
     const tenantId = user.counterparty_id ?? undefined;
     const accountKey = tenantId ? `${user.id}:${tenantId}` : user.id;
 
@@ -117,47 +113,78 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     return session;
   }
 
-  async refresh(): Promise<AuthTokens> {
-    const current = memoryAuthStore.getTokens();
-    if (!current?.refreshToken) {
-      throw new Error("No refresh token");
-    }
-
-    const data = await this.http.post<DioDeskTokenResponse>("/api/v1/auth/refresh", {
-      refresh_token: current.refreshToken,
-    });
-
-    const tokens: AuthTokens = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt:
-        data.expires_at > 1_000_000_000_000
-          ? data.expires_at
-          : data.expires_at * 1000,
-    };
-
+  refresh(): Promise<AuthTokens> {
+    if (this.refreshing) return this.refreshing;
+    memoryAuthStore.syncFromStorage();
     const session = memoryAuthStore.getSession();
-    if (!session) {
-      throw new Error("No session to refresh");
-    }
-    memoryAuthStore.setAuth(session, tokens);
-    return tokens;
+    const current = memoryAuthStore.getTokens();
+    if (!session || !current?.refreshToken)
+      return Promise.reject(new Error("No refresh token"));
+
+    const run = async () => {
+      memoryAuthStore.syncFromStorage();
+      const active = memoryAuthStore.getTokens();
+      if (!active || memoryAuthStore.getSession() !== session)
+        throw new Error("Session changed");
+      if (active.accessToken !== current.accessToken) return active;
+      try {
+        const data = await this.http.post<DioDeskTokenResponse>(
+          "/api/v1/auth/refresh",
+          {
+            refresh_token: active.refreshToken,
+          },
+        );
+        memoryAuthStore.syncFromStorage();
+        if (memoryAuthStore.getSession() !== session)
+          throw new Error("Session changed");
+        const latest = memoryAuthStore.getTokens();
+        if (latest && latest !== active) return latest;
+        const tokens = {
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          expiresAt: normalizeExpiry(data.expires_at),
+        };
+        memoryAuthStore.setAuth(session, tokens);
+        return tokens;
+      } catch (error) {
+        memoryAuthStore.syncFromStorage();
+        if (memoryAuthStore.getSession() === session) {
+          const latest = memoryAuthStore.getTokens();
+          if (latest && latest !== active) return latest;
+          if (error instanceof HttpError && [400, 401, 403].includes(error.status))
+            memoryAuthStore.clear();
+        }
+        throw error;
+      }
+    };
+    const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+    const pending = Promise.resolve(
+      locks ? locks.request("dio-messenger-auth-refresh", run) : run(),
+    ).finally(() => {
+      this.refreshing = null;
+    });
+    this.refreshing = pending;
+    return pending;
   }
 
   async logout(): Promise<void> {
-    const token = memoryAuthStore.getAccessToken();
+    const token = memoryAuthStore.getAccessTokenAllowExpired();
     const refresh = memoryAuthStore.getTokens()?.refreshToken;
+    memoryAuthStore.clear();
     try {
       if (token) {
         await this.http.request("/api/v1/auth/logout", {
           method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
           json: refresh ? { refresh_token: refresh } : {},
         });
       }
     } catch {
       // best-effort logout
-    } finally {
-      memoryAuthStore.clear();
     }
   }
+}
+
+function normalizeExpiry(timestamp: number) {
+  return timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
 }

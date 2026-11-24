@@ -3,6 +3,10 @@
 interface ImportMetaEnv {
   readonly VITE_MESSENGER_API_URL: string;
   readonly VITE_DIODESK_API_URL: string;
+  readonly VITE_DIODESK_WEB_URL: string;
+  readonly VITE_TELEMETRY_URL?: string;
+  readonly VITE_RELEASE?: string;
+  readonly VITE_RUNTIME_CONFIG?: "1";
 }
 
 interface ImportMeta {

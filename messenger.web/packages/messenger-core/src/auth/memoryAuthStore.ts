@@ -17,6 +17,12 @@ const state: MemoryAuthState = {
   session: null,
   tokens: null,
 };
+const listeners = new Set<() => void>();
+let storedValue: string | null = null;
+
+function notify() {
+  for (const listener of listeners) listener();
+}
 
 function canUseStorage(): boolean {
   return typeof localStorage !== "undefined";
@@ -24,48 +30,67 @@ function canUseStorage(): boolean {
 
 function persist(): void {
   if (!canUseStorage()) return;
-  if (!state.session || !state.tokens) {
-    localStorage.removeItem(STORAGE_KEY);
-    return;
+  const value = state.session && state.tokens ? JSON.stringify(state) : null;
+  try {
+    if (value === null) localStorage.removeItem(STORAGE_KEY);
+    else localStorage.setItem(STORAGE_KEY, value);
+    storedValue = value;
+  } catch {
+    // The session can continue in memory if browser storage is unavailable.
   }
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      session: state.session,
-      tokens: state.tokens,
-    }),
-  );
 }
 
 function hydrateFromStorage(): void {
   if (!canUseStorage()) return;
+  let raw: string | null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw) as {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return;
+  }
+  try {
+    if (raw === storedValue) return;
+    storedValue = raw;
+    const parsed = (raw ? JSON.parse(raw) : {}) as {
       session?: AuthSession;
       tokens?: AuthTokens;
     };
     if (
       parsed.session?.userId &&
       parsed.session?.accountKey &&
+      parsed.session.accountKey !== "pending" &&
       parsed.tokens?.accessToken &&
       parsed.tokens?.refreshToken &&
       typeof parsed.tokens.expiresAt === "number"
     ) {
-      state.session = parsed.session;
+      if (state.session?.accountKey !== parsed.session.accountKey) {
+        state.session = parsed.session;
+      }
       state.tokens = parsed.tokens;
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      state.session = null;
+      state.tokens = null;
     }
   } catch {
-    localStorage.removeItem(STORAGE_KEY);
+    state.session = null;
+    state.tokens = null;
   }
+  notify();
 }
 
 hydrateFromStorage();
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE_KEY || event.key === null) hydrateFromStorage();
+  });
+}
 
 export const memoryAuthStore = {
+  syncFromStorage: hydrateFromStorage,
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
   getSession(): AuthSession | null {
     return state.session;
   },
@@ -89,10 +114,12 @@ export const memoryAuthStore = {
     state.session = session;
     state.tokens = tokens;
     persist();
+    notify();
   },
   clear(): void {
     state.session = null;
     state.tokens = null;
     persist();
+    notify();
   },
 };

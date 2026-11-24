@@ -1,0 +1,16 @@
+.notice {
+  position: fixed;
+  z-index: 100;
+  inset-inline-end: 12px;
+  inset-block-start: max(12px, env(safe-area-inset-top));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-inline-size: calc(100% - 24px);
+  padding: 8px 12px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-lg);
+  background: var(--dio-sidebar);
+  box-shadow: var(--dio-shadow-sm);
+}

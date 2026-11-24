@@ -1,5 +1,6 @@
 import {
   HttpClient,
+  memoryAuthStore,
   MediaUploadManager,
   createSyncEngine,
   openMessengerDatabase,
@@ -20,8 +21,10 @@ import {
 import { useAuth } from "./AuthProvider.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useUiStore } from "../../stores/uiStore.js";
+import { useLiveQuery } from "dexie-react-hooks";
+import { reportFailure, reportTiming } from "../telemetry.js";
 
-const messengerApi = import.meta.env.VITE_MESSENGER_API_URL ?? "http://127.0.0.1:8002";
+import { getRuntimeConfig } from "../runtimeConfig.js";
 
 interface RuntimeContextValue {
   db: MessengerDatabase | null;
@@ -37,7 +40,7 @@ const RuntimeContext = createContext<RuntimeContextValue | null>(null);
 const idleStatus: SyncStatus = { runtime: "idle", wsConnected: false };
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
-  const { session, adapter, isAuthenticated, onSessionExpired } = useAuth();
+  const { session, adapter, isAuthenticated } = useAuth();
   const queries = useQueryClient();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(idleStatus);
   const [runtime, setRuntime] = useState<{
@@ -54,6 +57,21 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     accountKey: null,
   });
   const activeAccountRef = useRef<string | null>(null);
+  const selected = useUiStore((state) => state.selectedConversationId);
+  const selectedExists = useLiveQuery(async () => {
+    if (!selected || !runtime.db) return null;
+    return { selected, exists: !!(await runtime.db.conversations.get(selected)) };
+  }, [selected, runtime.db]);
+  useEffect(() => {
+    if (
+      selectedExists &&
+      selectedExists.selected === selected &&
+      !selectedExists.exists
+    ) {
+      useUiStore.getState().setSelectedConversation(null);
+      queries.clear();
+    }
+  }, [selectedExists, selected, queries]);
 
   useEffect(() => {
     if (!isAuthenticated || !session) {
@@ -78,22 +96,49 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     }
 
     const accountKey = session.accountKey;
+    const { messengerApi } = getRuntimeConfig();
     activeAccountRef.current = accountKey;
+    const ui = useUiStore.getState();
+    ui.setSelectedConversation(null);
+    ui.setSearchPanelOpen(false);
+    ui.setNewChatOpen(false);
+    const lifetime = new AbortController();
+    const sessionToken = () => {
+      memoryAuthStore.syncFromStorage();
+      if (adapter.getSession() !== session) {
+        lifetime.abort();
+        return null;
+      }
+      return adapter.getAccessToken();
+    };
     const db = openMessengerDatabase(accountKey);
     const http = new HttpClient({
       baseUrl: messengerApi,
-      getAccessToken: () => adapter.getAccessToken(),
-      onUnauthorized: () => {
-        void adapter.refresh().catch(() => {
-          onSessionExpired();
-        });
+      signal: lifetime.signal,
+      timeoutMs: 12_000,
+      getAccessToken: sessionToken,
+      refreshAccessToken: async (rejectedToken) => {
+        const active = sessionToken();
+        if (adapter.getSession() !== session) return null;
+        if (active && active !== rejectedToken) return active;
+        try {
+          await adapter.refresh();
+          return sessionToken();
+        } catch {
+          if (!lifetime.signal.aborted && navigator.onLine)
+            reportFailure("session_refresh_failed");
+          return null;
+        }
       },
     });
-    const wsBase = messengerApi.replace(/^http/, "ws") + "/v1/ws";
+    const wsBase = new URL(`${messengerApi}/v1/ws`, window.location.origin);
+    wsBase.protocol = wsBase.protocol === "https:" ? "wss:" : "ws:";
     const sync = createSyncEngine({
       db,
       accountKey,
       userId: session.userId,
+      onFailure: reportFailure,
+      onTiming: reportTiming,
       onAccessRevoked: (conversationId) => {
         const ui = useUiStore.getState();
         if (ui.selectedConversationId === conversationId)
@@ -102,15 +147,30 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         queries.clear();
       },
       http,
-      wsBaseUrl: wsBase,
+      wsBaseUrl: wsBase.href,
     });
-    const media = new MediaUploadManager(http, (conversationId, assetId, filename) =>
-      saveDraftUpload(db, accountKey, conversationId, assetId, filename),
+    const media = new MediaUploadManager(
+      http,
+      (conversationId, assetId, filename) =>
+        saveDraftUpload(db, accountKey, conversationId, assetId, filename),
+      lifetime.signal,
     );
 
     setRuntime({ db, sync, http, media, accountKey });
 
     const unsub = sync.subscribe(setSyncStatus);
+    const reconcile = () => {
+      if (!navigator.onLine || document.visibilityState === "hidden") return;
+      void sync
+        .synchronize()
+        .then(() => sync.requestFlush())
+        .catch(() => undefined);
+    };
+    window.addEventListener("online", reconcile);
+    window.addEventListener("offline", sync.pauseSending);
+    window.addEventListener("focus", reconcile);
+    window.addEventListener("pageshow", reconcile);
+    document.addEventListener("visibilitychange", reconcile);
     void sync.start().catch((error) => {
       setSyncStatus((prev) => ({
         ...prev,
@@ -121,10 +181,17 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
 
     return () => {
       unsub();
+      lifetime.abort();
+      window.removeEventListener("online", reconcile);
+      window.removeEventListener("offline", sync.pauseSending);
+      window.removeEventListener("focus", reconcile);
+      window.removeEventListener("pageshow", reconcile);
+      document.removeEventListener("visibilitychange", reconcile);
       void sync.stop();
-      // Keep IndexedDB open across Strict Mode remount; close only on logout.
+      if (adapter.getSession()?.accountKey !== accountKey)
+        void closeMessengerDatabase(accountKey);
     };
-  }, [isAuthenticated, session, adapter, onSessionExpired, queries]);
+  }, [isAuthenticated, session, adapter, queries]);
 
   const value: RuntimeContextValue = {
     db: runtime.db,

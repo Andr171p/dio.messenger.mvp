@@ -1,0 +1,92 @@
+name: Messenger Frontend
+
+on:
+  push:
+    paths: ["messenger.web/**", ".github/workflows/messenger-frontend.yml"]
+  pull_request:
+    paths: ["messenger.web/**", ".github/workflows/messenger-frontend.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: messenger.web
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      VITE_RUNTIME_CONFIG: "1"
+      VITE_RELEASE: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: messenger.web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: messenger.web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Write build identifier
+        run: node -e 'require("node:fs").writeFileSync("apps/messenger/dist/release.json", JSON.stringify({sha:process.env.VITE_RELEASE}))'
+      - name: Configure test hosts
+        run: |
+          node -e 'require("node:fs").writeFileSync("apps/messenger/dist/messenger-runtime.json", JSON.stringify({messengerApi:"/mock-messenger",deskApi:"/mock-desk",deskWeb:"https://desk.example.invalid"}))'
+      - run: pnpm --filter @dio/messenger exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm e2e
+        env:
+          PLAYWRIGHT_ALL_BROWSERS: "1"
+          PLAYWRIGHT_PRODUCTION: "1"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: messenger-playwright-results
+          path: messenger.web/apps/messenger/test-results
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: messenger-web-${{ github.sha }}
+          path: |
+            messenger.web/apps/messenger/dist/
+            !messenger.web/apps/messenger/dist/messenger-runtime.json
+
+  staging:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: messenger-staging
+    env:
+      PLAYWRIGHT_STAGING_URL: ${{ vars.PLAYWRIGHT_STAGING_URL }}
+      STAGING_MESSENGER_API_URL: ${{ vars.STAGING_MESSENGER_API_URL }}
+      STAGING_CHAT_ID: ${{ vars.STAGING_CHAT_ID }}
+      STAGING_CHAT_TITLE: ${{ vars.STAGING_CHAT_TITLE }}
+      STAGING_MEMBER_ID: ${{ vars.STAGING_MEMBER_ID }}
+      STAGING_MEMBER_ROLE: ${{ vars.STAGING_MEMBER_ROLE }}
+      STAGING_OWNER_EMAIL: ${{ secrets.STAGING_OWNER_EMAIL }}
+      STAGING_OWNER_PASSWORD: ${{ secrets.STAGING_OWNER_PASSWORD }}
+      STAGING_MEMBER_EMAIL: ${{ secrets.STAGING_MEMBER_EMAIL }}
+      STAGING_MEMBER_PASSWORD: ${{ secrets.STAGING_MEMBER_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: messenger.web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: messenger.web/pnpm-lock.yaml
+      - name: Check deployed commit
+        run: |
+          test -n "$PLAYWRIGHT_STAGING_URL"
+          node -e 'fetch(new URL("/release.json",process.env.PLAYWRIGHT_STAGING_URL)).then(r=>r.json()).then(r=>{if(r.sha!==process.env.GITHUB_SHA)throw new Error("Deploy this commit to Messenger staging before running the live scenarios")})'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @dio/messenger exec playwright install --with-deps chromium
+      - run: pnpm e2e

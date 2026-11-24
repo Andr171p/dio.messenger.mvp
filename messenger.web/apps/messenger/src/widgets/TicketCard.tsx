@@ -38,7 +38,10 @@ export function TicketCard({
     <button
       type="button"
       className={styles.ticketCard}
-      onClick={() => useUiStore.getState().setContextResource(name, uuid)}
+      onClick={(event) => {
+        event.currentTarget.focus({ preventScroll: true });
+        useUiStore.getState().setContextResource(name, uuid);
+      }}
     >
       <span className={styles.ticketLabel}>
         <Icon name="itsm-link" size={15} /> {name}

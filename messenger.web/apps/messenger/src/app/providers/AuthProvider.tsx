@@ -14,7 +14,7 @@ import {
   type ReactNode,
 } from "react";
 
-const dioDeskBase = import.meta.env.VITE_DIODESK_API_URL;
+import { getRuntimeConfig } from "../runtimeConfig.js";
 
 interface AuthContextValue {
   adapter: AuthAdapter;
@@ -23,19 +23,21 @@ interface AuthContextValue {
   ready: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  onSessionExpired: () => void;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const adapter = useMemo(() => new DioDeskAuthAdapter(dioDeskBase), []);
+  const adapter = useMemo(() => new DioDeskAuthAdapter(getRuntimeConfig().deskApi), []);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    const unsubscribe = memoryAuthStore.subscribe(() =>
+      setSession(memoryAuthStore.getSession()),
+    );
     void (async () => {
       try {
         const restored = await adapter.restoreSession();
@@ -44,8 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!cancelled) {
-          memoryAuthStore.clear();
-          setSession(null);
+          setSession(memoryAuthStore.getSession());
         }
       } finally {
         if (!cancelled) setReady(true);
@@ -53,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [adapter]);
 
@@ -66,13 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await adapter.logout();
-    setSession(null);
   }, [adapter]);
-
-  const onSessionExpired = useCallback(() => {
-    memoryAuthStore.clear();
-    setSession(null);
-  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -81,10 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready,
       login,
       logout,
-      onSessionExpired,
       isAuthenticated: !!session,
     }),
-    [adapter, session, ready, login, logout, onSessionExpired],
+    [adapter, session, ready, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

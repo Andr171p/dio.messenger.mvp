@@ -1,8 +1,12 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { MessengerShellPage } from "../../pages/MessengerShellPage.js";
 import { LoginPage } from "../../pages/LoginPage.js";
 import { useAuth } from "../providers/AuthProvider.js";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+
+const MessengerShellPage = lazy(async () => {
+  const { MessengerShellPage } = await import("../../pages/MessengerShellPage.js");
+  return { default: MessengerShellPage };
+});
 
 function AuthGate({ children }: { children: ReactNode }) {
   const { ready } = useAuth();
@@ -42,7 +46,9 @@ export function AppRouter() {
             path="/*"
             element={
               <ProtectedRoute>
-                <MessengerShellPage />
+                <Suspense fallback={<p role="status">Загрузка переписки…</p>}>
+                  <MessengerShellPage />
+                </Suspense>
               </ProtectedRoute>
             }
           />
