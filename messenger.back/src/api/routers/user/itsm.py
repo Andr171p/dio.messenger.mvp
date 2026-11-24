@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from src.api.dependencies.auth import BearerToken, CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
@@ -21,6 +21,7 @@ from src.application.itsm.dtos import (
     CreateTicketFromChatResultDTO,
     ResourceActionRequestDTO,
     ResourceActionResultDTO,
+    ResourceAttachmentAccessDTO,
     ResourcePreviewDTO,
     ResourceReference,
     TicketSuggestionDTO,
@@ -37,7 +38,7 @@ async def search_tickets(
     membership_repository: MembershipRepositoryDep,
     itsm: ItsmAdapterDep,
     conversation_id: Annotated[UUID, Query(alias="conversationId")],
-    q: Annotated[str, Query(min_length=3, max_length=100)],
+    q: Annotated[str, Query(max_length=100)] = "",
 ) -> list[ResourcePreviewDTO]:
     _, membership = await require_active_membership(
         conversation_id=conversation_id,
@@ -47,7 +48,7 @@ async def search_tickets(
     )
     if is_guest_role(membership.role):
         raise PermissionDeniedError("Ticket search is available to staff members.")
-    if len(q.strip()) < 3:
+    if 0 < len(q.strip()) < 3:
         return []
     return await itsm.search(q.strip(), access_token=token)
 
@@ -79,6 +80,31 @@ async def get_resource_preview(
         preview_resolver=itsm,
         include_activity=include_activity,
     )
+
+
+@router.get("/v1/resources/tickets/{ticket_id}/attachments/{attachment_id}/access")
+async def get_ticket_attachment_access(
+    ticket_id: UUID,
+    attachment_id: UUID,
+    response: Response,
+    auth: CurrentUser,
+    token: BearerToken,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    itsm: ItsmAdapterDep,
+    conversation_id: Annotated[UUID, Query(alias="conversationId")],
+) -> ResourceAttachmentAccessDTO:
+    _, membership = await require_active_membership(
+        conversation_id=conversation_id,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if is_guest_role(membership.role):
+        raise PermissionDeniedError("Ticket attachments are available to staff members.")
+    result = await itsm.attachment_access(ticket_id, attachment_id, access_token=token)
+    response.headers["Cache-Control"] = "no-store"
+    return result
 
 
 @router.post(

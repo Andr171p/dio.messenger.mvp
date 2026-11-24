@@ -25,6 +25,7 @@ interface MentionTicketPickerProps {
   conversationId: string;
   http: HttpClient | null;
   query: string;
+  showSearch?: boolean;
   onPick: (token: string, id: string) => void;
   onClose: () => void;
 }
@@ -56,14 +57,17 @@ export function MentionTicketPicker({
   conversationId,
   http,
   query,
+  showSearch = false,
   onPick,
   onClose,
 }: MentionTicketPickerProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const mentionQ = extractMentionQuery(query);
-  const ticketQ = extractTicketQuery(query);
+  const mentionQ = showSearch ? search.trim() : extractMentionQuery(query);
+  const ticketQ = showSearch ? search.trim() : extractTicketQuery(query);
   const [ticketTerm, setTicketTerm] = useState("");
   useEffect(() => {
     const timer = setTimeout(() => setTicketTerm(ticketQ), 250);
@@ -75,7 +79,7 @@ export function MentionTicketPicker({
     enabled:
       mode === "ticket" &&
       !!http &&
-      ticketTerm.length >= 3 &&
+      (ticketTerm.length === 0 || ticketTerm.length >= 3) &&
       !UUID_RE.test(ticketTerm),
     queryFn: () => {
       const params = new URLSearchParams({ conversationId, q: ticketTerm });
@@ -179,7 +183,7 @@ export function MentionTicketPicker({
         !items.some((row) => row.id === link.resourceId)
       ) {
         items.push({
-          id: `link-${link.resourceId ?? label}`,
+          id: link.resourceId,
           label: label.startsWith("#") ? label : `#${label}`,
           sub: "Контекст беседы",
         });
@@ -230,7 +234,11 @@ export function MentionTicketPicker({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.isComposing || !(e.target instanceof HTMLTextAreaElement)) return;
+      if (
+        e.isComposing ||
+        (!(e.target instanceof HTMLTextAreaElement) && e.target !== searchRef.current)
+      )
+        return;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
@@ -266,11 +274,20 @@ export function MentionTicketPicker({
       (ticketPreview.isFetching || contextLink.isFetching || ticketSearch.isFetching));
 
   return (
-    <div
-      className={styles.root}
-      role="listbox"
-      aria-label={mode === "mention" ? "Упоминания" : "Заявки"}
-    >
+    <div className={styles.root}>
+      {showSearch ? (
+        <input
+          ref={searchRef}
+          className={styles.search}
+          value={search}
+          maxLength={100}
+          aria-label={mode === "mention" ? "Поиск участника" : "Поиск заявки"}
+          placeholder={
+            mode === "mention" ? "Поиск участника" : "Номер или название заявки"
+          }
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      ) : null}
       {loading ? (
         <>
           <p className={styles.hint}>
@@ -290,7 +307,12 @@ export function MentionTicketPicker({
                 : "Заявки не найдены"}
         </p>
       ) : (
-        <ul className={styles.list} ref={listRef}>
+        <ul
+          className={styles.list}
+          ref={listRef}
+          role="listbox"
+          aria-label={mode === "mention" ? "Упоминания" : "Заявки"}
+        >
           {rows.map((row, index) => (
             <li key={row.id}>
               <button

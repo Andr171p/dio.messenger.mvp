@@ -15,6 +15,7 @@ from src.application.media.exceptions import MediaNotFoundError
 from src.application.media.repositories import MediaRepository
 from src.application.messaging.builders import build_message_dto
 from src.application.messaging.config import MessagingConfig
+from src.application.messaging.formatting import visible_formatted_text
 from src.application.messaging.content import (
     build_message_content,
     extract_media_asset_ids,
@@ -83,7 +84,8 @@ async def _ensure_reply_target(
     if quote_text is not None:
         if reply.is_tombstone:
             raise MessageNotFoundError("Quoted message not found.")
-        if quote_text not in snapshot_text_from_content(reply.content):
+        source_text = snapshot_text_from_content(reply.content)
+        if quote_text not in source_text and quote_text not in visible_formatted_text(source_text):
             raise MessageContentInvalidError("Quoted text must be a fragment of the original message.")
 
 

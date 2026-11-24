@@ -42,7 +42,7 @@ export class HttpClient {
 
   async request<T>(
     path: string,
-    init: RequestInit & { json?: unknown } = {},
+    { timeoutMs, ...init }: RequestInit & { json?: unknown; timeoutMs?: number } = {},
   ): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("X-Correlation-Id", this.correlationId());
@@ -65,7 +65,7 @@ export class HttpClient {
     const signals = [init.signal, this.options.signal].filter(
       (value): value is AbortSignal => !!value,
     );
-    const timeout = this.options.timeoutMs;
+    const timeout = timeoutMs ?? this.options.timeoutMs;
     const fetchAttempt = () =>
       fetch(`${this.options.baseUrl}${path}`, {
         ...init,

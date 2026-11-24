@@ -22,6 +22,11 @@ class ResourceAttachmentDTO(BaseModel):
     filename: str
     content_type: str
     size: int
+    id: UUID | None = None
+
+
+class ResourceAttachmentAccessDTO(BaseModel):
+    url: str
 
 
 class ResourceActivityDTO(BaseModel):
@@ -41,6 +46,7 @@ class ResourcePreviewDTO(BaseModel):
     priority: str
     ticket_type: str | None = None
     assignee_display_name: str | None = None
+    assignee_id: UUID | None = None
     access: Literal["full", "limited", "denied"] = "full"
     description: str | None = None
     updated_at: datetime | None = None

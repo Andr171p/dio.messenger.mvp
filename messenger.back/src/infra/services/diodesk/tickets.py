@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,9 @@ from http import HTTPStatus
 from src.application.itsm.exceptions import ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError
 from src.infra.services.diodesk.config import DioDeskConfig
 from src.infra.services.iam.config import SrvIamConfig
+
+_TICKET_NUMBER = re.compile(r"(?:[^\W\d_][^\W_]*-)?\d+(?:-\d+)*")
+_NUMBER_LOOKUP_PAGES = 3
 
 
 class DioDeskTicketsClient:
@@ -52,12 +56,44 @@ class DioDeskTicketsClient:
             expected=(HTTPStatus.CREATED, HTTPStatus.OK),
         )
 
+    async def attachment_download(self, attachment_id: UUID, *, access_token: str) -> str:
+        result = await self._request(
+            "GET", f"/api/v1/attachments/{attachment_id}/presigned-download", access_token=access_token,
+        )
+        url = result.get("download_url")
+        if not isinstance(url, str):
+            raise ItsmProviderError("DioDesk returned an invalid attachment download URL.")
+        return url
+
     async def search_tickets(self, query: str, *, access_token: str) -> list[dict[str, Any]]:
+        if query and _TICKET_NUMBER.fullmatch(query):
+            return await self._find_ticket_number(query, access_token=access_token)
         response = await self._request(
             "POST", "/api/v1/tickets/search?size=10", access_token=access_token,
-            json_body={"search_query": query},
+            json_body={"search_query": query} if query else {},
         )
         return [item for item in response.get("items", []) if isinstance(item, dict)]
+
+    async def _find_ticket_number(self, query: str, *, access_token: str) -> list[dict[str, Any]]:
+        # Desktop search indexes title and description. Limit the number of Desk pages read per lookup.
+        matches: list[dict[str, Any]] = []
+        needle = query.casefold()
+        for page in range(1, _NUMBER_LOOKUP_PAGES + 1):
+            response = await self._request(
+                "POST", f"/api/v1/tickets/search?page={page}&size=50", access_token=access_token, json_body={},
+            )
+            items = response.get("items", [])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                number = str(item.get("number", "")).casefold()
+                if number == needle:
+                    return [item]
+                if number.startswith(needle) and len(matches) < 10:
+                    matches.append(item)
+            if len(items) < 50:
+                break
+        return matches
 
     async def ticket_activity(self, ticket_id: UUID, *, access_token: str) -> list[dict[str, Any]]:
         response = await self._request(

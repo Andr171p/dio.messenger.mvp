@@ -9,7 +9,7 @@ export interface AuthAdapter {
   login(credentials: LoginCredentials): Promise<AuthSession>;
   /** Restore persisted session; refresh if access expired. Returns null if logged out. */
   restoreSession(): Promise<AuthSession | null>;
-  refresh(): Promise<AuthTokens>;
+  refresh(rejectedToken?: string | null): Promise<AuthTokens>;
   logout(): Promise<void>;
   getAccessToken(): string | null;
   getSession(): AuthSession | null;

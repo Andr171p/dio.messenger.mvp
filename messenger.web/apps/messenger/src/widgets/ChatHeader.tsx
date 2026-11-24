@@ -1,5 +1,6 @@
 import type { Conversation } from "@dio/messenger-core";
 import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
+import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
@@ -27,11 +28,21 @@ function presenceLabel(
 }
 
 export function ChatHeader() {
-  const { db, sync } = useRuntime();
+  const { db, sync, http } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const members = useConversationMembers(conversationId);
   const profiles = useDirectoryProfiles(!!conversationId);
+  const presence = useQuery({
+    queryKey: ["conversation-presence", conversationId],
+    enabled: !!conversationId && !!http,
+    queryFn: () =>
+      http!.get<{ userId: string; status: "online" | "offline" }[]>(
+        "/v1/conversations/" + conversationId + "/presence",
+      ),
+    refetchInterval: 8_000,
+    retry: false,
+  });
   const mobilePane = useUiStore((s) => s.mobilePane);
   const setMobilePane = useUiStore((s) => s.setMobilePane);
   const setSearchOpen = useUiStore((s) => s.setSearchPanelOpen);
@@ -69,11 +80,16 @@ export function ChatHeader() {
   }
 
   const guest = conversation?.isGuest || conversation?.hasExternalMembers === true;
-  const peerPresence = peerId && sync ? sync.getPresence(peerId) : undefined;
+  const onlineStates = new Map(
+    presence.isError
+      ? []
+      : presence.data?.map((item) => [item.userId, item.status] as const),
+  );
+  const peerPresence = peerId ? onlineStates.get(peerId) : undefined;
   const peerOnline =
     conversation?.kind === "direct"
       ? peerPresence
-        ? peerPresence.status === "online"
+        ? peerPresence === "online"
         : null
       : null;
   const baseSubtitle = presenceLabel(
@@ -87,7 +103,20 @@ export function ChatHeader() {
         ? "внешние участники"
         : "внутренняя группа"
       : null;
-  const subtitle = groupKind ? `${baseSubtitle} · ${groupKind}` : baseSubtitle;
+  const onlineCount = [...onlineStates.values()].filter(
+    (status) => status === "online",
+  ).length;
+  const subtitle = groupKind
+    ? [baseSubtitle, groupKind, ...(onlineCount ? [onlineCount + " в сети"] : [])].join(
+        " · ",
+      )
+    : baseSubtitle;
+  const typingLabel =
+    typingOthers.length === 1
+      ? conversation?.kind === "group"
+        ? (profiles.data?.[typingOthers[0]!] ?? "Участник") + " печатает…"
+        : "печатает…"
+      : "Печатают несколько участников…";
 
   return (
     <header className={styles.root}>
@@ -101,16 +130,24 @@ export function ChatHeader() {
             onClick={() => setMobilePane("list")}
           />
         ) : null}
-        <Avatar name={conversation?.title ?? "Chat"} size="md" />
+        <Avatar
+          name={
+            (conversation?.kind === "direct" && peerId && profiles.data?.[peerId]) ||
+            conversation?.title ||
+            "Беседа"
+          }
+          size="md"
+          online={peerOnline === true}
+        />
         <div className={styles.copy}>
           <h1 className={styles.title}>
             {conversation?.kind === "direct" && peerId
               ? (profiles.data?.[peerId] ?? "Личный чат")
               : (conversation?.title ?? "Беседа")}
           </h1>
-          <p className={styles.subtitle}>
+          <p className={styles.subtitle} aria-live="polite">
             {typingOthers.length ? (
-              <span className={styles.typing}>печатает…</span>
+              <span className={styles.typing}>{typingLabel}</span>
             ) : (
               <span className={peerOnline === true ? styles.online : undefined}>
                 {subtitle}
@@ -149,6 +186,9 @@ export function ChatHeader() {
                       ? "Вы"
                       : (profiles.data?.[member.principalId] ?? "Участник")}
                     {member.role === "guest" ? " · внешний участник" : ""}
+                    {onlineStates.get(member.principalId) === "online" ? (
+                      <span className={styles.online}> · в сети</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>

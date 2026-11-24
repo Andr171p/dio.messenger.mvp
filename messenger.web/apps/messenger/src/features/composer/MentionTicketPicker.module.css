@@ -18,6 +18,16 @@
   color: var(--dio-text-secondary);
 }
 
+.search {
+  min-width: 0;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--dio-text);
+  background: var(--dio-field);
+}
+
 .empty {
   margin: var(--dio-space-2) var(--dio-space-3);
   font-size: 13px;

@@ -9,7 +9,9 @@ from src.application.auth import AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
+from src.application.messaging.enrich import snapshot_text_from_content
 from src.application.messaging.exceptions import MessageNotFoundError
+from src.application.messaging.formatting import visible_formatted_text
 from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 from src.application.audit.repositories import AuditRepository
 from src.application.audit.service import log_audit
@@ -201,13 +203,15 @@ async def list_pins(
     membership_repository: MembershipRepository,
     pin_repository: PinRepository,
 ) -> list[PinDTO]:
-    await require_active_membership(
+    _, membership = await require_active_membership(
         conversation_id=conversation_id,
         actor=actor,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
-    items = await pin_repository.list_for_conversation(conversation_id)
+    items = await pin_repository.list_for_conversation(
+        conversation_id, history_from_seq=membership.history_from_seq,
+    )
     return [
         PinDTO(
             id=item.id,
@@ -216,6 +220,7 @@ async def list_pins(
             pinned_by=item.pinned_by,
             pinned_at=item.pinned_at,
             event_seq=item.message_created_seq,
+            preview=visible_formatted_text(snapshot_text_from_content(content), hide_spoilers=True)[:160],
         )
-        for item in items
+        for item, content in items
     ]

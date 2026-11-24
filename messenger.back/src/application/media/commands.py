@@ -1,4 +1,6 @@
+from collections.abc import AsyncIterable
 from datetime import UTC, datetime, timedelta
+from tempfile import SpooledTemporaryFile
 from uuid import UUID, uuid4
 
 from ddf.application.uow import UnitOfWork
@@ -15,7 +17,7 @@ from src.application.media.dtos import (
     MediaAssetDTO,
     UploadResponseDTO,
 )
-from src.application.media.exceptions import MediaAccessDeniedError, MediaNotFoundError
+from src.application.media.exceptions import MediaAccessDeniedError, MediaNotFoundError, MediaPolicyViolationError
 from src.application.media.metadata import parse_media_meta
 from src.application.media.policies import validate_upload_request
 from src.application.media.repositories import MediaRepository
@@ -108,6 +110,43 @@ async def initiate_upload(
     )
 
 
+async def store_upload_content(
+    upload_id: UUID,
+    chunks: AsyncIterable[bytes],
+    *,
+    actor: AuthUser,
+    media_repository: MediaRepository,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    storage: S3Client,
+) -> None:
+    asset = await media_repository.read(upload_id)
+    if asset is None or asset.organization_id != actor.user.organization_id:
+        raise MediaNotFoundError("Media upload not found.")
+    if asset.owner_id != actor.user.id or asset.status is not MediaStatus.PENDING:
+        raise MediaAccessDeniedError("Upload is not writable.")
+    await require_active_membership(
+        conversation_id=asset.conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    staging = asset.object_for(MediaObjectRole.STAGING)
+    if staging is None:
+        raise MediaNotFoundError("Staging object not found.")
+    size = 0
+    with SpooledTemporaryFile(max_size=1024 * 1024) as file:
+        async for chunk in chunks:
+            size += len(chunk)
+            if size > asset.size:
+                raise MediaPolicyViolationError("Upload exceeds the declared size.")
+            file.write(chunk)
+        if size != asset.size:
+            raise MediaPolicyViolationError("Upload does not match the declared size.")
+        file.seek(0)
+        await storage.upload(file, staging.key, asset.content_type)
+
+
 async def complete_upload(
     upload_id: UUID,
     *,
@@ -131,6 +170,8 @@ async def complete_upload(
         raise MediaNotFoundError("Staging object not found.")
 
     meta = await storage.get_metadata(staging.key)
+    if meta.size != asset.size:
+        raise MediaPolicyViolationError("Upload does not match the declared size.")
     asset.mark_uploaded(size=meta.size, content_type=meta.content_type or asset.content_type)
     asset.objects = [
         MediaObject(

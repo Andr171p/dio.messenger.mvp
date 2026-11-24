@@ -13,7 +13,18 @@ import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
 import { useUiStore } from "../../stores/uiStore.js";
+import { maskSpoilers } from "../../widgets/MessageFormatting.js";
 import styles from "./MessageComposer.module.css";
+
+const formats = [
+  ["Жирный", "**", "b"],
+  ["Курсив", "*", "i"],
+  ["Подчёркнутый", "__", "u"],
+  ["Зачёркнутый", "~~", "x"],
+  ["Скрытый текст", "||", "s"],
+  ["Моноширинный", "\x60", "m"],
+] as const;
+type ComposerTool = "mention" | "ticket" | "emoji" | "attach" | "format";
 
 export function MessageComposer() {
   const conversationId = useUiStore((state) => state.selectedConversationId);
@@ -39,7 +50,11 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [failedUpload, setFailedUpload] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
-  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [tool, setTool] = useState<ComposerTool | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const hoverOpened = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [draftText, setDraftText] = useState("");
@@ -52,6 +67,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const sendLock = useRef(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTyping = useRef(0);
 
   const resizeInput = () => {
     const el = inputRef.current;
@@ -134,22 +150,6 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       cancelled = true;
     };
   }, [editingId, db]);
-
-  useEffect(() => {
-    if (!sync || !hydrated) return;
-    const previous = typingTimer.current;
-    if (previous) clearTimeout(previous);
-    if (!text.trim() || editingId) {
-      if (previous) sync.sendTyping(conversationId, false);
-      typingTimer.current = null;
-      return;
-    }
-    if (!previous) sync.sendTyping(conversationId, true);
-    typingTimer.current = setTimeout(() => {
-      typingTimer.current = null;
-      sync.sendTyping(conversationId, false);
-    }, 2_500);
-  }, [text, conversationId, sync, hydrated, editingId]);
 
   useEffect(() => {
     return () => {
@@ -279,15 +279,139 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   function updateText(value: string) {
     setText(value);
     if (!editingId) setDraftText(value);
+    if (!sync || editingId) return;
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    if (!value.trim()) {
+      if (typingTimer.current) sync.sendTyping(conversationId, false);
+      typingTimer.current = null;
+      return;
+    }
+    if (!typingTimer.current || Date.now() - lastTyping.current >= 3_000) {
+      lastTyping.current = Date.now();
+      sync.sendTyping(conversationId, true);
+    }
+    typingTimer.current = setTimeout(() => {
+      typingTimer.current = null;
+      sync.sendTyping(conversationId, false);
+    }, 2_500);
   }
 
+  function closeTools() {
+    clearTimeout(closeTimer.current);
+    setPickerMode(null);
+    setTool(null);
+  }
+
+  useEffect(() => {
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target))
+        closeTools();
+    };
+    document.addEventListener("pointerdown", outside);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      clearTimeout(closeTimer.current);
+    };
+  }, []);
+
+  function openTool(next: ComposerTool, hover: boolean) {
+    clearTimeout(closeTimer.current);
+    hoverOpened.current = hover;
+    setTool(next);
+    setPickerMode(next === "mention" || next === "ticket" ? next : null);
+  }
+
+  function activateTool(next: ComposerTool, event: React.MouseEvent) {
+    openTool(next, event.detail > 0 && window.matchMedia("(hover: hover)").matches);
+    if (event.detail === 0) {
+      requestAnimationFrame(() =>
+        rootRef.current
+          ?.querySelector<HTMLElement>(
+            "[data-composer-popup] input, [data-composer-popup] button",
+          )
+          ?.focus({ preventScroll: true }),
+      );
+    }
+  }
+
+  function scheduleClose(event: React.PointerEvent) {
+    if (event.pointerType !== "mouse" || !hoverOpened.current) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(closeTools, 180);
+  }
+
+  const popupHover = {
+    "data-composer-popup": true,
+    onPointerEnter: () => clearTimeout(closeTimer.current),
+    onPointerLeave: scheduleClose,
+  };
+
+  function hoverTool(next: ComposerTool, disabled = false) {
+    return {
+      onPointerEnter: (event: React.PointerEvent) => {
+        if (event.pointerType === "mouse" && !disabled) openTool(next, true);
+      },
+      onPointerLeave: scheduleClose,
+    };
+  }
+
+  function replaceSelection(
+    value: string,
+    suffix?: RegExp,
+    after = "",
+    select = false,
+  ) {
+    const input = inputRef.current;
+    const end = input?.selectionEnd ?? text.length;
+    let start = input?.selectionStart ?? end;
+    if (suffix) start -= suffix.exec(text.slice(0, start))?.[0].length ?? 0;
+    const body = select ? text.slice(start, end) : "";
+    updateText(text.slice(0, start) + value + body + after + text.slice(end));
+    requestAnimationFrame(() => {
+      input?.focus({ preventScroll: true });
+      input?.setSelectionRange(
+        start + value.length,
+        start + value.length + body.length,
+      );
+    });
+  }
+
+  function chooseFile(accept = "") {
+    closeTools();
+    if (!fileInputRef.current) return;
+    fileInputRef.current.accept = accept;
+    fileInputRef.current.click();
+  }
+
+  const disabled = !hydrated || sending;
+  const attachDisabled = disabled || !!editingId || policy?.allowAttachments === false;
+
   return (
-    <div className={styles.root}>
+    <div
+      className={styles.root}
+      ref={rootRef}
+      onPointerEnter={() => clearTimeout(closeTimer.current)}
+      onPointerLeave={scheduleClose}
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && !event.currentTarget.contains(next)) closeTools();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && (tool || pickerMode)) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeTools();
+          inputRef.current?.focus({ preventScroll: true });
+        }
+      }}
+    >
       {reply ? (
         <div className={styles.replyBar}>
           <Icon name="reply" size={16} />
           <span className={styles.replyText}>
-            {reply.quoteText ? `«${reply.quoteText}»` : reply.preview}
+            {reply.quoteText
+              ? `«${reply.quoteText}»`
+              : maskSpoilers(reply.preview ?? "")}
           </span>
           <button type="button" onClick={() => clearReply(null)}>
             Отмена
@@ -309,35 +433,45 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         </div>
       ) : null}
       {pickerMode ? (
-        <MentionTicketPicker
-          mode={pickerMode}
-          conversationId={conversationId}
-          http={http}
-          query={text}
-          onPick={(token, id) => {
-            if (pickerMode === "mention") {
-              updateText(text.replace(/@[\p{L}\p{N}_.-]*$/u, token + " "));
-              setMentions((current) => ({ ...current, [token]: id }));
-            } else {
-              updateText(text.replace(/#[\p{L}\p{N}_-]*$/u, ""));
-              setAttachments((items) => [
-                ...items,
-                {
-                  label: token,
-                  block: {
-                    type: "resource",
-                    provider: "dio-desk",
-                    resourceType: "ticket",
-                    resourceId: id,
-                    number: token.slice(1),
-                  },
-                },
-              ]);
-            }
-            setPickerMode(null);
-          }}
-          onClose={() => setPickerMode(null)}
-        />
+        <div className={styles.pickerPopup} {...popupHover}>
+          <MentionTicketPicker
+            key={pickerMode}
+            mode={pickerMode}
+            conversationId={conversationId}
+            http={http}
+            query={tool ? "" : pickerQuery}
+            showSearch={!!tool}
+            onPick={(token, id) => {
+              if (pickerMode === "mention") {
+                replaceSelection(token + " ", /@[\p{L}\p{N}_.-]*$/u);
+                setMentions((current) => ({ ...current, [token]: id }));
+              } else {
+                if (!tool) replaceSelection("", /#[\p{L}\p{N}_-]*$/u);
+                setAttachments((items) =>
+                  items.some(
+                    ({ block }) => block.type === "resource" && block.resourceId === id,
+                  )
+                    ? items
+                    : [
+                        ...items,
+                        {
+                          label: token,
+                          block: {
+                            type: "resource",
+                            provider: "dio-desk",
+                            resourceType: "ticket",
+                            resourceId: id,
+                            number: token.slice(1),
+                          },
+                        },
+                      ],
+                );
+              }
+              closeTools();
+            }}
+            onClose={closeTools}
+          />
+        </div>
       ) : null}
       {!editingId
         ? attachments.map((attachment, index) => (
@@ -356,6 +490,37 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         : null}
       <div className={styles.composerShell}>
         <div className={styles.composerRow}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            onChange={(e) => void onAttach(e.target.files)}
+          />
+          <span {...hoverTool("attach", attachDisabled)}>
+            <IconButton
+              label={
+                policy?.allowAttachments === false
+                  ? "Вложения запрещены правилами беседы"
+                  : "Вложение"
+              }
+              icon="attach"
+              size="sm"
+              iconSize={20}
+              disabled={attachDisabled}
+              aria-expanded={tool === "attach"}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown") return;
+                event.preventDefault();
+                openTool("attach", false);
+                requestAnimationFrame(() =>
+                  rootRef.current
+                    ?.querySelector<HTMLButtonElement>("[data-composer-popup] button")
+                    ?.focus({ preventScroll: true }),
+                );
+              }}
+              onClick={() => chooseFile()}
+            />
+          </span>
           <textarea
             ref={inputRef}
             className={[styles.input, "dio-scroll"].join(" ")}
@@ -366,15 +531,32 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             placeholder="Написать сообщение…"
             onChange={(e) => {
               const value = e.target.value;
+              const before = value.slice(0, e.target.selectionStart);
               updateText(value);
-              if (/@[\p{L}\p{N}_.-]*$/u.test(value) && !editingId)
+              setPickerQuery(before);
+              setTool(null);
+              hoverOpened.current = false;
+              if (/(?:^|\s)@[\p{L}\p{N}_.-]*$/u.test(before) && !editingId)
                 setPickerMode("mention");
-              else if (/#[\p{L}\p{N}_-]*$/u.test(value) && !editingId)
+              else if (/(?:^|\s)#[\p{L}\p{N}_-]*$/u.test(before) && !editingId)
                 setPickerMode("ticket");
               else setPickerMode(null);
             }}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return;
+              if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+                const key = e.key.toLowerCase();
+                const format = formats.find(
+                  ([, , shortcut]) =>
+                    shortcut === key && e.shiftKey === ["x", "s", "m"].includes(key),
+                );
+                if (format) {
+                  e.preventDefault();
+                  closeTools();
+                  replaceSelection(format[1], undefined, format[1], true);
+                  return;
+                }
+              }
               if (
                 pickerMode &&
                 (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")
@@ -388,66 +570,51 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             }}
           />
           <div className={styles.toolsTrailing}>
-            <IconButton
-              label="Эмодзи"
-              icon="emoji"
-              size="sm"
-              iconSize={20}
-              onClick={() => {
-                setEmojiOpen((value) => !value);
-                setPickerMode(null);
-              }}
-              disabled={!hydrated || sending}
-            />
-            <IconButton
-              label="Упомянуть участника"
-              icon="mention"
-              size="sm"
-              iconSize={20}
-              disabled={!hydrated || sending || !!editingId}
-              onClick={() => {
-                updateText(text + (text && !text.endsWith(" ") ? " @" : "@"));
-                setPickerMode("mention");
-                setEmojiOpen(false);
-                inputRef.current?.focus();
-              }}
-            />
-            <IconButton
-              label="Заявка"
-              icon="hash"
-              size="sm"
-              iconSize={20}
-              disabled={!hydrated || sending || !!editingId}
-              onClick={() => {
-                updateText(text.endsWith(" ") || !text ? text + "#" : text + " #");
-                setPickerMode("ticket");
-                setEmojiOpen(false);
-                inputRef.current?.focus();
-              }}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              hidden
-              onChange={(e) => void onAttach(e.target.files)}
-            />
-            <IconButton
-              label={
-                policy?.allowAttachments === false
-                  ? "Вложения запрещены правилами беседы"
-                  : "Вложение"
-              }
-              icon="attach"
-              size="sm"
-              iconSize={20}
-              disabled={
-                !!editingId ||
-                sending ||
-                !hydrated ||
-                policy?.allowAttachments === false
-              }
-              onClick={() => fileInputRef.current?.click()}
-            />
+            <span {...hoverTool("format", disabled)}>
+              <button
+                type="button"
+                className={styles.formatButton}
+                aria-label="Форматирование"
+                aria-expanded={tool === "format"}
+                disabled={disabled}
+                onClick={(event) => activateTool("format", event)}
+              >
+                Aa
+              </button>
+            </span>
+            <span {...hoverTool("emoji", disabled)}>
+              <IconButton
+                label="Эмодзи"
+                icon="emoji"
+                size="sm"
+                iconSize={20}
+                aria-expanded={tool === "emoji"}
+                onClick={(event) => activateTool("emoji", event)}
+                disabled={!hydrated || sending}
+              />
+            </span>
+            <span {...hoverTool("mention", disabled || !!editingId)}>
+              <IconButton
+                label="Упомянуть участника"
+                icon="mention"
+                size="sm"
+                iconSize={20}
+                disabled={!hydrated || sending || !!editingId}
+                aria-expanded={tool === "mention"}
+                onClick={(event) => activateTool("mention", event)}
+              />
+            </span>
+            <span {...hoverTool("ticket", disabled || !!editingId)}>
+              <IconButton
+                label="Заявка"
+                icon="hash"
+                size="sm"
+                iconSize={20}
+                disabled={!hydrated || sending || !!editingId}
+                aria-expanded={tool === "ticket"}
+                onClick={(event) => activateTool("ticket", event)}
+              />
+            </span>
           </div>
         </div>
         <div className={styles.sendSlot}>
@@ -465,29 +632,63 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
           />
         </div>
       </div>
-      {emojiOpen ? (
+      {tool === "emoji" ? (
         <div
           className={styles.emojiPicker}
           role="group"
           aria-label="Выбрать эмодзи"
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setEmojiOpen(false);
-              inputRef.current?.focus();
-            }
-          }}
+          {...popupHover}
         >
           {["😊", "👍", "❤️", "🎉", "👀", "🤝", "✅", "🔥"].map((emoji) => (
             <button
               type="button"
               key={emoji}
               onClick={() => {
-                updateText(text + emoji);
-                setEmojiOpen(false);
-                inputRef.current?.focus();
+                replaceSelection(emoji);
+                closeTools();
               }}
             >
               {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {tool === "attach" ? (
+        <div
+          className={styles.filePicker}
+          role="group"
+          aria-label="Тип вложения"
+          {...popupHover}
+        >
+          {[
+            ["Документ", ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"],
+            ["Изображение", "image/*"],
+            ["Статья", ".md,.txt,.pdf"],
+            ["Музыка", "audio/*"],
+          ].map(([label, accept]) => (
+            <button type="button" key={label} onClick={() => chooseFile(accept)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {tool === "format" ? (
+        <div
+          className={styles.emojiPicker}
+          role="group"
+          aria-label="Формат текста"
+          {...popupHover}
+        >
+          {formats.map(([label, delimiter]) => (
+            <button
+              type="button"
+              key={label}
+              onClick={() => {
+                replaceSelection(delimiter, undefined, delimiter, true);
+                closeTools();
+              }}
+            >
+              {label}
             </button>
           ))}
         </div>

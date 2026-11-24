@@ -1,4 +1,4 @@
-const TICKET_INLINE = /#(INC-[\w-]+|REQ-[\w-]+|\d+)/i;
+const TICKET_INLINE = /#([\p{L}][\p{L}\p{N}]*-\d+(?:-\d+)*|\d+)(?![\p{L}\p{N}_-])/iu;
 
 /** Extract display number like INC-228 from message text (not a UUID). */
 export function extractTicketNumber(text: string): string | null {

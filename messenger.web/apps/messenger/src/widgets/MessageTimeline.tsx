@@ -375,6 +375,12 @@ export function MessageTimeline() {
                                 member.historyFromSeq <= readSeq &&
                                 member.lastReadMessageSeq >= readSeq,
                             ).length,
+                            delivered: members.data.some(
+                              (member) =>
+                                member.principalId !== session?.userId &&
+                                member.historyFromSeq <= readSeq &&
+                                member.lastDeliveredMessageSeq >= readSeq,
+                            ),
                           }
                         : undefined
                     }
@@ -389,14 +395,21 @@ export function MessageTimeline() {
                       e.preventDefault();
                       menuTrigger.current = e.currentTarget as HTMLElement;
                       const selection = window.getSelection();
-                      const body = e.currentTarget
-                        .closest(`.${styles.bubble}`)
-                        ?.querySelector(`.${styles.blockStack}`);
+                      const body = e.currentTarget.querySelector(
+                        `.${styles.blockStack}`,
+                      );
+                      const quoteRoot = (node: Node) =>
+                        (node instanceof Element ? node : node.parentElement)?.closest(
+                          `.${styles.text}`,
+                        );
                       const selected =
                         selection?.anchorNode &&
                         selection.focusNode &&
                         body?.contains(selection.anchorNode) &&
-                        body.contains(selection.focusNode)
+                        body.contains(selection.focusNode) &&
+                        quoteRoot(selection.anchorNode) &&
+                        quoteRoot(selection.anchorNode) ===
+                          quoteRoot(selection.focusNode)
                           ? selection.toString().trim()
                           : "";
                       setMenu({

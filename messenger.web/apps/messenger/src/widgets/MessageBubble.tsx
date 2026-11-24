@@ -1,14 +1,14 @@
 import {
-  extractTicketNumber,
   toggleReaction,
   type ContentBlock,
   type LocalMessage,
 } from "@dio/messenger-core";
 import { Badge, Icon } from "@dio/messenger-ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageMedia } from "./MessageMedia.js";
+import { maskSpoilers, MessageFormatting } from "./MessageFormatting.js";
 import { TicketCard } from "./TicketCard.js";
 import styles from "./MessageTimeline.module.css";
 
@@ -26,7 +26,7 @@ export function MessageBubble(props: {
   grouped?: boolean;
   openMenu: (e: React.MouseEvent | React.KeyboardEvent) => void;
   replyPreview?: string;
-  receiptCount?: { seen: number; total: number };
+  receiptCount?: { seen: number; total: number; delivered: boolean };
   db: ReturnType<typeof useRuntime>["db"];
   accountKey: string | null;
   conversationId: string;
@@ -35,7 +35,19 @@ export function MessageBubble(props: {
 }) {
   const { message, status, blocks, grouped } = props;
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const press = useRef<
+    { timer: ReturnType<typeof setTimeout>; x: number; y: number } | undefined
+  >(undefined);
+  const cancelPress = () => {
+    if (press.current) clearTimeout(press.current.timer);
+    press.current = undefined;
+  };
+  useEffect(() => cancelPress, []);
   const seen = props.receiptCount?.seen ?? 0;
+  const delivered =
+    props.receiptCount?.delivered ||
+    message.deliveryStatus === "delivered" ||
+    message.deliveryStatus === "read";
   const receipt =
     message.isOutgoing && message.sendStatus === "sent" ? (
       <button
@@ -44,7 +56,9 @@ export function MessageBubble(props: {
         aria-label={
           seen
             ? `Прочитали ${seen} из ${props.receiptCount?.total}`
-            : "Принято сервером"
+            : delivered
+              ? "Доставлено"
+              : "Принято сервером"
         }
         aria-expanded={seen ? receiptOpen : undefined}
         onClick={() => {
@@ -53,16 +67,12 @@ export function MessageBubble(props: {
         disabled={!seen}
       >
         <Icon
-          name={seen ? "check-double" : "check"}
+          name={seen || delivered ? "check-double" : "check"}
           context="status"
           className={seen ? styles.checksRead : styles.checks}
         />
       </button>
     ) : null;
-
-  const legacyTicket = blocks.some((block) => block.type === "resource")
-    ? null
-    : extractTicketNumber(message.content);
 
   return (
     <div
@@ -74,7 +84,41 @@ export function MessageBubble(props: {
         message.isPinned ? styles.pinned : "",
       ].join(" ")}
       tabIndex={0}
+      aria-keyshortcuts="Shift+F10"
       onContextMenu={props.openMenu}
+      onPointerDown={(event) => {
+        if (
+          event.pointerType !== "touch" ||
+          (event.target instanceof Element && event.target.closest("button, a"))
+        )
+          return;
+        cancelPress();
+        const target = event.currentTarget;
+        const { clientX: x, clientY: y } = event;
+        press.current = {
+          x,
+          y,
+          timer: setTimeout(() => {
+            cancelPress();
+            target.dispatchEvent(
+              new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+              }),
+            );
+          }, 550),
+        };
+      }}
+      onPointerMove={(event) => {
+        const start = press.current;
+        if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10)
+          cancelPress();
+      }}
+      onPointerUp={cancelPress}
+      onPointerCancel={cancelPress}
+      onPointerLeave={cancelPress}
       onKeyDown={(event) => {
         if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu")
           props.openMenu(event);
@@ -87,7 +131,7 @@ export function MessageBubble(props: {
         <span className={styles.forwarded}>
           Переслано
           {message.forwardedFrom.text
-            ? ` · ${message.forwardedFrom.text.slice(0, 80)}`
+            ? ` · ${maskSpoilers(message.forwardedFrom.text).slice(0, 80)}`
             : ""}
         </span>
       ) : null}
@@ -101,7 +145,9 @@ export function MessageBubble(props: {
         >
           {message.quoteText
             ? `«${message.quoteText}»`
-            : (props.replyPreview ?? message.replyPreview ?? "К исходному сообщению")}
+            : maskSpoilers(
+                props.replyPreview ?? message.replyPreview ?? "К исходному сообщению",
+              )}
         </button>
       ) : null}
       {!message.deletedAt ? (
@@ -109,19 +155,7 @@ export function MessageBubble(props: {
       ) : (
         <p className={styles.text}>Сообщение удалено</p>
       )}
-      {!message.deletedAt && legacyTicket ? (
-        <TicketCard number={legacyTicket} conversationId={props.conversationId} />
-      ) : null}
       <div className={styles.footer}>
-        <button
-          type="button"
-          className={styles.messageActions}
-          onClick={props.openMenu}
-          aria-label="Действия с сообщением"
-          aria-haspopup="menu"
-        >
-          <Icon name="more-vertical" size={16} />
-        </button>
         {status ? <Badge tone="neutral">{message.sendError ?? status}</Badge> : null}
         {message.reactions
           ? Object.entries(message.reactions).map(([emoji, users]) => (
@@ -172,9 +206,24 @@ function MessageBody({
       {blocks.map((block, index) => {
         if (block.type === "text") {
           return (
-            <p key={`t-${index}`} className={styles.text}>
-              {block.text}
-            </p>
+            <div key={`t-${index}`} className={styles.text}>
+              <MessageFormatting
+                text={block.text}
+                openTicket={(number) => {
+                  const resource = blocks.find(
+                    (item) =>
+                      item.type === "resource" &&
+                      item.number?.toUpperCase() === number.toUpperCase(),
+                  );
+                  useUiStore
+                    .getState()
+                    .setContextResource(
+                      number,
+                      resource?.type === "resource" ? resource.resourceId : undefined,
+                    );
+                }}
+              />
+            </div>
           );
         }
         if (block.type === "media") {

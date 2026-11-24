@@ -6,6 +6,7 @@ import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./ForwardModal.module.css";
+import { maskSpoilers } from "./MessageFormatting.js";
 
 export function ForwardModal() {
   const forward = useUiStore((s) => s.forwardTarget);
@@ -146,7 +147,9 @@ function ForwardDialog() {
                   >
                     <strong>{conv.title}</strong>
                     {conv.lastMessagePreview ? (
-                      <span className={styles.sub}>{conv.lastMessagePreview}</span>
+                      <span className={styles.sub}>
+                        {maskSpoilers(conv.lastMessagePreview)}
+                      </span>
                     ) : null}
                   </button>
                 </li>

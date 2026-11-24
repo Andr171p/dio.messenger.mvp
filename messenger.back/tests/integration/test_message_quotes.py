@@ -36,7 +36,7 @@ async def test_quote_survives_storage_history_and_retry(db_session) -> None:
     )
     original = await seed_message(
         db_session, conversation=conversation, sender_id=conversation.created_by,
-        created_seq=2, text="Check VPN access first.",
+        created_seq=2, text="Check **VPN** access first.",
     )
     actor = AuthUser(
         id=sender_id, type=AuthType.USER,

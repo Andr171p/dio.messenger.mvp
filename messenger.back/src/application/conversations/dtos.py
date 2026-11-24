@@ -1,4 +1,5 @@
 from uuid import UUID
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt
 from pydantic.alias_generators import to_camel
@@ -41,6 +42,13 @@ class ConversationMemberDTO(BaseModel):
     history_from_seq: NonNegativeInt
     last_read_message_seq: NonNegativeInt
     last_delivered_message_seq: NonNegativeInt
+
+
+class ConversationPresenceDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    user_id: UUID
+    status: Literal["online", "offline"]
 
 
 class ConversationDTO(BaseModel):

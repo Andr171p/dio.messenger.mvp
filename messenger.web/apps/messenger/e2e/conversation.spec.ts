@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "@playwright/test";
 
 test.use({ serviceWorkers: "block" });
 
@@ -250,7 +250,7 @@ test("отправляет выделенный фрагмент как мета
   });
 });
 
-test("завершает загрузку в черновик исходной беседы", async ({ page }) => {
+test("завершает загрузку в черновик исходной беседы", async ({ page, browserName }) => {
   const assetId = "12345678-3456-4000-8000-123456789012";
   let finishUpload!: () => void;
   const waitForSwitch = new Promise<void>((resolve) => {
@@ -265,7 +265,13 @@ test("завершает загрузку в черновик исходной �
       },
     }),
   );
-  await page.route("**/test-upload", (route) => route.fulfill({ status: 200 }));
+  await page.route("**/test-upload", (route) => route.abort("failed"));
+  await page.route("**/v1/media/uploads/" + assetId + "/content", (route) => {
+    expect(route.request().method()).toBe("PUT");
+    const body = route.request().postDataBuffer();
+    if (body || browserName !== "webkit") expect(body?.toString()).toBe("test fixture");
+    return route.fulfill({ status: 204 });
+  });
   await page.route(`**/v1/media/uploads/${assetId}/complete`, async (route) => {
     await waitForSwitch;
     await route.fulfill({ json: { id: assetId, status: "ready" } });
@@ -358,9 +364,19 @@ test("обновляет сессию в двух вкладках и синхр
 }) => {
   let refreshes = 0;
   let rejectOld = false;
+  let releaseRefresh!: () => void;
+  const concurrentRequests = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
   const recovered = new Set<import("@playwright/test").Page>();
-  await context.route("**/api/v1/auth/refresh", (route) => {
+  const rejected = new Set<import("@playwright/test").Page>();
+  await context.addInitScript(() => {
+    // Headless test tabs should both handle the concurrent focus signals below.
+    Object.defineProperty(document, "visibilityState", { get: () => "visible" });
+  });
+  await context.route("**/api/v1/auth/refresh", async (route) => {
     refreshes += 1;
+    await concurrentRequests;
     return route.fulfill({
       json: {
         access_token: "renewed",
@@ -373,8 +389,10 @@ test("обновляет сессию в двух вкладках и синхр
     route.fulfill({ status: 204 }),
   );
   await context.route("**/v1/sync/manifest", (route) => {
-    if (rejectOld && route.request().headers().authorization !== "Bearer renewed")
+    if (rejectOld && route.request().headers().authorization !== "Bearer renewed") {
+      rejected.add(route.request().frame().page());
       return route.fulfill({ status: 401 });
+    }
     if (rejectOld) recovered.add(route.request().frame().page());
     return route.fallback();
   });
@@ -384,11 +402,20 @@ test("обновляет сессию в двух вкладках и синхр
   await other.goto("/");
   await expect(other.getByRole("button", { name: /Дежурная смена/ })).toBeVisible();
   rejectOld = true;
-  await Promise.all(
-    [page, other].map((tab) =>
-      tab.evaluate(() => window.dispatchEvent(new Event("focus"))),
-    ),
-  );
+  try {
+    await expect
+      .poll(async () => {
+        await Promise.all(
+          [page, other]
+            .filter((tab) => !rejected.has(tab))
+            .map((tab) => tab.evaluate(() => window.dispatchEvent(new Event("focus")))),
+        );
+        return rejected.size;
+      })
+      .toBe(2);
+  } finally {
+    releaseRefresh();
+  }
   await expect
     .poll(() =>
       page.evaluate(
@@ -588,4 +615,202 @@ test("проверяет доступ и запрашивает новую сс�
     page.getByRole("alert").filter({ hasText: "Нет доступа к файлу" }),
   ).toBeVisible();
   expect(grants).toBe(2);
+});
+
+test("открывает меню редактора наведением и сохраняет форматирование", async ({
+  page,
+}) => {
+  await page.route("**/v1/resources/tickets/search?*", (route) =>
+    route.fulfill({
+      json: [{ ref: { resourceId }, number: "INC-228", title: "Доступ к VPN" }],
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const editor = page.getByRole("textbox", { name: "Текст сообщения" });
+  await editor.fill("Проверка");
+  await page.getByRole("button", { name: "Эмодзи" }).hover();
+  await expect(page.getByRole("group", { name: "Выбрать эмодзи" })).toBeVisible();
+  await editor.hover();
+  await expect(page.getByRole("group", { name: "Выбрать эмодзи" })).toBeHidden();
+  const paperclip = page.getByRole("button", { name: "Вложение", exact: true });
+  expect((await paperclip.boundingBox())!.x).toBeLessThan(
+    (await editor.boundingBox())!.x,
+  );
+  await paperclip.hover();
+  for (const name of ["Документ", "Изображение", "Статья", "Музыка"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  const chooser = page.waitForEvent("filechooser");
+  await paperclip.click();
+  await chooser;
+  await page.getByRole("button", { name: "Заявка", exact: true }).hover();
+  await page.getByRole("option", { name: /INC-228/ }).click();
+  await expect(page.getByRole("button", { name: "Убрать #INC-228" })).toBeVisible();
+  await editor.selectText();
+  await editor.press("Control+b");
+  await expect(editor).toHaveValue("**Проверка**");
+});
+
+test("переключает два закрепа и загружает отсутствующий в снимке", async ({ page }) => {
+  await page.route("**/v1/conversations/" + chatId + "/pins", (route) =>
+    route.fulfill({
+      json: [
+        { messageId: replyId, pinnedAt: "2026-11-24T09:30:00Z" },
+        { messageId: sourceId, pinnedAt: "2026-11-24T09:00:00Z" },
+      ],
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const first = page.getByRole("button", { name: /Закреплённое сообщение 1 \/ 2/ });
+  await expect(first).toContainText("Уже есть заявка.");
+  await first.click();
+  const second = page.getByRole("button", { name: /Закреплённое сообщение 2 \/ 2/ });
+  await expect(second).toContainText("Проверяем доступ к VPN.");
+  const history = page.waitForRequest((request) => {
+    const params = new URL(request.url()).searchParams;
+    return params.get("aroundMessageId") === sourceId && params.get("limit") === "50";
+  });
+  await second.click();
+  await history;
+  await expect(
+    page.getByText("Проверяем доступ к VPN.", { exact: true }),
+  ).toBeVisible();
+});
+
+test("рисует Markdown, не показывает троеточие и отображает presence", async ({
+  page,
+}) => {
+  let socket: WebSocketRoute | undefined;
+  await page.routeWebSocket("**/v1/ws?*", (route) => {
+    socket = route;
+  });
+  await page.route("**/v1/conversations/" + chatId + "/snapshot?*", (route) =>
+    route.fulfill({
+      json: {
+        conversation: chat,
+        membership: { historyFromSeq: 1 },
+        messages: [
+          {
+            ...source,
+            content: {
+              blocks: [
+                {
+                  type: "text",
+                  text: "**привет** и *курсив* ||скрыто|| [ссылка](https://example.com)",
+                },
+              ],
+            },
+          },
+        ],
+        snapshotEventSeq: 81,
+      },
+    }),
+  );
+  await page.route("**/v1/conversations/" + chatId + "/presence", (route) =>
+    route.fulfill({ json: [{ userId, status: "online" }] }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(
+    page.locator("strong").getByText("привет", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("em").getByText("курсив", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "ссылка" })).toHaveAttribute(
+    "href",
+    "https://example.com",
+  );
+  const spoiler = page.getByRole("button", { name: "Показать скрытый текст" });
+  await spoiler.click();
+  await expect(
+    page.getByRole("button", { name: "скрыто", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await page.getByText("привет", { exact: true }).hover();
+  await expect(page.getByRole("button", { name: "Действия с сообщением" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByText(/1 в сети/)).toBeVisible();
+  await expect.poll(() => !!socket).toBe(true);
+  const typing = (status: string) =>
+    socket!.send(
+      JSON.stringify({
+        type: "typing.updated",
+        payload: { conversationId: chatId, userId: source.senderId, status },
+      }),
+    );
+  typing("started");
+  await expect(page.getByText("Участник печатает…")).toBeVisible();
+  typing("stopped");
+  await expect(page.getByText("Участник печатает…")).toBeHidden();
+});
+
+test("открывает заявку по номеру и запрашивает защищённую ссылку на её вложение", async ({
+  page,
+  context,
+}) => {
+  const attachmentId = "ab123456-3456-4000-8000-123456789012";
+  await page.route("**/v1/conversations/" + chatId + "/snapshot?*", (route) =>
+    route.fulfill({
+      json: {
+        conversation: chat,
+        membership: { historyFromSeq: 1 },
+        messages: [
+          {
+            ...reply,
+            content: {
+              blocks: [
+                { type: "text", text: "Посмотрите #INC-228" },
+                reply.content.blocks[1],
+              ],
+            },
+          },
+        ],
+        snapshotEventSeq: 81,
+      },
+    }),
+  );
+  await page.route("**/v1/resources/preview?*", (route) =>
+    route.fulfill({
+      json: {
+        ref: { resourceId },
+        number: "INC-228",
+        title: "Нет доступа к VPN",
+        status: "in_progress",
+        priority: "high",
+        assigneeDisplayName: "Анна Смирнова",
+        description: "Ошибка подключения",
+        attachments: [
+          {
+            id: attachmentId,
+            filename: "vpn.log",
+            size: 72,
+            contentType: "text/plain",
+          },
+        ],
+        activity: [{ action: "ticket.created", occurredAt: "2026-11-24T09:00:00Z" }],
+      },
+    }),
+  );
+  const externalUrl = "https://files.example.invalid/vpn-desk.log";
+  await context.route(externalUrl, (route) => route.fulfill({ body: "VPN test log" }));
+  await page.route("**/attachments/" + attachmentId + "/access?*", (route) => {
+    expect(new URL(route.request().url()).searchParams.get("conversationId")).toBe(
+      chatId,
+    );
+    return route.fulfill({ json: { url: externalUrl } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(page.getByRole("button", { name: /Подробнее/ })).toContainText(
+    "Анна Смирнова",
+  );
+  await page.getByRole("button", { name: "#INC-228", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Контекст заявки" });
+  await expect(panel.getByRole("heading", { name: "Нет доступа к VPN" })).toBeVisible();
+  await expect(panel.getByText("P2 · Высокий")).toBeVisible();
+  await expect(panel.getByText("Создана заявка")).toBeVisible();
+  const popup = page.waitForEvent("popup");
+  await panel.getByRole("button", { name: /vpn.log/ }).click();
+  await expect(await popup).toHaveURL(externalUrl);
 });

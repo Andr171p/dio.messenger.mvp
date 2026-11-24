@@ -20,3 +20,4 @@ class PinDTO(BaseModel):
     pinned_by: UUID
     pinned_at: datetime
     event_seq: int
+    preview: str | None = None

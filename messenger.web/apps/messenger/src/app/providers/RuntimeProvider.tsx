@@ -122,7 +122,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         if (adapter.getSession() !== session) return null;
         if (active && active !== rejectedToken) return active;
         try {
-          await adapter.refresh();
+          await adapter.refresh(rejectedToken);
           return sessionToken();
         } catch {
           if (!lifetime.signal.aborted && navigator.onLine)

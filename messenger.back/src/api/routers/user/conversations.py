@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 
 from src.api.dependencies.auth import BearerToken, CurrentUser, iam_client
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
@@ -9,11 +9,13 @@ from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.policies import ConversationPolicyRepositoryDep
+from src.api.dependencies.realtime import EphemeralStoreDep
 from src.application.conversations import commands, queries
 from src.application.conversations.dtos import (
     AddMemberDTO,
     ConversationDTO,
     ConversationMemberDTO,
+    ConversationPresenceDTO,
     CreateDirectConversationDTO,
     CreateGroupConversationDTO,
     InviteCatalogUserDTO,
@@ -131,6 +133,31 @@ async def list_members(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
+
+
+@router.get("/{conversation_id}/presence", summary="Статусы активных участников беседы")
+async def list_presence(
+    conversation_id: UUID,
+    response: Response,
+    auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    ephemeral_store: EphemeralStoreDep,
+) -> list[ConversationPresenceDTO]:
+    conversation, _ = await commands.require_active_membership(
+        conversation_id=conversation_id,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    members = await membership_repository.list_active(conversation_id)
+    user_ids = [member.principal_id for member in members]
+    online = await ephemeral_store.online_users(conversation.organization_id, user_ids)
+    response.headers["Cache-Control"] = "no-store"
+    return [
+        ConversationPresenceDTO(user_id=user_id, status="online" if user_id in online else "offline")
+        for user_id in user_ids
+    ]
 
 
 @router.post(

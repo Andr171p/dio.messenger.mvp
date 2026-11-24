@@ -4,6 +4,7 @@ from uuid import UUID
 from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
 from src.application.itsm.dtos import (
     ResourceActionResultDTO,
+    ResourceAttachmentAccessDTO,
     ResourceActivityDTO,
     ResourceAttachmentDTO,
     ResourcePreviewDTO,
@@ -50,11 +51,15 @@ def _map_preview(ref: ResourceReference, raw: dict[str, Any], *, guest: bool) ->
         priority=str(raw.get("priority") or ""),
         ticket_type=str(raw["type"]) if raw.get("type") is not None else None,
         assignee_display_name=assignee_name,
+        assignee_id=raw.get("assignee_id"),
         access="full",
         description=raw.get("description"),
         updated_at=raw.get("updated_at"),
         attachments=[
-            ResourceAttachmentDTO(filename=item["original_filename"], content_type=item["mime_type"], size=item["size_bytes"])
+            ResourceAttachmentDTO(
+                id=item.get("id"), filename=item["original_filename"],
+                content_type=item["mime_type"], size=item["size_bytes"],
+            )
             for item in raw["attachments"]
         ] if "attachments" in raw else None,
     )
@@ -98,6 +103,15 @@ class DioDeskItsmAdapter:
             ), item, guest=True)
             for item in results
         ]
+
+    async def attachment_access(
+        self, ticket_id: UUID, attachment_id: UUID, *, access_token: str,
+    ) -> ResourceAttachmentAccessDTO:
+        raw = await self._client.get_ticket(ticket_id, access_token=access_token)
+        if not any(item.get("id") == str(attachment_id) for item in raw.get("attachments", [])):
+            raise ItsmNotFoundError("Attachment not found on this ticket.")
+        url = await self._client.attachment_download(attachment_id, access_token=access_token)
+        return ResourceAttachmentAccessDTO(url=url)
 
     async def execute(
         self,

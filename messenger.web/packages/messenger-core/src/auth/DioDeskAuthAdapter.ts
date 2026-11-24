@@ -113,7 +113,7 @@ export class DioDeskAuthAdapter implements AuthAdapter {
     return session;
   }
 
-  refresh(): Promise<AuthTokens> {
+  refresh(rejectedToken?: string | null): Promise<AuthTokens> {
     if (this.refreshing) return this.refreshing;
     memoryAuthStore.syncFromStorage();
     const session = memoryAuthStore.getSession();
@@ -127,6 +127,12 @@ export class DioDeskAuthAdapter implements AuthAdapter {
       if (!active || memoryAuthStore.getSession() !== session)
         throw new Error("Session changed");
       if (active.accessToken !== current.accessToken) return active;
+      if (
+        rejectedToken !== undefined &&
+        active.accessToken !== rejectedToken &&
+        active.expiresAt > Date.now()
+      )
+        return active;
       try {
         const data = await this.http.post<DioDeskTokenResponse>(
           "/api/v1/auth/refresh",
@@ -145,6 +151,8 @@ export class DioDeskAuthAdapter implements AuthAdapter {
           expiresAt: normalizeExpiry(data.expires_at),
         };
         memoryAuthStore.setAuth(session, tokens);
+        // Let browsers commit the storage task before another tab takes the refresh lock.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
         return tokens;
       } catch (error) {
         memoryAuthStore.syncFromStorage();

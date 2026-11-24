@@ -42,7 +42,7 @@
   background: var(--dio-sidebar);
   border: 1px solid var(--dio-border-subtle);
   border-radius: 24px;
-  padding: 4px 6px 4px 14px;
+  padding: 4px 6px;
   box-shadow: var(--dio-shadow-sm);
 }
 
@@ -52,6 +52,30 @@
   gap: 0;
   color: var(--dio-icon-default);
   flex-shrink: 0;
+}
+
+.composerRow > span,
+.toolsTrailing > span {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.formatButton {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  width: 34px;
+  min-height: 34px;
+  border-radius: 8px;
+}
+
+.formatButton:hover {
+  background: var(--dio-field);
 }
 
 .input {
@@ -77,7 +101,7 @@
 
 .sendSlot {
   flex-shrink: 0;
-  padding-bottom: 4px;
+  align-self: center;
 }
 
 .note {
@@ -114,8 +138,9 @@
 .root {
   position: relative;
 }
-.emojiPicker button {
-  min-width: 36px;
+.emojiPicker button,
+.filePicker button {
+  min-width: 34px;
   min-height: 36px;
   border: 0;
   border-radius: 8px;
@@ -124,20 +149,45 @@
   cursor: pointer;
 }
 
-.emojiPicker button:hover {
+.emojiPicker button:hover,
+.filePicker button:hover {
   background: var(--dio-field);
 }
 
-.emojiPicker {
+.emojiPicker,
+.filePicker,
+.pickerPopup {
   display: flex;
   flex-wrap: wrap;
   position: absolute;
   right: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 4px);
   z-index: 5;
+  max-width: 100%;
+}
+
+.emojiPicker,
+.filePicker {
   padding: 6px;
   border: 1px solid var(--dio-border);
   border-radius: var(--dio-radius-lg);
   background: var(--dio-sidebar);
   box-shadow: var(--dio-shadow-sm);
+}
+
+.filePicker {
+  right: auto;
+  left: 0;
+  flex-direction: column;
+  min-width: 136px;
+}
+
+.filePicker button {
+  text-align: start;
+  padding-inline: 12px;
+}
+
+.pickerPopup {
+  display: block;
+  width: min(360px, 100%);
 }

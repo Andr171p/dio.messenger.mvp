@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore, type ListCategory } from "../stores/uiStore.js";
 import styles from "./ConversationList.module.css";
+import { maskSpoilers } from "./MessageFormatting.js";
 import { useAuth } from "../app/providers/AuthProvider.js";
 
 const CHIPS: { id: ListCategory; label: string }[] = [
@@ -150,7 +151,7 @@ export function ConversationList() {
                   <span className={styles.time}>{formatTime(conv.lastMessageAt)}</span>
                 </div>
                 <span className={styles.preview}>
-                  {conv.lastMessagePreview ?? "Нет сообщений"}
+                  {maskSpoilers(conv.lastMessagePreview ?? "Нет сообщений")}
                 </span>
               </div>
               {conv.unreadCount > 0 ? (

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
 from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
@@ -42,6 +42,28 @@ async def create_upload(
         storage=storage,
         uow=session,
     )
+
+
+@router.put("/uploads/{upload_id}/content", status_code=status.HTTP_204_NO_CONTENT)
+async def put_upload_content(
+    upload_id: UUID,
+    request: Request,
+    auth: CurrentUser,
+    media_repository: MediaRepositoryDep,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    storage: S3ClientDep,
+) -> Response:
+    await commands.store_upload_content(
+        upload_id,
+        request.stream(),
+        actor=auth,
+        media_repository=media_repository,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        storage=storage,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

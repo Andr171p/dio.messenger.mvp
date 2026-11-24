@@ -1,0 +1,59 @@
+.body :is(pre, blockquote) {
+  margin: 4px 0;
+  padding: 4px 8px;
+  border-inline-start: 2px solid var(--dio-focus-ring);
+  background: var(--dio-field);
+  border-radius: 4px;
+}
+
+.body pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.body :is(a, code) {
+  overflow-wrap: anywhere;
+}
+
+.body a {
+  color: var(--dio-text);
+  text-decoration: underline;
+}
+
+.body code {
+  background: var(--dio-field);
+  border-radius: 3px;
+  padding-inline: 2px;
+}
+
+.spoiler {
+  border: 0;
+  padding: 0 3px;
+  background: var(--dio-field);
+  color: inherit;
+  font: inherit;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.spoiler[aria-expanded="false"] {
+  background: var(--dio-text-secondary);
+  color: transparent;
+  user-select: none;
+}
+
+.ticketReference {
+  border: 0;
+  border-radius: 999px;
+  padding: 1px 7px;
+  background: var(--dio-field);
+  color: var(--dio-text);
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.ticketReference:hover {
+  text-decoration: underline;
+}

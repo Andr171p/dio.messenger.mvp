@@ -31,6 +31,13 @@ class EphemeralRealtimeStore:
     def _presence_sessions_key(self, organization_id: UUID, user_id: UUID) -> str:
         return f"messenger:presence:sessions:{organization_id}:{user_id}"
 
+    async def online_users(self, organization_id: UUID, user_ids: list[UUID]) -> set[UUID]:
+        if not user_ids:
+            return set()
+        keys = [self._presence_key(organization_id, user_id) for user_id in user_ids]
+        values = await self._redis.mget(keys)
+        return {user_id for user_id, value in zip(user_ids, values, strict=True) if value is not None}
+
     async def typing_started(
         self,
         *,

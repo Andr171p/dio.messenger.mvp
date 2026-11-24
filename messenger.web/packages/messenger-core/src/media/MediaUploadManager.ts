@@ -28,6 +28,19 @@ interface CompleteUploadResponse {
   status: string;
 }
 
+const inlineTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "video/mp4",
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/webm",
+]);
+const uploadTimeoutMs = 180_000;
+
 export class MediaUploadManager {
   private jobs = new Map<string, MediaUploadJob>();
   private listeners = new Set<() => void>();
@@ -92,11 +105,15 @@ export class MediaUploadManager {
 
     try {
       if (!job.uploaded) {
+        const declaredType = job.file.type.split(";", 1)[0] ?? "";
+        const contentType = inlineTypes.has(declaredType)
+          ? declaredType
+          : "application/octet-stream";
         const session = await this.http.post<CreateUploadSessionResponse>(
           `/v1/media/uploads`,
           {
             filename: job.file.name,
-            contentType: job.file.type || "application/octet-stream",
+            contentType,
             size: job.file.size,
             target: {
               type: "message",
@@ -109,15 +126,28 @@ export class MediaUploadManager {
         job.assetId = session.asset.id;
         this.notify();
 
-        const put = await fetch(session.uploadUrl, {
+        const upload = {
           method: "PUT",
           body: job.file,
           signal: this.signal,
-          headers: {
-            "Content-Type": job.file.type || "application/octet-stream",
-          },
-        });
-        if (!put.ok) throw new Error("Не удалось загрузить файл");
+          headers: { "Content-Type": contentType },
+        };
+        let uploaded = false;
+        try {
+          const timeout = AbortSignal.timeout(uploadTimeoutMs);
+          const signal = this.signal
+            ? AbortSignal.any([this.signal, timeout])
+            : timeout;
+          uploaded = (await fetch(session.uploadUrl, { ...upload, signal })).ok;
+        } catch {
+          this.signal?.throwIfAborted();
+        }
+        if (!uploaded) {
+          await this.http.request<void>(
+            `/v1/media/uploads/${session.uploadId}/content`,
+            { ...upload, timeoutMs: uploadTimeoutMs },
+          );
+        }
         job.uploaded = true;
       }
 

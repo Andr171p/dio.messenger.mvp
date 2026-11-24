@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from ddf.application.exceptions import UniqueConstraintViolationError
@@ -7,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.pins import MessagePin
+from src.infra.database.models.messages import MessageOrm
 from src.infra.database.models.pins import MessagePinOrm
 
 
@@ -72,20 +74,26 @@ class SqlAlchemyPinRepository:
         await self._session.flush()
         return existing
 
-    async def list_for_conversation(self, conversation_id: UUID) -> list[MessagePin]:
+    async def list_for_conversation(
+        self, conversation_id: UUID, *, history_from_seq: int,
+    ) -> list[tuple[MessagePin, dict[str, Any]]]:
         stmt = (
-            select(MessagePinOrm)
+            select(MessagePinOrm, MessageOrm.created_seq, MessageOrm.content)
+            .join(MessageOrm, MessageOrm.id == MessagePinOrm.message_id)
             .where(
                 MessagePinOrm.conversation_id == conversation_id,
                 MessagePinOrm.deleted_at.is_(None),
+                MessageOrm.conversation_id == conversation_id,
+                MessageOrm.deleted_at.is_(None),
+                MessageOrm.created_seq >= history_from_seq,
             )
-            .order_by(MessagePinOrm.pinned_at.desc())
+            .order_by(MessagePinOrm.pinned_at.desc(), MessagePinOrm.id.desc())
         )
-        result = await self._session.scalars(stmt)
-        return [self._from_model(model) for model in result.all()]
+        result = await self._session.execute(stmt)
+        return [(self._from_model(model, created_seq), content) for model, created_seq, content in result]
 
     @staticmethod
-    def _from_model(model: MessagePinOrm) -> MessagePin:
+    def _from_model(model: MessagePinOrm, message_created_seq: int = 0) -> MessagePin:
         return MessagePin(
             id=model.id,
             created_at=model.created_at,
@@ -96,5 +104,5 @@ class SqlAlchemyPinRepository:
             message_id=model.message_id,
             pinned_by=model.pinned_by,
             pinned_at=model.pinned_at,
-            message_created_seq=0,
+            message_created_seq=message_created_seq,
         )

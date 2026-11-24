@@ -109,6 +109,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const presenceListeners = new Set<() => void>();
   const presenceByUser = new Map<string, PresenceState>();
   const typingByConversation = new Map<string, TypingState>();
+  const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const delivered = new Map<string, number>();
   const pulling = new Set<string>();
   let syncing: Promise<void> | null = null;
   let stopped = false;
@@ -125,6 +127,30 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const notifyPresence = () => {
     for (const listener of presenceListeners) listener();
   };
+
+  function clearTyping() {
+    for (const timer of typingTimers.values()) clearTimeout(timer);
+    typingTimers.clear();
+    typingByConversation.clear();
+    notifyPresence();
+  }
+
+  async function acknowledgeDelivery(conversationId: string, seq: number) {
+    const previous = delivered.get(conversationId) ?? 0;
+    if (seq <= previous || stopped || revoked.has(conversationId)) return;
+    delivered.set(conversationId, seq);
+    try {
+      await options.http.put(
+        "/v1/conversations/" + conversationId + "/delivery-cursor",
+        {
+          lastDeliveredMessageSeq: seq,
+        },
+      );
+    } catch {
+      if (delivered.get(conversationId) === seq)
+        delivered.set(conversationId, previous);
+    }
+  }
 
   const outbox = new OutboxProcessor({
     db: options.db,
@@ -151,6 +177,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       });
       if (connected) {
         void synchronize().catch(() => undefined);
+      } else {
+        clearTyping();
       }
     },
     onAccessRevoked: ({ conversationId }) => {
@@ -174,17 +202,35 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         const active = payload.active !== false && payload.status !== "stopped";
         const prev = typingByConversation.get(conversationId);
         const nextIds = new Set(prev?.userIds ?? []);
-        if (active) {
-          for (const id of userIds) nextIds.add(id);
-        } else {
-          for (const id of userIds) nextIds.delete(id);
-          if (typeof payload.userId === "string") nextIds.delete(payload.userId);
+        for (const id of userIds) {
+          const key = conversationId + ":" + id;
+          clearTimeout(typingTimers.get(key));
+          typingTimers.delete(key);
+          if (!active) {
+            nextIds.delete(id);
+            continue;
+          }
+          nextIds.add(id);
+          typingTimers.set(
+            key,
+            setTimeout(() => {
+              typingTimers.delete(key);
+              const state = typingByConversation.get(conversationId);
+              if (state) {
+                state.userIds = state.userIds.filter((userId) => userId !== id);
+                if (!state.userIds.length) typingByConversation.delete(conversationId);
+              }
+              notifyPresence();
+            }, 6_000),
+          );
         }
-        typingByConversation.set(conversationId, {
-          conversationId,
-          userIds: [...nextIds],
-          updatedAt: Date.now(),
-        });
+        if (!nextIds.size) typingByConversation.delete(conversationId);
+        else
+          typingByConversation.set(conversationId, {
+            conversationId,
+            userIds: [...nextIds],
+            updatedAt: Date.now(),
+          });
         notifyPresence();
         return;
       }
@@ -330,6 +376,23 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     );
 
     // Catch any events after snapshot
+    delivered.set(
+      conversationId,
+      Math.max(
+        delivered.get(conversationId) ?? 0,
+        snap.membership.lastDeliveredMessageSeq ?? 0,
+      ),
+    );
+    const newestIncoming = snap.messages.reduce(
+      (latest, message) =>
+        message.senderId !== options.userId &&
+        !message.deletedAt &&
+        message.createdSeq >= historyFromSeq
+          ? Math.max(latest, message.createdSeq)
+          : latest,
+      0,
+    );
+    void acknowledgeDelivery(conversationId, newestIncoming);
     await pullConversationDelta(conversationId, snap.snapshotEventSeq);
   }
 
@@ -385,6 +448,13 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       ]);
       const afterSeq = cursor?.eventSeq ?? 0;
       const historyFromSeq = entry.historyFromSeq ?? 1;
+      delivered.set(
+        conversationId,
+        Math.max(
+          delivered.get(conversationId) ?? 0,
+          entry.lastDeliveredMessageSeq ?? 0,
+        ),
+      );
       if (afterSeq > 0 && afterSeq + 1 < historyFromSeq) {
         // Cursor behind retained history → snapshot
         await applySnapshot(conversationId);
@@ -412,6 +482,23 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           }
         }
       }
+      const latestIncoming = await options.db.messages
+        .where("[accountKey+conversationId+createdSeq]")
+        .between(
+          [
+            options.accountKey,
+            conversationId,
+            Math.max(historyFromSeq, (delivered.get(conversationId) ?? 0) + 1),
+          ],
+          [options.accountKey, conversationId, Number.MAX_SAFE_INTEGER],
+          true,
+          true,
+        )
+        .reverse()
+        .filter((message) => !message.isOutgoing && !message.deletedAt)
+        .first();
+      if (latestIncoming?.createdSeq)
+        void acknowledgeDelivery(conversationId, latestIncoming.createdSeq);
     }
   }
 
@@ -435,6 +522,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     }
 
     let lastApplied = afterSeq;
+    let newestIncoming = 0;
     for (const raw of events) {
       if (stopped || revoked.has(conversationId)) break;
       await applyEvent(
@@ -445,7 +533,15 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         true,
       );
       lastApplied = raw.seq;
+      if (
+        raw.type === "message.created" &&
+        raw.payload.senderId !== options.userId &&
+        typeof raw.payload.senderId === "string" &&
+        typeof raw.payload.createdSeq === "number"
+      )
+        newestIncoming = Math.max(newestIncoming, raw.payload.createdSeq);
     }
+    void acknowledgeDelivery(conversationId, newestIncoming);
     return lastApplied;
   }
 
@@ -547,6 +643,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       stopped = true;
       accessVerified = false;
       ws.disconnect();
+      clearTyping();
       outbox.stop();
       notify({ runtime: "idle", wsConnected: false });
     },

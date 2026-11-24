@@ -13,6 +13,7 @@ _MAGIC: list[tuple[bytes, str]] = [
     (b"GIF89a", "image/gif"),
     (b"%PDF", "application/pdf"),
     (b"ID3", "audio/mpeg"),
+    (b"OggS", "audio/ogg"),
     (b"\xff\xfb", "audio/mpeg"),
     (b"\xff\xf3", "audio/mpeg"),
     (b"\xff\xf2", "audio/mpeg"),
@@ -28,6 +29,8 @@ class SniffResult:
 
 
 def sniff_content_type(header: bytes) -> SniffResult:
+    if header.startswith(b"\x1a\x45\xdf\xa3") and b"\x42\x82\x84webm" in header[:64]:
+        return SniffResult(detected_content_type="audio/webm", matched=True)
     if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP":
         return SniffResult(detected_content_type="image/webp", matched=True)
     if len(header) >= 12:

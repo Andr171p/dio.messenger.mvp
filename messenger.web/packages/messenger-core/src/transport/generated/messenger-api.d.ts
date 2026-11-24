@@ -108,6 +108,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Статусы активных участников беседы */
+        get: operations["list_presence_v1_conversations__conversation_id__presence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/members/{principal_id}": {
         parameters: {
             query?: never;
@@ -258,6 +275,23 @@ export interface paths {
         put?: never;
         /** Создать upload session и presigned PUT URL */
         post: operations["create_upload_v1_media_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/media/uploads/{upload_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Upload Content */
+        put: operations["put_upload_content_v1_media_uploads__upload_id__content_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -599,6 +633,23 @@ export interface paths {
         };
         /** Безопасное превью ITSM-ресурса */
         get: operations["get_resource_preview_v1_resources_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/resources/tickets/{ticket_id}/attachments/{attachment_id}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ticket Attachment Access */
+        get: operations["get_ticket_attachment_access_v1_resources_tickets__ticket_id__attachments__attachment_id__access_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1007,6 +1058,19 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** ConversationPresenceDTO */
+        ConversationPresenceDTO: {
+            /**
+             * Userid
+             * Format: uuid
+             */
+            userId: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "online" | "offline";
+        };
         /** ConversationSnapshotDTO */
         ConversationSnapshotDTO: {
             conversation: components["schemas"]["SnapshotConversationDTO"];
@@ -1380,6 +1444,8 @@ export interface components {
             pinnedAt: string;
             /** Eventseq */
             eventSeq: number;
+            /** Preview */
+            preview?: string | null;
         };
         /** PollDTO */
         PollDTO: {
@@ -1547,6 +1613,11 @@ export interface components {
              */
             occurredAt: string;
         };
+        /** ResourceAttachmentAccessDTO */
+        ResourceAttachmentAccessDTO: {
+            /** Url */
+            url: string;
+        };
         /** ResourceAttachmentDTO */
         ResourceAttachmentDTO: {
             /** Filename */
@@ -1555,6 +1626,8 @@ export interface components {
             contentType: string;
             /** Size */
             size: number;
+            /** Id */
+            id?: string | null;
         };
         /** ResourceBlock */
         ResourceBlock: {
@@ -1587,6 +1660,8 @@ export interface components {
             ticketType?: string | null;
             /** Assigneedisplayname */
             assigneeDisplayName?: string | null;
+            /** Assigneeid */
+            assigneeId?: string | null;
             /**
              * Access
              * @default full
@@ -2163,6 +2238,37 @@ export interface operations {
             };
         };
     };
+    list_presence_v1_conversations__conversation_id__presence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPresenceDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     remove_member_v1_conversations__conversation_id__members__principal_id__delete: {
         parameters: {
             query?: never;
@@ -2555,6 +2661,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UploadResponseDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_upload_content_v1_media_uploads__upload_id__content_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -3239,7 +3374,7 @@ export interface operations {
         parameters: {
             query: {
                 conversationId: string;
-                q: string;
+                q?: string;
             };
             header?: never;
             path?: never;
@@ -3289,6 +3424,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResourcePreviewDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ticket_attachment_access_v1_resources_tickets__ticket_id__attachments__attachment_id__access_get: {
+        parameters: {
+            query: {
+                conversationId: string;
+            };
+            header?: never;
+            path: {
+                ticket_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceAttachmentAccessDTO"];
                 };
             };
             /** @description Validation Error */
