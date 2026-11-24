@@ -3,7 +3,7 @@
 > **Статус:** концепция и требования к дизайну MVP · **Версия:** 1.0  
 > **Дата:** 2026-11-23  
 > **Расположение в репозитории:** `docs/design/UI_UX_DESIGN.md`  
-> **Связанные документы:** `docs/architecture/ARCHITECTURE.md`, `docs/development/CODE_STANDARDS.md`, `docs/development/IMPLEMENTATION_PLAN.md`, `docs/development/TEST_PLAN.md`.
+> **Связанные документы:** `docs/architecture/ARCHITECTURE.md`, `docs/development/CODE_STANDARDS.md`, `docs/development/IMPLEMENTATION_PLAN.md`, `docs/development/TEST_PLAN.md`, [`ICONOGRAPHY.md`](ICONOGRAPHY.md).
 
 ## 1. Назначение документа
 
@@ -634,16 +634,11 @@ DIO Messenger должен быстро ощущаться **до** заверш
 
 ---
 
-## 19. Reference screenshots (MVP mockups)
+## 19. Reference screenshots
 
 | Screen | File |
 |---|---|
-| Light shell | [screenshots/01-light-shell.png](screenshots/01-light-shell.png) |
-| Light + context panel | [screenshots/02-light-context-panel.png](screenshots/02-light-context-panel.png) |
-| Light + ticket `#` picker | [screenshots/03-light-ticket-picker.png](screenshots/03-light-ticket-picker.png) |
-| Dark shell | [screenshots/04-dark-shell.png](screenshots/04-dark-shell.png) |
-| Dark + context panel | [screenshots/05-dark-context-panel.png](screenshots/05-dark-context-panel.png) |
-| Wallpaper (dark) | [screenshots/wallpaper-dark.jpg](screenshots/wallpaper-dark.jpg) |
-| Wallpaper source (light/dark composite) | [screenshots/wallpaper-light-dark-composite.jpg](screenshots/wallpaper-light-dark-composite.jpg) |
+| Desktop shell after density pass | [screenshots/06-density-after.png](screenshots/06-density-after.png) |
 
-Итерации реализации UI: [FRONTEND_PRODUCTION_ITERATIONS.md](../development/FRONTEND_PRODUCTION_ITERATIONS.md).
+Итерации реализации UI: [FRONTEND_PRODUCTION_ITERATIONS.md](../development/FRONTEND_PRODUCTION_ITERATIONS.md).  
+Иконография: [ICONOGRAPHY.md](ICONOGRAPHY.md).

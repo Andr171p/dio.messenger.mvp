@@ -7,7 +7,6 @@ export interface MessengerLayoutProps {
   list: ReactNode;
   chat: ReactNode;
   context: ReactNode;
-  statusBar?: ReactNode;
   contextOpen?: boolean;
   mobilePane?: MobilePane;
 }
@@ -17,7 +16,6 @@ export function MessengerLayout({
   list,
   chat,
   context,
-  statusBar,
   contextOpen,
   mobilePane = "list",
 }: MessengerLayoutProps) {
@@ -46,7 +44,6 @@ export function MessengerLayout({
       >
         {context}
       </aside>
-      {statusBar ? <footer className={styles.statusBar}>{statusBar}</footer> : null}
     </div>
   );
 }

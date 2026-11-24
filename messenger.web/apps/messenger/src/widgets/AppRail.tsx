@@ -35,7 +35,7 @@ export function AppRail() {
               aria-current={active === item.id ? "page" : undefined}
               onClick={() => setActive(item.id)}
             >
-              <Icon name={item.icon} size={20} />
+              <Icon name={item.icon} size={20} filled={active === item.id} />
             </button>
           </li>
         ))}

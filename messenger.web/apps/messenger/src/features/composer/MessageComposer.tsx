@@ -4,7 +4,7 @@ import {
   sendMessage,
   upsertDraft,
 } from "@dio/messenger-core";
-import { Button, Icon } from "@dio/messenger-ui";
+import { Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
@@ -25,8 +25,21 @@ export function MessageComposer() {
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const draftConvRef = useRef<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resizeInput = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const max = 24 * 6; // ~6 lines at 15/1.45
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+  };
+
+  useEffect(() => {
+    resizeInput();
+  }, [text]);
 
   const draft = useLiveQuery(async () => {
     if (!db || !accountKey || !conversationId) return null;
@@ -193,75 +206,74 @@ export function MessageComposer() {
           onClose={() => setPickerMode(null)}
         />
       ) : null}
-      <div className={styles.composerRow}>
-        <textarea
-          className={styles.input}
-          value={text}
-          rows={2}
-          placeholder="Написать сообщение…"
-          onChange={(e) => {
-            const value = e.target.value;
-            setText(value);
-            if (/@[\w.-]*$/.test(value)) setPickerMode("mention");
-            else if (/#[\w-]*$/.test(value)) setPickerMode("ticket");
-            else setPickerMode(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
-            if (pickerMode && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")) {
-              return;
-            }
-            if (e.key === "Enter" && !e.shiftKey && !pickerMode) {
-              e.preventDefault();
-              void onSend();
-            }
-          }}
-        />
-        <div className={styles.tools}>
-          <button type="button" aria-label="Эмодзи" onClick={() => setText((p) => p + "😊 ")}>
-            <Icon name="emoji" size={18} />
-          </button>
-          <button
-            type="button"
-            aria-label="Упоминание"
-            onClick={() => {
-              setText((p) => (p.endsWith(" ") || !p ? p + "@" : `${p} @`));
-              setPickerMode("mention");
+      <div className={styles.composerShell}>
+        <div className={styles.composerRow}>
+          <textarea
+            ref={inputRef}
+            className={[styles.input, "dio-scroll"].join(" ")}
+            value={text}
+            rows={1}
+            placeholder="Написать сообщение…"
+            onChange={(e) => {
+              const value = e.target.value;
+              setText(value);
+              if (/@[\w.-]*$/.test(value)) setPickerMode("mention");
+              else if (/#[\w-]*$/.test(value)) setPickerMode("ticket");
+              else setPickerMode(null);
             }}
-          >
-            <Icon name="mention" size={18} />
-          </button>
-          <button
-            type="button"
-            aria-label="Заявка"
-            onClick={() => {
-              setText((p) => (p.endsWith(" ") || !p ? p + "#" : `${p} #`));
-              setPickerMode("ticket");
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              if (pickerMode && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")) {
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey && !pickerMode) {
+                e.preventDefault();
+                void onSend();
+              }
             }}
-          >
-            <Icon name="hash" size={18} />
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            hidden
-            onChange={(e) => void onAttach(e.target.files)}
           />
-          <button
-            type="button"
-            aria-label="Вложение"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Icon name="attach" size={18} />
-          </button>
-          <Button
+          <div className={styles.toolsTrailing}>
+            <IconButton
+              label="Эмодзи"
+              icon="emoji"
+              size="sm"
+              iconSize={20}
+              onClick={() => setText((p) => p + "😊 ")}
+            />
+            <IconButton
+              label="Заявка"
+              icon="hash"
+              size="sm"
+              iconSize={20}
+              onClick={() => {
+                setText((p) => (p.endsWith(" ") || !p ? p + "#" : `${p} #`));
+                setPickerMode("ticket");
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              onChange={(e) => void onAttach(e.target.files)}
+            />
+            <IconButton
+              label="Вложение"
+              icon="attach"
+              size="sm"
+              iconSize={20}
+              onClick={() => fileInputRef.current?.click()}
+            />
+          </div>
+        </div>
+        <div className={styles.sendSlot}>
+          <IconButton
+            label="Отправить"
+            icon="send"
             variant="send"
-            aria-label="Отправить"
+            iconSize={18}
             onClick={() => void onSend()}
             disabled={!text.trim()}
-          >
-            <Icon name="send" size={18} />
-          </Button>
+          />
         </div>
       </div>
       {uploadNote ? <p className={styles.note}>{uploadNote}</p> : null}

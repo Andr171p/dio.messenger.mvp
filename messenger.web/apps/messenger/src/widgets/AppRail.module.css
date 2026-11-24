@@ -5,11 +5,15 @@
   height: 100%;
   width: 100%;
   padding: var(--dio-space-3) 0;
-  gap: var(--dio-space-4);
+  gap: var(--dio-space-3);
 }
 
 .brand {
-  margin-bottom: var(--dio-space-2);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
 }
 
 .mark {
@@ -25,7 +29,8 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--dio-space-2);
+  align-items: center;
+  gap: 4px;
   flex: 1;
 }
 
@@ -36,22 +41,28 @@
   width: 40px;
   height: 40px;
   border: none;
-  border-radius: var(--dio-radius-md);
+  border-radius: 12px;
   background: transparent;
-  color: var(--dio-text-secondary);
+  color: var(--dio-icon-default);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
 .navBtn:hover {
-  background: var(--dio-field);
-  color: var(--dio-text);
+  background: var(--dio-surface-hover);
+  color: var(--dio-icon-strong);
+}
+
+.navBtn:focus-visible {
+  outline: 2px solid var(--dio-focus-ring);
+  outline-offset: 2px;
 }
 
 .active {
   background: var(--dio-accent-muted);
-  color: var(--dio-action);
-  box-shadow: inset 3px 0 0 var(--dio-action);
+  color: var(--dio-icon-active);
 }
 
 .footer {
@@ -59,10 +70,14 @@
   flex-direction: column;
   align-items: center;
   gap: var(--dio-space-2);
+  padding-bottom: var(--dio-space-1);
 }
 
 .themeBtn {
-  min-width: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
-  font-size: 16px;
+  border-radius: 12px;
 }

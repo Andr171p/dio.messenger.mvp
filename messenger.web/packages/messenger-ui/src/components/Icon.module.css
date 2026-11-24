@@ -1,9 +1,0 @@
-.root {
-  display: block;
-  flex-shrink: 0;
-  color: currentColor;
-}
-
-.logo {
-  color: var(--dio-action);
-}

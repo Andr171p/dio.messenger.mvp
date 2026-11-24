@@ -1,5 +1,5 @@
 import type { Conversation } from "@dio/messenger-core";
-import { Avatar, Badge, Button, Icon } from "@dio/messenger-ui";
+import { Avatar, Badge, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
@@ -7,14 +7,22 @@ import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./ChatHeader.module.css";
 
-function kindLabel(kind?: Conversation["kind"]): string {
-  if (kind === "group") return "Группа";
-  if (kind === "direct") return "Личный";
-  return "Чат";
+function presenceLabel(
+  kind: Conversation["kind"] | undefined,
+  memberCount: number | undefined,
+  peerOnline: boolean | null,
+): string {
+  if (kind === "group") {
+    const count = memberCount !== undefined ? `${memberCount} участников` : "Группа";
+    return count;
+  }
+  if (peerOnline === true) return "В сети";
+  if (peerOnline === false) return "не в сети";
+  return "Личный чат";
 }
 
 export function ChatHeader() {
-  const { db, sync } = useRuntime();
+  const { db, sync, accountKey } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const mobilePane = useUiStore((s) => s.mobilePane);
@@ -32,8 +40,19 @@ export function ChatHeader() {
     return db.conversations.get(conversationId);
   }, [db, conversationId]);
 
+  const peerId = useLiveQuery(async () => {
+    if (!db || !accountKey || !conversationId || !session?.userId) return null;
+    if (conversation?.kind !== "direct") return null;
+    const recent = await db.messages
+      .where("[accountKey+conversationId]")
+      .equals([accountKey, conversationId])
+      .toArray();
+    const other = recent.find((m) => m.authorId && m.authorId !== session.userId);
+    return other?.authorId ?? null;
+  }, [db, accountKey, conversationId, conversation?.kind, session?.userId]);
+
   const typing =
-    conversationId && sync ? sync.getTyping(conversationId)?.userIds ?? [] : [];
+    conversationId && sync ? (sync.getTyping(conversationId)?.userIds ?? []) : [];
   const typingOthers = typing.filter((id) => id !== session?.userId);
 
   if (!conversationId) {
@@ -44,56 +63,61 @@ export function ChatHeader() {
     );
   }
 
-  const guest =
-    conversation?.isGuest || conversation?.hasExternalMembers === true;
-  const participants =
-    conversation?.memberCount !== undefined
-      ? `${conversation.memberCount} участников`
-      : "Участники";
+  const guest = conversation?.isGuest || conversation?.hasExternalMembers === true;
+  const peerPresence = peerId && sync ? sync.getPresence(peerId) : undefined;
+  const peerOnline =
+    conversation?.kind === "direct"
+      ? peerPresence
+        ? peerPresence.status === "online"
+        : null
+      : null;
+  const baseSubtitle = presenceLabel(conversation?.kind, conversation?.memberCount, peerOnline);
+  const groupKind =
+    conversation?.kind === "group"
+      ? guest
+        ? "внешние участники"
+        : "внутренняя группа"
+      : null;
+  const subtitle = groupKind ? `${baseSubtitle} · ${groupKind}` : baseSubtitle;
 
   return (
     <header className={styles.root}>
       <div className={styles.identity}>
         {mobilePane === "chat" ? (
-          <Button
-            variant="ghost"
-            size="sm"
+          <IconButton
             className={styles.backBtn}
-            aria-label="Назад к списку"
+            label="Назад к списку"
+            icon="menu"
+            size="sm"
             onClick={() => setMobilePane("list")}
-          >
-            <Icon name="menu" />
-          </Button>
+          />
         ) : null}
         <Avatar name={conversation?.title ?? "Chat"} size="md" />
-        <div>
+        <div className={styles.copy}>
           <h1 className={styles.title}>{conversation?.title ?? "Беседа"}</h1>
           <p className={styles.subtitle}>
             {typingOthers.length ? (
               <span className={styles.typing}>печатает…</span>
             ) : (
-              <>
-                {participants} · {kindLabel(conversation?.kind)}
-              </>
+              <span className={peerOnline === true ? styles.online : undefined}>{subtitle}</span>
             )}
           </p>
           {guest ? (
-            <Badge tone="warning">Гостевой доступ — внешние участники</Badge>
+            <div className={styles.guest}>
+              <Badge tone="warning">Гостевой доступ — внешние участники</Badge>
+            </div>
           ) : null}
         </div>
       </div>
       <div className={styles.actions}>
-        <Button
-          variant="ghost"
+        <IconButton
+          label="Поиск в беседе"
+          icon="search"
           size="sm"
-          aria-label="Поиск в беседе"
+          iconSize={20}
           onClick={() => setSearchOpen(true)}
-        >
-          <Icon name="search" />
-        </Button>
-        <Button variant="ghost" size="sm" aria-label="Ещё">
-          <Icon name="more" />
-        </Button>
+        />
+        <IconButton label="Ещё" icon="more-vertical" size="sm" iconSize={22} />
       </div>
     </header>
   );

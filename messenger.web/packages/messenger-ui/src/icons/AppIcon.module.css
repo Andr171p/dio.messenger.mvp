@@ -1,0 +1,33 @@
+.root {
+  display: block;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.toneMuted {
+  color: var(--dio-icon-muted);
+}
+
+.toneDefault {
+  color: var(--dio-icon-default);
+}
+
+.toneStrong {
+  color: var(--dio-icon-strong);
+}
+
+.toneActive {
+  color: var(--dio-icon-active);
+}
+
+.toneDanger {
+  color: var(--dio-icon-danger);
+}
+
+.toneDisabled {
+  color: var(--dio-icon-disabled);
+}
+
+.logo {
+  color: var(--dio-action);
+}

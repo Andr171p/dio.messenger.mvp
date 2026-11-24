@@ -4,8 +4,6 @@
 - **Код:** `messenger.web/`
 - **Макеты:** `docs/design/screenshots/` + Penpot
 - **Итерации:** [FRONTEND_PRODUCTION_ITERATIONS.md](../development/FRONTEND_PRODUCTION_ITERATIONS.md)
-- **Ревью:** [frontend-review.md](../reviews/frontend-review.md)
-
 ## Scope закрыт (I0–I7)
 
 | Область | Результат |

@@ -1,7 +1,8 @@
 .root {
-  padding: var(--dio-space-3) var(--dio-space-4) var(--dio-space-4);
-  border-top: 1px solid var(--dio-border-subtle);
-  background: var(--dio-sidebar);
+  flex-shrink: 0;
+  margin: 8px 12px 12px;
+  padding: 0;
+  z-index: 2;
 }
 
 .replyBar,
@@ -11,10 +12,11 @@
   gap: var(--dio-space-2);
   font-size: 13px;
   color: var(--dio-text-secondary);
-  margin-bottom: var(--dio-space-2);
-  padding: var(--dio-space-2) var(--dio-space-3);
-  background: var(--dio-field);
-  border-radius: var(--dio-radius-md);
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: var(--dio-sidebar);
+  border-radius: 14px;
+  border: 1px solid var(--dio-border-subtle);
 }
 
 .replyText {
@@ -24,59 +26,62 @@
   white-space: nowrap;
 }
 
+.composerShell {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .composerRow {
   display: flex;
   align-items: flex-end;
-  gap: var(--dio-space-2);
-  background: var(--dio-field);
-  border: 1px solid var(--dio-border);
-  border-radius: var(--dio-radius-xl);
-  padding: var(--dio-space-2) var(--dio-space-2) var(--dio-space-2) var(--dio-space-3);
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  background: var(--dio-sidebar);
+  border: 1px solid var(--dio-border-subtle);
+  border-radius: 24px;
+  padding: 4px 6px 4px 14px;
+  box-shadow: var(--dio-shadow-sm);
+}
+
+.toolsTrailing {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  color: var(--dio-icon-default);
+  flex-shrink: 0;
 }
 
 .input {
   flex: 1;
+  min-width: 0;
   border: none;
   background: transparent;
   resize: none;
   font: inherit;
-  font-size: var(--dio-font-message-size);
-  line-height: var(--dio-font-message-line);
+  font-size: 15px;
+  line-height: 22px;
   color: var(--dio-text);
-  min-height: 44px;
-  padding: 8px 0;
+  height: 22px;
+  min-height: 22px;
+  max-height: 132px;
+  padding: 9px 4px;
+  overflow-y: auto;
 }
 
 .input:focus {
   outline: none;
 }
 
-.tools {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.tools button {
-  border: none;
-  background: transparent;
-  color: var(--dio-text-secondary);
-  cursor: pointer;
-  width: 36px;
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--dio-radius-full);
-}
-
-.tools button:hover {
-  background: var(--dio-accent-muted);
-  color: var(--dio-text);
+.sendSlot {
+  flex-shrink: 0;
+  padding-bottom: 4px;
 }
 
 .note {
-  margin: var(--dio-space-2) 0 0;
+  margin: 8px 4px 0;
   font-size: 12px;
   color: var(--dio-text-secondary);
 }

@@ -52,9 +52,9 @@ messenger.web/
 │   │       └── media/
 │   └── messenger-ui/
 │       └── src/
-│           ├── components/
-│           ├── primitives/
-│           ├── tokens/
+│           ├── components/   # Button, IconButton, Avatar, …
+│           ├── icons/        # AppIcon + Phosphor registry + custom DIOS
+│           ├── tokens/       # tokens.css, icons.css
 │           └── styles/
 ├── pnpm-workspace.yaml
 ├── package.json

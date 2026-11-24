@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "./icons.css";
 
 /* Light theme (default) */
 :root,
@@ -27,7 +28,7 @@
   --dio-status-info: #626c7b;
   --dio-pattern: #e2e5dc;
   --dio-details: #f7f8f6;
-  --dio-accent-muted: rgba(182, 36, 55, 0.12);
+  --dio-accent-muted: rgba(182, 36, 55, 0.08);
   --dio-focus-ring: #b62437;
   --dio-overlay: rgba(24, 34, 48, 0.35);
   --dio-glass-bg: rgba(255, 255, 255, 0.78);
@@ -40,15 +41,21 @@
   --dio-radius-full: 9999px;
   --dio-font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --dio-font-message-size: 15px;
-  --dio-font-message-line: 22px;
+  --dio-font-message-line: 1.45;
   --dio-space-1: 4px;
   --dio-space-2: 8px;
   --dio-space-3: 12px;
   --dio-space-4: 16px;
   --dio-space-5: 24px;
-  --dio-rail-width: 56px;
-  --dio-list-width: 320px;
+  --dio-rail-width: 64px;
+  --dio-list-width: 340px;
   --dio-context-width: 352px;
+  --dio-chat-header-height: 68px;
+  --dio-composer-min-height: 56px;
+  --dio-conversation-item-height: 70px;
+  --dio-message-max-width: 600px;
+  --dio-scrollbar-thumb: rgba(24, 34, 48, 0.28);
+  --dio-presence-online: #3d9a5f;
   color-scheme: light;
 }
 
@@ -77,10 +84,12 @@
   --dio-status-info: #c1cbc3;
   --dio-pattern: #2b2c28;
   --dio-details: #252925;
-  --dio-accent-muted: rgba(187, 37, 45, 0.22);
+  --dio-accent-muted: rgba(187, 37, 45, 0.16);
   --dio-focus-ring: #ffa5af;
   --dio-overlay: rgba(0, 0, 0, 0.55);
   --dio-glass-bg: rgba(36, 38, 36, 0.82);
+  --dio-scrollbar-thumb: rgba(242, 243, 240, 0.28);
+  --dio-presence-online: #6ecf8e;
   color-scheme: dark;
 }
 
@@ -124,15 +133,38 @@ body {
 }
 
 [data-dio-theme="light"] .dio-chat-canvas {
+  background-color: #f7f7f5;
   background-image:
-    linear-gradient(rgba(245, 245, 242, 0.72), rgba(245, 245, 242, 0.82)),
+    linear-gradient(rgba(247, 247, 245, 0.92), rgba(247, 247, 245, 0.96)),
     url("/wallpapers/chat-light.jpg");
 }
 
 [data-dio-theme="dark"] .dio-chat-canvas {
+  background-color: #202320;
   background-image:
-    linear-gradient(rgba(32, 35, 32, 0.78), rgba(32, 35, 32, 0.88)),
+    linear-gradient(rgba(32, 35, 32, 0.94), rgba(32, 35, 32, 0.97)),
     url("/wallpapers/chat-dark.jpg");
+}
+
+/* Quiet scrollbars — content over chrome */
+.dio-scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dio-scrollbar-thumb) transparent;
+}
+
+.dio-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dio-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dio-scroll::-webkit-scrollbar-thumb {
+  background: var(--dio-scrollbar-thumb);
+  border-radius: 999px;
 }
 
 .dio-message-text {

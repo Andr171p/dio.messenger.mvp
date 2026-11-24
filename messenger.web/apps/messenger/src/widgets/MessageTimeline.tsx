@@ -6,18 +6,18 @@ import {
   type ContentBlock,
   type LocalMessage,
 } from "@dio/messenger-core";
-import { Badge, Button, Icon } from "@dio/messenger-ui";
+import { Badge, Icon } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useReadCursor } from "../features/read/useReadCursor.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./MessageTimeline.module.css";
 
-const QUICK_EMOJI = ["👍", "❤️", "😂", "🔥", "👀"];
+const MENU_REACTIONS = ["❤️", "👍", "🔥", "🎉", "🤝", "👀"];
 
 function statusLabel(status: LocalMessage["sendStatus"]): string {
   switch (status) {
@@ -45,6 +45,13 @@ function formatDay(ts: number): string {
 
 function sameDay(a: number, b: number): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+function formatClock(ts: number): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(ts);
 }
 
 function messageBlocks(message: LocalMessage): ContentBlock[] {
@@ -109,9 +116,11 @@ export function MessageTimeline() {
   const setForward = useUiStore((s) => s.setForwardTarget);
   const setContext = useUiStore((s) => s.setContextResource);
   const parentRef = useRef<HTMLDivElement | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; message: LocalMessage } | null>(
-    null,
-  );
+  const [menu, setMenu] = useState<{
+    message: LocalMessage;
+    anchor: DOMRect;
+    quote: string;
+  } | null>(null);
 
   const messages = useLiveQuery(async () => {
     if (!db || !accountKey || !conversationId) return [] as LocalMessage[];
@@ -128,7 +137,7 @@ export function MessageTimeline() {
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 104,
+    estimateSize: () => 64,
     overscan: 12,
     measureElement: (el) => el.getBoundingClientRect().height,
   });
@@ -156,7 +165,7 @@ export function MessageTimeline() {
 
   return (
     <>
-      <div ref={parentRef} className={[styles.scroller, "dio-chat-canvas"].join(" ")}>
+      <div ref={parentRef} className={[styles.scroller, "dio-scroll"].join(" ")}>
         <div
           className={styles.inner}
           style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
@@ -166,6 +175,16 @@ export function MessageTimeline() {
             if (!message) return null;
             const prev = items[row.index - 1];
             const showDate = !prev || !sameDay(prev.createdAt, message.createdAt);
+            const grouped =
+              !!prev &&
+              !showDate &&
+              prev.authorId === message.authorId &&
+              message.createdAt - prev.createdAt < 5 * 60_000;
+            const next = items[row.index + 1];
+            const authorBreak =
+              !next ||
+              next.authorId !== message.authorId ||
+              !sameDay(message.createdAt, next.createdAt);
             const status = statusLabel(message.sendStatus);
             const ticket = findTicketResource(message);
             const readSeq = message.createdSeq ?? 0;
@@ -176,7 +195,13 @@ export function MessageTimeline() {
                 ref={virtualizer.measureElement}
                 data-index={row.index}
                 data-read-seq={readSeq > 0 ? String(readSeq) : undefined}
-                className={styles.row}
+                className={[
+                  styles.row,
+                  grouped ? styles.rowGrouped : "",
+                  authorBreak ? styles.rowBreak : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 style={{
                   position: "absolute",
                   top: 0,
@@ -199,13 +224,19 @@ export function MessageTimeline() {
                     status={status}
                     ticket={ticket}
                     blocks={messageBlocks(message)}
+                    grouped={grouped}
                     setReply={setReply}
                     setEditing={setEditing}
                     setForward={setForward}
                     setContext={setContext}
                     openMenu={(e) => {
                       e.preventDefault();
-                      setMenu({ x: e.clientX, y: e.clientY, message });
+                      const selected = window.getSelection()?.toString().trim() ?? "";
+                      setMenu({
+                        message,
+                        anchor: e.currentTarget.getBoundingClientRect(),
+                        quote: selected,
+                      });
                     }}
                     db={db}
                     accountKey={accountKey}
@@ -221,8 +252,8 @@ export function MessageTimeline() {
       </div>
       {menu ? (
         <ContextMenu
-          x={menu.x}
-          y={menu.y}
+          anchor={menu.anchor}
+          quote={menu.quote}
           message={menu.message}
           conversationId={conversationId}
           userId={session?.userId}
@@ -234,8 +265,8 @@ export function MessageTimeline() {
 }
 
 function ContextMenu(props: {
-  x: number;
-  y: number;
+  anchor: DOMRect;
+  quote: string;
   message: LocalMessage;
   conversationId: string;
   userId?: string;
@@ -245,20 +276,57 @@ function ContextMenu(props: {
   const setReply = useUiStore((s) => s.setReplyTarget);
   const setEditing = useUiStore((s) => s.setEditingMessageId);
   const setForward = useUiStore((s) => s.setForwardTarget);
-  const { message, conversationId, userId, onClose } = props;
+  const { message, conversationId, userId, onClose, anchor, quote } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: anchor.left, top: Math.max(8, anchor.top - 8) });
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    let left = anchor.left + anchor.width / 2 - box.width / 2;
+    // Sit just above the bubble, overlapping it by a few pixels (Telegram-style).
+    let top = anchor.top - box.height + 28;
+    left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - box.height - 8));
+    setPos({ left, top });
+  }, [anchor]);
 
   const act = (fn: () => void) => {
     fn();
     onClose();
   };
 
+  const react = (emoji: string) => {
+    if (!db || !accountKey || !userId || message.deletedAt) return;
+    void toggleReaction(db, accountKey, {
+      conversationId,
+      localId: message.localId,
+      emoji,
+      userId,
+    }).then(() => sync?.requestFlush());
+  };
+
+  const fragment = quote || message.content;
+
   return (
     <div
-      className={styles.contextMenu}
-      style={{ top: props.y, left: props.x }}
-      role="menu"
+      ref={rootRef}
+      className={styles.contextPopover}
+      style={{ top: pos.top, left: pos.left }}
       onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
     >
+      {!message.deletedAt && userId ? (
+        <div className={styles.reactionBar} role="toolbar" aria-label="Реакции">
+          {MENU_REACTIONS.map((emoji) => (
+            <button key={emoji} type="button" className={styles.reactionPick} onClick={() => act(() => react(emoji))}>
+              {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className={styles.contextMenu} role="menu">
         <button
           type="button"
           role="menuitem"
@@ -268,12 +336,40 @@ function ContextMenu(props: {
                 localId: message.localId,
                 serverId: message.serverId,
                 preview: message.content,
-                quoteText: message.quoteText,
               }),
             )
           }
         >
-          Ответить
+          <Icon name="reply" size={18} /> Ответить
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!fragment.trim() || !!message.deletedAt}
+          onClick={() =>
+            act(() =>
+              setReply({
+                localId: message.localId,
+                serverId: message.serverId,
+                preview: message.content,
+                quoteText: fragment.slice(0, 280),
+              }),
+            )
+          }
+        >
+          <Icon name="quote" size={18} /> Цитировать фрагмент
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() =>
+            act(() => {
+              const text = (quote || message.content).trim();
+              if (text) void navigator.clipboard.writeText(text);
+            })
+          }
+        >
+          <Icon name="copy" size={18} /> Копировать текст
         </button>
         <button
           type="button"
@@ -289,13 +385,8 @@ function ContextMenu(props: {
             )
           }
         >
-          Переслать
+          <Icon name="forward" size={18} /> Переслать
         </button>
-        {message.isOutgoing && !message.deletedAt ? (
-          <button type="button" role="menuitem" onClick={() => act(() => setEditing(message.localId))}>
-            Редактировать
-          </button>
-        ) : null}
         {!message.deletedAt && db && accountKey ? (
           <button
             type="button"
@@ -310,16 +401,20 @@ function ContextMenu(props: {
               )
             }
           >
-            {message.isPinned ? "Открепить" : "Закрепить"}
+            <Icon name="pin" size={18} /> {message.isPinned ? "Открепить" : "Закрепить"}
           </button>
         ) : null}
-        {message.isOutgoing && !message.deletedAt && userId ? (
+        {message.isOutgoing && !message.deletedAt ? (
+          <button type="button" role="menuitem" onClick={() => act(() => setEditing(message.localId))}>
+            <Icon name="edit" size={18} /> Редактировать
+          </button>
+        ) : null}
+        {message.isOutgoing && !message.deletedAt && userId && db && accountKey ? (
           <button
             type="button"
             role="menuitem"
             onClick={() =>
               act(() => {
-                if (!db || !accountKey) return;
                 void deleteMessage(db, accountKey, {
                   conversationId,
                   localId: message.localId,
@@ -331,6 +426,7 @@ function ContextMenu(props: {
             Удалить
           </button>
         ) : null}
+      </div>
     </div>
   );
 }
@@ -340,6 +436,7 @@ function MessageBubble(props: {
   status: string;
   ticket: { number: string | null; uuid: string | null };
   blocks: ContentBlock[];
+  grouped?: boolean;
   setReply: ReturnType<typeof useUiStore.getState>["setReplyTarget"];
   setEditing: ReturnType<typeof useUiStore.getState>["setEditingMessageId"];
   setForward: ReturnType<typeof useUiStore.getState>["setForwardTarget"];
@@ -351,17 +448,17 @@ function MessageBubble(props: {
   userId?: string;
   sync: ReturnType<typeof useRuntime>["sync"];
 }) {
-  const { message, status, ticket, blocks } = props;
+  const { message, status, ticket, blocks, grouped } = props;
 
   const receipt = useMemo(() => {
     if (!message.isOutgoing || message.sendStatus !== "sent") return null;
     if (message.deliveryStatus === "read") {
-      return <Icon name="check-double" size={14} className={styles.checksRead} />;
+      return <Icon name="check-double" context="status" className={styles.checksRead} />;
     }
     if (message.deliveryStatus === "delivered") {
-      return <Icon name="check-double" size={14} className={styles.checks} />;
+      return <Icon name="check-double" context="status" className={styles.checks} />;
     }
-    return <Icon name="check" size={14} className={styles.checks} />;
+    return <Icon name="check" context="status" className={styles.checks} />;
   }, [message]);
 
   const openTicket = () => {
@@ -381,7 +478,7 @@ function MessageBubble(props: {
       tabIndex={-1}
       onContextMenu={props.openMenu}
     >
-      {!message.isOutgoing && !message.deletedAt ? (
+      {!message.isOutgoing && !message.deletedAt && !grouped ? (
         <span className={styles.author}>
           {message.authorDisplayName ?? message.authorId.slice(0, 8)}
         </span>
@@ -411,7 +508,6 @@ function MessageBubble(props: {
       ) : null}
       <div className={styles.footer}>
         {status ? <Badge tone="neutral">{status}</Badge> : null}
-        {receipt}
         {message.reactions
           ? Object.entries(message.reactions).map(([emoji, users]) => (
               <button
@@ -433,79 +529,12 @@ function MessageBubble(props: {
               </button>
             ))
           : null}
-        {!message.deletedAt ? (
-          <div className={styles.reactQuick}>
-            {QUICK_EMOJI.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                className={styles.reactBtn}
-                onClick={() => {
-                  if (!props.db || !props.accountKey || !props.userId) return;
-                  void toggleReaction(props.db, props.accountKey, {
-                    conversationId: props.conversationId,
-                    localId: message.localId,
-                    emoji,
-                    userId: props.userId,
-                  }).then(() => props.sync?.requestFlush());
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <div className={styles.actions}>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              props.setReply({
-                localId: message.localId,
-                serverId: message.serverId,
-                preview: message.content,
-                quoteText: message.quoteText,
-              })
-            }
-          >
-            <Icon name="reply" size={14} /> Ответ
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              props.setForward({
-                localId: message.localId,
-                serverId: message.serverId,
-                preview: message.content,
-                conversationId: props.conversationId,
-              })
-            }
-          >
-            Переслать
-          </Button>
-          {message.isOutgoing && !message.deletedAt ? (
-            <Button variant="ghost" size="sm" onClick={() => props.setEditing(message.localId)}>
-              <Icon name="edit" size={14} />
-            </Button>
-          ) : null}
-          {!message.deletedAt && message.isOutgoing && props.userId ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (!props.db || !props.accountKey) return;
-                void deleteMessage(props.db, props.accountKey, {
-                  conversationId: props.conversationId,
-                  localId: message.localId,
-                  authorId: props.userId!,
-                }).then(() => props.sync?.requestFlush());
-              }}
-            >
-              Удалить
-            </Button>
-          ) : null}
-        </div>
+        <span className={styles.meta}>
+          <time dateTime={new Date(message.createdAt).toISOString()}>
+            {formatClock(message.createdAt)}
+          </time>
+          {receipt}
+        </span>
       </div>
     </div>
   );

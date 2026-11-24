@@ -9,7 +9,7 @@
 2. [**development/IMPLEMENTATION_PLAN.md**](development/IMPLEMENTATION_PLAN.md) — порядок работ, контрактные вехи и критерии готовности.
 3. [**development/TEST_PLAN.md**](development/TEST_PLAN.md) — integration/e2e/load/security и показатели SLO.
 4. [**development/CODE_STANDARDS.md**](development/CODE_STANDARDS.md) — как писать код и контракты MVP.
-5. [**design/UI_UX_DESIGN.md**](design/UI_UX_DESIGN.md) — UI/UX спецификация.
+5. [**design/UI_UX_DESIGN.md**](design/UI_UX_DESIGN.md) · [**design/ICONOGRAPHY.md**](design/ICONOGRAPHY.md) — UI/UX и система иконок.
 5a. [**architecture/FRONTEND_ARCHITECTURE.md**](architecture/FRONTEND_ARCHITECTURE.md) · [**development/FRONTEND_CODE_STANDARDS.md**](development/FRONTEND_CODE_STANDARDS.md) — frontend.
 5b. [**status/STATUS-frontend-mvp.md**](status/STATUS-frontend-mvp.md) — статус frontend MVP.
 5c. [**development/FRONTEND_PRODUCTION_ITERATIONS.md**](development/FRONTEND_PRODUCTION_ITERATIONS.md) — итерации production frontend (I0–I14).
@@ -25,7 +25,8 @@ docs/
 ├── architecture/             # системный дизайн (SSOT)
 │   └── ARCHITECTURE.md
 ├── design/                   # продуктовый / UI UX дизайн
-│   └── UI_UX_DESIGN.md
+│   ├── UI_UX_DESIGN.md
+│   └── ICONOGRAPHY.md
 ├── development/              # план, стандарты, тестирование
 │   ├── CODE_STANDARDS.md
 │   ├── IMPLEMENTATION_PLAN.md

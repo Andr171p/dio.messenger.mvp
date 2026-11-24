@@ -28,4 +28,4 @@
 ## Последствия
 
 - Per-pod scraping required for accurate WS connection counts.
-- Snapshot metric over-counts if clients poll snapshot routinely — document in STATUS-hardening.
+- Snapshot metric over-counts if clients poll snapshot routinely — track in ops notes / metrics dashboard.

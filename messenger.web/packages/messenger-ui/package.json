@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "sideEffects": ["**/*.css"],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -25,5 +27,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "~5.7.2"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10"
   }
 }

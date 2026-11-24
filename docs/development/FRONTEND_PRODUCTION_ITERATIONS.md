@@ -3,7 +3,7 @@
 - **Дата:** 2026-11-23
 - **Scope сейчас:** Messenger Core (I0–I7)
 - **Access revoke:** wipe локальной проекции беседы (history, drafts, outbox, cursor)
-- **Связано:** [STATUS-frontend-mvp.md](../status/STATUS-frontend-mvp.md), [FRONTEND_ARCHITECTURE.md](../architecture/FRONTEND_ARCHITECTURE.md), [frontend-review.md](../reviews/frontend-review.md)
+- **Связано:** [STATUS-frontend-mvp.md](../status/STATUS-frontend-mvp.md), [FRONTEND_ARCHITECTURE.md](../architecture/FRONTEND_ARCHITECTURE.md), [ICONOGRAPHY.md](../design/ICONOGRAPHY.md)
 
 ## Цель
 
@@ -33,11 +33,7 @@
 
 | Файл | Назначение |
 |---|---|
-| [`docs/design/screenshots/01-light-shell.png`](../design/screenshots/01-light-shell.png) | Light desktop shell |
-| [`docs/design/screenshots/02-light-context-panel.png`](../design/screenshots/02-light-context-panel.png) | Light + заявка context |
-| [`docs/design/screenshots/03-light-ticket-picker.png`](../design/screenshots/03-light-ticket-picker.png) | `#` ticket picker |
-| [`docs/design/screenshots/04-dark-shell.png`](../design/screenshots/04-dark-shell.png) | Dark desktop shell |
-| [`docs/design/screenshots/05-dark-context-panel.png`](../design/screenshots/05-dark-context-panel.png) | Dark + заявка context |
+| [`docs/design/screenshots/06-density-after.png`](../design/screenshots/06-density-after.png) | Актуальный desktop shell после density-pass |
 | `apps/messenger/public/brand/dios-mark.png` | Лого DIOS |
 | `apps/messenger/public/wallpapers/chat-dark.jpg` | Обои тёмной темы |
 | `apps/messenger/public/wallpapers/chat-pattern-source.jpg` | Источник паттерна (light/dark composite) |

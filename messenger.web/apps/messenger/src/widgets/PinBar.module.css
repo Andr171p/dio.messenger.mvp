@@ -1,22 +1,23 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--dio-space-1);
-  padding: var(--dio-space-2) var(--dio-space-4);
-  background: var(--dio-glass-bg);
-  backdrop-filter: blur(var(--dio-glass-blur));
+  gap: 2px;
+  padding: 0;
+  background: var(--dio-sidebar);
   border-bottom: 1px solid var(--dio-border-subtle);
+  flex-shrink: 0;
 }
 
 .item {
   display: flex;
   align-items: center;
-  gap: var(--dio-space-2);
+  gap: 8px;
+  min-height: 40px;
   font-size: 13px;
   color: var(--dio-text-secondary);
-  padding: var(--dio-space-1) var(--dio-space-2);
-  border-radius: var(--dio-radius-md);
-  background: var(--dio-field);
+  padding: 6px 16px;
+  border-radius: 0;
+  background: transparent;
 }
 
 .text {

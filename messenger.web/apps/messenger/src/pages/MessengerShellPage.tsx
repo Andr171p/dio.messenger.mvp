@@ -34,15 +34,15 @@ export function MessengerShellPage() {
         rail={<AppRail />}
         list={<ConversationList />}
         chat={
-          <div className={styles.chatColumn}>
+          <div className={[styles.chatColumn, "dio-chat-canvas"].join(" ")}>
             <ChatHeader />
+            <OfflineIndicator />
             <PinBar />
             <MessageTimeline />
             <MessageComposer />
           </div>
         }
         context={<ContextResourcePanel />}
-        statusBar={<OfflineIndicator />}
       />
     </>
   );

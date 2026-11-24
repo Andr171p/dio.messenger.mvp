@@ -110,12 +110,16 @@ export function ConversationList() {
           ))}
         </div>
       </header>
-      <ul className={styles.list}>
+      <ul className={[styles.list, "dio-scroll"].join(" ")}>
         {visible.map((conv) => (
           <li key={conv.id}>
             <button
               type="button"
-              className={[styles.item, selectedId === conv.id ? styles.selected : ""]
+              className={[
+                styles.item,
+                selectedId === conv.id ? styles.selected : "",
+                conv.unreadCount > 0 ? styles.unread : "",
+              ]
                 .filter(Boolean)
                 .join(" ")}
               onClick={() => {

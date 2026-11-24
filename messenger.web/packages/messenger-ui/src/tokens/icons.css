@@ -1,0 +1,22 @@
+/* Semantic icon color roles — never bake brand colors into SVG paths. */
+
+:root,
+[data-dio-theme="light"] {
+  --dio-icon-muted: #8a93a0;
+  --dio-icon-default: #626c7b;
+  --dio-icon-strong: #182230;
+  --dio-icon-active: #b62437;
+  --dio-icon-danger: #b62437;
+  --dio-icon-disabled: #b0b7c1;
+  --dio-surface-hover: rgba(24, 34, 48, 0.06);
+}
+
+[data-dio-theme="dark"] {
+  --dio-icon-muted: #8a948c;
+  --dio-icon-default: #c1cbc3;
+  --dio-icon-strong: #f2f3f0;
+  --dio-icon-active: #ffa5af;
+  --dio-icon-danger: #ffa5af;
+  --dio-icon-disabled: #6a736c;
+  --dio-surface-hover: rgba(255, 255, 255, 0.06);
+}

@@ -1,6 +1,27 @@
-.ok {
-  display: inline-flex;
+.banner {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--dio-status-success);
+  gap: var(--dio-space-2);
+  min-height: 36px;
+  padding: 6px var(--dio-space-4);
+  font-size: 13px;
+  line-height: 1.3;
+  border-bottom: 1px solid var(--dio-border-subtle);
+  background: var(--dio-sidebar);
+  color: var(--dio-text);
+  flex-shrink: 0;
+}
+
+.info {
+  color: var(--dio-text-secondary);
+}
+
+.warning {
+  background: var(--dio-status-warning);
+  color: var(--dio-warm-text);
+}
+
+.error {
+  background: var(--dio-accent-muted);
+  color: var(--dio-status-error);
 }

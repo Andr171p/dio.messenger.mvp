@@ -1,4 +1,4 @@
-import { Badge, Icon } from "@dio/messenger-ui";
+import { Icon } from "@dio/messenger-ui";
 import { useSyncExternalStore } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import styles from "./OfflineIndicator.module.css";
@@ -16,49 +16,40 @@ function getOnlineSnapshot() {
   return navigator.onLine;
 }
 
+/**
+ * Connectivity banner only — never a permanent “В сети” status bar.
+ * User presence belongs in ChatHeader.
+ */
 export function OfflineIndicator() {
   const online = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
   const { syncStatus } = useRuntime();
 
   if (!online) {
     return (
-      <Badge tone="error">
-        <Icon name="offline" size={14} />
-        Нет сети — сообщения сохраняются локально
-      </Badge>
+      <div className={[styles.banner, styles.error].join(" ")} role="status">
+        <Icon name="offline" size={16} />
+        <span>Нет подключения. Сообщения будут отправлены позже.</span>
+      </div>
     );
   }
 
   if (syncStatus.runtime === "syncing" || syncStatus.runtime === "starting") {
     return (
-      <Badge tone="info">
-        <Icon name="offline" size={14} />
-        Синхронизация…
-      </Badge>
+      <div className={[styles.banner, styles.info].join(" ")} role="status">
+        <Icon name="offline" size={16} />
+        <span>Подключение…</span>
+      </div>
     );
   }
 
   if (syncStatus.runtime === "error") {
     return (
-      <Badge tone="warning">
-        <Icon name="offline" size={14} />
-        Не удалось обновить данные — показан локальный кэш
-      </Badge>
+      <div className={[styles.banner, styles.warning].join(" ")} role="status">
+        <Icon name="offline" size={16} />
+        <span>Не удалось обновить данные — показан локальный кэш</span>
+      </div>
     );
   }
 
-  if (syncStatus.wsConnected) {
-    return (
-      <span className={styles.ok}>
-        <Icon name="check" size={14} /> В сети
-      </span>
-    );
-  }
-
-  return (
-    <Badge tone="info">
-      <Icon name="check" size={14} />
-      В сети · обновления с небольшой задержкой
-    </Badge>
-  );
+  return null;
 }
