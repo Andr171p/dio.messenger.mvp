@@ -349,6 +349,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/media/{asset_id}/gallery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Media Gallery Position */
+        get: operations["get_media_gallery_position_v1_media__asset_id__gallery_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/media/{asset_id}/content": {
         parameters: {
             query?: never;
@@ -1362,6 +1379,38 @@ export interface components {
              * Format: uuid
              */
             assetId: string;
+        };
+        /** MediaGalleryKeyDTO */
+        MediaGalleryKeyDTO: {
+            /**
+             * Assetid
+             * Format: uuid
+             */
+            assetId: string;
+            /**
+             * Messageid
+             * Format: uuid
+             */
+            messageId: string;
+        };
+        /** MediaGalleryPositionDTO */
+        MediaGalleryPositionDTO: {
+            /** Position */
+            position: number;
+            /** Total */
+            total: number;
+            /**
+             * Senderid
+             * Format: uuid
+             */
+            senderId: string;
+            /**
+             * Sentat
+             * Format: date-time
+             */
+            sentAt: string;
+            previous?: components["schemas"]["MediaGalleryKeyDTO"] | null;
+            next?: components["schemas"]["MediaGalleryKeyDTO"] | null;
         };
         /**
          * MediaStatus
@@ -2801,6 +2850,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaAssetDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_media_gallery_position_v1_media__asset_id__gallery_get: {
+        parameters: {
+            query: {
+                messageId: string;
+            };
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaGalleryPositionDTO"];
                 };
             };
             /** @description Validation Error */

@@ -267,3 +267,41 @@ async def test_search_acl_respects_history_from_seq(db_session) -> None:
     )
     assert len(hits) == 1
     assert hits[0].created_seq == 3
+
+async def test_media_gallery_numbers_only_visible_photos_in_order(db_session) -> None:
+    conversation = await seed_conversation(db_session)
+    repository = SqlAlchemyMediaRepository(db_session)
+    entries = []
+    for seq, mime in enumerate(("image/png", "image/png", "video/mp4", "image/png"), start=1):
+        message_id = await seed_message(
+            db_session, conversation=conversation, sender_id=conversation.created_by,
+            created_seq=seq, text="Gallery fixture",
+        )
+        asset = await seed_pending_media(db_session, conversation=conversation, owner_id=conversation.created_by)
+        asset.mark_uploaded(size=64, content_type=mime)
+        asset.mark_scanning()
+        asset.mark_ready()
+        await repository.update(asset)
+        await repository.link_to_message(message_id=message_id, asset_ids=[asset.id])
+        entries.append((message_id, asset.id))
+
+    criteria = dict(conversation_id=conversation.id, history_from_seq=2, media_kind="image")
+    hidden_message, hidden_asset = entries[0]
+    assert await repository.get_gallery_position(
+        **criteria, message_id=hidden_message, asset_id=hidden_asset,
+    ) is None
+    first_message, first_asset = entries[1]
+    last_message, last_asset = entries[3]
+    first = await repository.get_gallery_position(
+        **criteria, message_id=first_message, asset_id=first_asset,
+    )
+    assert first is not None and (first.position, first.total) == (1, 2)
+    assert first.previous is None and first.next is not None
+    assert (first.next.message_id, first.next.asset_id) == (last_message, last_asset)
+    assert first.sender_id == conversation.created_by
+    last = await repository.get_gallery_position(
+        **criteria, message_id=last_message, asset_id=last_asset,
+    )
+    assert last is not None and (last.position, last.total) == (2, 2)
+    assert last.next is None and last.previous is not None
+    assert (last.previous.message_id, last.previous.asset_id) == (first_message, first_asset)

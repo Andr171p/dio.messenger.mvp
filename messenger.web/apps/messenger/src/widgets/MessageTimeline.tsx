@@ -13,6 +13,7 @@ import {
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageBubble } from "./MessageBubble.js";
 import { MessageContextMenu } from "./MessageContextMenu.js";
+import { MediaViewer, type MediaSelection } from "./MediaViewer.js";
 import { TicketFromMessageDialog } from "./TicketFromMessageDialog.js";
 import styles from "./MessageTimeline.module.css";
 
@@ -62,6 +63,7 @@ export function MessageTimeline() {
   const profiles = useDirectoryProfiles(!!conversationId);
   const parentRef = useRef<HTMLDivElement | null>(null);
   const menuTrigger = useRef<HTMLElement | null>(null);
+  const [viewingMedia, setViewingMedia] = useState<MediaSelection | null>(null);
   const [menu, setMenu] = useState<{
     message: LocalMessage;
     anchor: DOMRect;
@@ -269,6 +271,7 @@ export function MessageTimeline() {
 
   useEffect(() => {
     setMenu(null);
+    setViewingMedia(null);
   }, [conversationId]);
 
   if (!conversationId) {
@@ -309,6 +312,8 @@ export function MessageTimeline() {
       ) : null}
       <div
         ref={parentRef}
+        role="region"
+        aria-label="История сообщений"
         className={[styles.scroller, "dio-scroll"].join(" ")}
         onScroll={(event) => {
           if (positionedConversation !== conversationId) return;
@@ -406,6 +411,7 @@ export function MessageTimeline() {
                   </div>
                   <MessageBubble
                     message={message}
+                    onPreview={setViewingMedia}
                     status={status}
                     receiptCount={
                       message.isOutgoing && readSeq > 0 && members.data
@@ -525,6 +531,9 @@ export function MessageTimeline() {
           messageId={ticketSource.id}
           onClose={() => setTicketSource(null)}
         />
+      ) : null}
+      {viewingMedia?.conversationId === conversationId ? (
+        <MediaViewer initial={viewingMedia} onClose={() => setViewingMedia(null)} />
       ) : null}
     </>
   );

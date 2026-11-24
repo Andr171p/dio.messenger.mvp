@@ -33,7 +33,10 @@ export function OfflineIndicator() {
     );
   }
 
-  if (syncStatus.runtime === "syncing" || syncStatus.runtime === "starting") {
+  if (
+    syncStatus.runtime === "starting" ||
+    (syncStatus.runtime === "syncing" && syncStatus.lastSyncAt === undefined)
+  ) {
     return (
       <div className={[styles.banner, styles.info].join(" ")} role="status">
         <Icon name="offline" size={16} />

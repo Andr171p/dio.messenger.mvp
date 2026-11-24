@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 
 from src.api.dependencies.auth import CurrentUser
@@ -14,6 +15,7 @@ from src.application.media.dtos import (
     MediaAccessDTO,
     MediaAccessRequestDTO,
     MediaAssetDTO,
+    MediaGalleryPositionDTO,
     UploadResponseDTO,
 )
 
@@ -129,6 +131,24 @@ async def get_media_asset(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
+
+
+@router.get("/{asset_id}/gallery")
+async def get_media_gallery_position(
+    asset_id: UUID,
+    message_id: Annotated[UUID, Query(alias="messageId")],
+    response: Response,
+    auth: CurrentUser,
+    media_repository: MediaRepositoryDep,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+) -> MediaGalleryPositionDTO:
+    item = await queries.get_gallery_position(
+        asset_id, message_id, actor=auth, media_repository=media_repository,
+        conversation_repository=conversation_repository, membership_repository=membership_repository,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return item
 
 
 @router.get("/{asset_id}/content", response_class=StreamingResponse)

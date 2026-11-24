@@ -1,0 +1,118 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #f4f6f8;
+  overflow: hidden;
+}
+
+.dialog[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.dialog::backdrop {
+  background: rgb(17 23 28 / 78%);
+}
+
+.top,
+.bottom {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-inline: max(16px, env(safe-area-inset-left))
+    max(16px, env(safe-area-inset-right));
+}
+
+.top {
+  justify-content: space-between;
+  padding-block: max(12px, env(safe-area-inset-top)) 8px;
+}
+
+.bottom {
+  padding-block: 8px max(14px, env(safe-area-inset-bottom));
+}
+
+.filename,
+.caption {
+  flex: 1;
+  min-width: 0;
+}
+
+.filename,
+.details {
+  color: #d9e0e6;
+}
+
+.filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caption {
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.details {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  min-width: 0;
+}
+
+.media :is(img, video, audio) {
+  display: block;
+  max-width: calc(100% - 24px);
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.media :is(img, video) {
+  min-width: 0;
+  min-height: 0;
+}
+
+.dialog :is(.control, .previous, .next) {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #f4f6f8;
+  background: rgb(20 27 33 / 66%);
+  border: 1px solid rgb(255 255 255 / 24%);
+}
+
+.dialog :is(.control, .previous, .next):hover:not(:disabled) {
+  background: rgb(52 64 74 / 92%);
+}
+
+.previous,
+.next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.previous {
+  left: max(12px, env(safe-area-inset-left));
+}
+
+.next {
+  right: max(12px, env(safe-area-inset-right));
+}

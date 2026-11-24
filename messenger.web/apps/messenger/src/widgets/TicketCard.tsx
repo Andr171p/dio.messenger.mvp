@@ -49,22 +49,29 @@ export function TicketCard({
         useUiStore.getState().setContextResource(name, uuid);
       }}
     >
-      <span className={styles.ticketTop}>
-        <span className={styles.ticketLabel}>
-          <Icon name="itsm-link" size={15} /> {name}
+      <span className={styles.ticketBody}>
+        <span className={styles.ticketTop}>
+          <span className={styles.ticketLabel}>
+            <Icon name="itsm-link" size={15} /> {name}
+          </span>
+          {data?.status ? <TicketStatus value={data.status} /> : null}
         </span>
-        {data?.status ? <TicketStatus value={data.status} /> : null}
+        {data?.title ? (
+          <strong className={styles.ticketTitle}>{data.title}</strong>
+        ) : null}
+        {!data && preview.isFetching ? (
+          <span className={styles.ticketTitle}>Загрузка заявки…</span>
+        ) : null}
+        {!data && (preview.isError || preview.data?.access === "denied") ? (
+          <span className={styles.ticketTitle}>Заявка недоступна</span>
+        ) : null}
+        {assignee ? (
+          <span className={styles.ticketAssigneeRow}>
+            <TicketAssignee name={assignee} />
+            <Icon name="next" size={14} />
+          </span>
+        ) : null}
       </span>
-      {data?.title ? (
-        <strong className={styles.ticketTitle}>{data.title}</strong>
-      ) : null}
-      {!data && preview.isFetching ? (
-        <span className={styles.ticketTitle}>Загрузка заявки…</span>
-      ) : null}
-      {!data && (preview.isError || preview.data?.access === "denied") ? (
-        <span className={styles.ticketTitle}>Заявка недоступна</span>
-      ) : null}
-      {assignee ? <TicketAssignee name={assignee} /> : null}
       <span className={styles.ticketHint}>
         Подробнее <span aria-hidden="true">→</span>
       </span>

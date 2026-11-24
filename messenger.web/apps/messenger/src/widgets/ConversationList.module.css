@@ -94,14 +94,6 @@
   background: var(--dio-surface-hover);
 }
 
-.selected {
-  background: var(--dio-field);
-}
-
-.selected:hover {
-  background: var(--dio-field);
-}
-
 .meta {
   flex: 1;
   min-width: 0;
@@ -159,7 +151,7 @@
 
 .selected,
 .selected:hover {
-  background: var(--dio-selection);
+  background: var(--dio-conversation-selected);
 }
 
 .actions {

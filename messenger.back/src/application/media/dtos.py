@@ -82,3 +82,21 @@ class MediaAccessDTO(BaseModel):
     url: str
     expires_in: PositiveInt
     expires_at: datetime
+
+
+class MediaGalleryKeyDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    asset_id: UUID
+    message_id: UUID
+
+
+class MediaGalleryPositionDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    position: PositiveInt
+    total: PositiveInt
+    sender_id: UUID
+    sent_at: datetime
+    previous: MediaGalleryKeyDTO | None = None
+    next: MediaGalleryKeyDTO | None = None

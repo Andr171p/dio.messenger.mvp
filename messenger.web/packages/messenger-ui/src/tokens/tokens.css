@@ -16,6 +16,7 @@
   --dio-border-subtle: #e4e8e3;
   --dio-field: #f2f3ef;
   --dio-selection: #f6e8e7;
+  --dio-conversation-selected: #e9ecef;
   --dio-bright: #182230;
   --dio-bubble-incoming: #fcfdfb;
   --dio-bubble-outgoing: #eaf4ee;
@@ -72,6 +73,7 @@
   --dio-border-subtle: #454c45;
   --dio-field: #31322f;
   --dio-selection: #462d31;
+  --dio-conversation-selected: #363b3d;
   --dio-bright: #ffa5af;
   --dio-bubble-incoming: #303430;
   --dio-bubble-outgoing: #304438;

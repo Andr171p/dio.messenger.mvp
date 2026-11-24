@@ -3,10 +3,11 @@ from uuid import UUID
 from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.infra.database.sqlalchemy import SqlAlchemyRepository
 from ddf.infra.database.sqlalchemy.utils import get_constraint_name, is_unique_violation
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.media.dtos import MediaGalleryKeyDTO, MediaGalleryPositionDTO
 from src.domain.media import MediaAsset, MediaObject, MediaObjectRole, MediaStatus, UploadTargetType
 from src.infra.database.models import MediaAssetOrm, MediaObjectOrm, MessageMediaOrm, MessageOrm
 
@@ -140,6 +141,55 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
             .limit(1)
         )
         return await self._session.scalar(stmt)
+
+    async def get_gallery_position(
+        self, *, conversation_id: UUID, asset_id: UUID, message_id: UUID,
+        history_from_seq: int, media_kind: str,
+    ) -> MediaGalleryPositionDTO | None:
+        order = (MessageOrm.created_seq, MessageMediaOrm.position)
+        gallery = (
+            select(
+                MessageMediaOrm.asset_id,
+                MessageMediaOrm.message_id,
+                MessageOrm.sender_id,
+                MessageOrm.created_at.label("sent_at"),
+                func.row_number().over(order_by=order).label("position"),
+                func.count().over().label("total"),
+                func.lag(MessageMediaOrm.asset_id).over(order_by=order).label("previous_asset"),
+                func.lag(MessageMediaOrm.message_id).over(order_by=order).label("previous_message"),
+                func.lead(MessageMediaOrm.asset_id).over(order_by=order).label("next_asset"),
+                func.lead(MessageMediaOrm.message_id).over(order_by=order).label("next_message"),
+            )
+            .select_from(MessageMediaOrm)
+            .join(MessageOrm, MessageOrm.id == MessageMediaOrm.message_id)
+            .join(MediaAssetOrm, MediaAssetOrm.id == MessageMediaOrm.asset_id)
+            .where(
+                MessageOrm.conversation_id == conversation_id,
+                MessageOrm.created_seq >= history_from_seq,
+                MessageOrm.deleted_at.is_(None),
+                MediaAssetOrm.status == MediaStatus.READY.value,
+                MediaAssetOrm.deleted_at.is_(None),
+                MediaAssetOrm.content_type.startswith(f"{media_kind}/"),
+                MediaAssetOrm.organization_id == MessageOrm.organization_id,
+            )
+            .subquery()
+        )
+        result = await self._session.execute(select(gallery).where(
+            gallery.c.asset_id == asset_id, gallery.c.message_id == message_id,
+        ))
+        row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        return MediaGalleryPositionDTO(
+            position=row["position"], total=row["total"],
+            sender_id=row["sender_id"], sent_at=row["sent_at"],
+            previous=MediaGalleryKeyDTO(
+                asset_id=row["previous_asset"], message_id=row["previous_message"],
+            ) if row["previous_asset"] else None,
+            next=MediaGalleryKeyDTO(
+                asset_id=row["next_asset"], message_id=row["next_message"],
+            ) if row["next_asset"] else None,
+        )
 
     async def claim_for_scanning(self, *, limit: int = 10) -> list[MediaAsset]:
         stmt = (

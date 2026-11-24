@@ -451,6 +451,7 @@ test("отзывает доступ перед отправкой очереди
   });
   await page.goto("/");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(page.getByText("Подключение…", { exact: true })).toBeHidden();
   await context.setOffline(true);
   const text = "Черновик отозванной беседы";
   await page.getByRole("textbox", { name: "Текст сообщения" }).fill(text);
@@ -805,6 +806,14 @@ test("открывает заявку по номеру и запрашивае�
   await expect(page.getByRole("button", { name: /Подробнее/ })).toContainText(
     "Анна Смирнова",
   );
+  await expect(
+    page
+      .getByRole("group", { name: "Прикреплённые заявки" })
+      .getByRole("button", { name: /Подробнее/ }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".dio-message-text").getByRole("button", { name: /Подробнее/ }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "#INC-228", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Контекст заявки" });
   await expect(panel.getByRole("heading", { name: "Нет доступа к VPN" })).toBeVisible();
@@ -974,6 +983,11 @@ test("открывает изображение внутри чата и воз�
       json: { url: imageUrl, expiresAt: new Date(Date.now() + 60_000).toISOString() },
     }),
   );
+  await page.route("**/v1/media/" + assetId + "/gallery?*", (route) =>
+    route.fulfill({
+      json: { position: 3, total: 7, senderId: userId, sentAt: source.createdAt },
+    }),
+  );
   await page.route("**/v1/media/" + assetId + "/content", (route) =>
     route.fulfill({
       contentType: "image/png",
@@ -990,7 +1004,86 @@ test("открывает изображение внутри чата и воз�
   await opener.click();
   const viewer = page.getByRole("dialog", { name: "Предпросмотр preview.png" });
   await expect(viewer.getByRole("img")).toHaveAttribute("src", /^blob:/);
+  await expect(viewer.getByText("Фото 3 из 7")).toBeVisible();
+  await expect(viewer.locator("time")).toHaveAttribute(
+    "datetime",
+    new Date(source.createdAt).toISOString(),
+  );
+  await expect(viewer.getByText("Вы", { exact: false })).toBeVisible();
+  const dimensions = await page.evaluate(() => ({
+    width: innerWidth,
+    height: innerHeight,
+  }));
+  const bounds = await viewer.boundingBox();
+  expect(bounds?.width).toBe(dimensions.width);
+  expect(bounds?.height).toBe(dimensions.height);
+  const download = page.waitForEvent("download");
+  await viewer.getByRole("button", { name: "Скачать файл" }).click();
+  expect((await download).suggestedFilename()).toBe("preview.png");
   await page.keyboard.press("Escape");
   await expect(viewer).toBeHidden();
   await expect(opener).toBeFocused();
+});
+
+test("сохраняет размеры и положение ленты при фоновой синхронизации после возврата", async ({
+  page,
+}) => {
+  let hold = false;
+  let finish!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route("**/v1/sync/manifest", async (route) => {
+    if (hold) await gate;
+    return route.fallback();
+  });
+  const messages = Array.from({ length: 45 }, (_, index) => ({
+    ...source,
+    id: crypto.randomUUID(),
+    createdSeq: index + 1,
+    content: { blocks: [{ type: "text", text: "Сообщение истории " + (index + 1) }] },
+  }));
+  await page.route("**/v1/conversations/" + chatId + "/snapshot?*", (route) =>
+    route.fulfill({
+      json: {
+        conversation: chat,
+        membership: { historyFromSeq: 1 },
+        messages,
+        snapshotEventSeq: 81,
+      },
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const history = page.getByRole("region", { name: "История сообщений" });
+  await expect(
+    history.getByText("Сообщение истории 45", { exact: true }),
+  ).toBeInViewport();
+  await expect(page.getByText("Подключение…", { exact: true })).toBeHidden();
+  await page.waitForLoadState("networkidle");
+  await history.evaluate(async (root) => {
+    root.scrollTop -= 400;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+  });
+  const readPosition = () =>
+    history.evaluate((root) => ({
+      top: root.getBoundingClientRect().top,
+      height: root.clientHeight,
+      offset: root.scrollTop,
+    }));
+  const before = await readPosition();
+  hold = true;
+  const request = page.waitForRequest("**/v1/sync/manifest");
+  try {
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await request;
+    await expect(page.getByText("Подключение…", { exact: true })).toBeHidden();
+    expect(await readPosition()).toEqual(before);
+  } finally {
+    finish();
+  }
+  await page.waitForLoadState("networkidle");
+  expect(await readPosition()).toEqual(before);
 });
