@@ -202,6 +202,9 @@ export class WebSocketClient {
     let ticket: string;
     try {
       const response = await this.options.http.post<WsTicketResponse>("/v1/ws/tickets");
+      if (typeof response.ticket !== "string" || !response.ticket.trim()) {
+        throw new Error("Missing WebSocket ticket");
+      }
       ticket = response.ticket;
     } catch {
       this.options.onConnectionChange?.(false);

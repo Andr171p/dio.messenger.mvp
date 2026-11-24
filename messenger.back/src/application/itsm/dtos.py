@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -15,6 +16,21 @@ class ResourceReference(BaseModel):
     resource_id: str = Field(min_length=1, max_length=128)
 
 
+class ResourceAttachmentDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    filename: str
+    content_type: str
+    size: int
+
+
+class ResourceActivityDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    action: str
+    occurred_at: datetime
+
+
 class ResourcePreviewDTO(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 
@@ -26,6 +42,10 @@ class ResourcePreviewDTO(BaseModel):
     ticket_type: str | None = None
     assignee_display_name: str | None = None
     access: Literal["full", "limited", "denied"] = "full"
+    description: str | None = None
+    updated_at: datetime | None = None
+    attachments: list[ResourceAttachmentDTO] | None = None
+    activity: list[ResourceActivityDTO] | None = None
 
 
 class ContextLinkDTO(BaseModel):

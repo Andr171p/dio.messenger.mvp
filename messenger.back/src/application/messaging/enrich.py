@@ -69,4 +69,6 @@ def build_send_content(
     )
     if forwarded_snapshot is not None:
         content = apply_forwarded_from(content, forwarded_snapshot)
+    if command.quote_text is not None:
+        content["quoteText"] = command.quote_text.strip()
     return content

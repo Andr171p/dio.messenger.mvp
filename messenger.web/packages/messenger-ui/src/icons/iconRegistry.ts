@@ -1,5 +1,6 @@
 import {
   ArrowBendUpLeft,
+  ArrowLeft,
   ArrowFatRight,
   At,
   BookmarkSimple,
@@ -60,6 +61,7 @@ export const icons = {
   sliders: SlidersHorizontal,
   search: MagnifyingGlass,
   menu: List,
+  back: ArrowLeft,
   more: DotsThree,
   "more-vertical": DotsThreeVertical,
   close: X,

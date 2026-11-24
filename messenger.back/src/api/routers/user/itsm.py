@@ -10,6 +10,9 @@ from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.itsm import ContextLinkRepositoryDep, ItsmAdapterDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.application.itsm import commands, queries
+from src.application.auth.exceptions import PermissionDeniedError
+from src.application.conversations.commands import require_active_membership
+from src.application.itsm.policies import is_guest_role
 from src.application.itsm.dtos import (
     ConfirmTicketSuggestionDTO,
     ContextLinkDTO,
@@ -24,6 +27,29 @@ from src.application.itsm.dtos import (
 )
 
 router = APIRouter(tags=["itsm"])
+
+
+@router.get("/v1/resources/tickets/search", summary="Поиск доступных заявок DIO Desk")
+async def search_tickets(
+    auth: CurrentUser,
+    token: BearerToken,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    itsm: ItsmAdapterDep,
+    conversation_id: Annotated[UUID, Query(alias="conversationId")],
+    q: Annotated[str, Query(min_length=3, max_length=100)],
+) -> list[ResourcePreviewDTO]:
+    _, membership = await require_active_membership(
+        conversation_id=conversation_id,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if is_guest_role(membership.role):
+        raise PermissionDeniedError("Ticket search is available to staff members.")
+    if len(q.strip()) < 3:
+        return []
+    return await itsm.search(q.strip(), access_token=token)
 
 
 @router.get(
@@ -41,6 +67,7 @@ async def get_resource_preview(
     resource_type: Annotated[str, Query(alias="resourceType", min_length=1)],
     resource_id: Annotated[str, Query(alias="resourceId", min_length=1)],
     conversation_id: Annotated[UUID | None, Query(alias="conversationId")] = None,
+    include_activity: Annotated[bool, Query(alias="includeActivity")] = False,
 ) -> ResourcePreviewDTO:
     return await queries.get_resource_preview(
         ResourceReference(provider=provider, resource_type=resource_type, resource_id=resource_id),
@@ -50,6 +77,7 @@ async def get_resource_preview(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
         preview_resolver=itsm,
+        include_activity=include_activity,
     )
 
 

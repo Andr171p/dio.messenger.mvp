@@ -1,23 +1,21 @@
-import {
-  deleteMessage,
-  extractTicketNumber,
-  pinMessage,
-  toggleReaction,
-  type ContentBlock,
-  type LocalMessage,
-} from "@dio/messenger-core";
-import { Badge, Icon } from "@dio/messenger-ui";
-import { useQuery } from "@tanstack/react-query";
+import { readMessageBlocks, type LocalMessage } from "@dio/messenger-core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useReadCursor } from "../features/read/useReadCursor.js";
+import {
+  useConversationMembers,
+  useDirectoryProfiles,
+} from "../features/read/useConversationMembers.js";
 import { useUiStore } from "../stores/uiStore.js";
+import { MessageBubble } from "./MessageBubble.js";
+import { MessageContextMenu } from "./MessageContextMenu.js";
+import { TicketFromMessageDialog } from "./TicketFromMessageDialog.js";
 import styles from "./MessageTimeline.module.css";
 
-const MENU_REACTIONS = ["❤️", "👍", "🔥", "🎉", "🤝", "👀"];
+const RECENT_MESSAGES = 150;
 
 function statusLabel(status: LocalMessage["sendStatus"]): string {
   switch (status) {
@@ -47,100 +45,187 @@ function sameDay(a: number, b: number): boolean {
   return new Date(a).toDateString() === new Date(b).toDateString();
 }
 
-function formatClock(ts: number): string {
-  return new Intl.DateTimeFormat("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(ts);
-}
-
-function messageBlocks(message: LocalMessage): ContentBlock[] {
-  if (message.contentBlocks) {
-    try {
-      const parsed = JSON.parse(message.contentBlocks) as ContentBlock[];
-      if (parsed.length) return parsed;
-    } catch {
-      /* fall through */
-    }
-  }
-  return [{ type: "text", text: message.content }];
-}
-
-function findTicketResource(message: LocalMessage): {
-  number: string | null;
-  uuid: string | null;
-} {
-  for (const block of messageBlocks(message)) {
-    if (block.type === "resource") {
-      return {
-        number: block.number ?? extractTicketNumber(message.content),
-        uuid: block.resourceId,
-      };
-    }
-  }
-  return { number: extractTicketNumber(message.content), uuid: null };
-}
-
-function MediaBlock({ assetId }: { assetId: string }) {
-  const { http } = useRuntime();
-  const access = useQuery({
-    queryKey: ["media-access", assetId],
-    enabled: !!http,
-    staleTime: 60_000,
-    queryFn: async () =>
-      http!.post<{ url: string }>(`/v1/media/${assetId}/access`, { role: "preview" }),
-  });
-
-  if (access.data?.url) {
-    return (
-      <a className={styles.mediaLink} href={access.data.url} target="_blank" rel="noreferrer">
-        <img className={styles.mediaImg} src={access.data.url} alt="Вложение" loading="lazy" />
-      </a>
-    );
-  }
-
-  return (
-    <div className={styles.mediaPlaceholder}>
-      <Icon name="attach" size={16} /> Вложение
-      {access.isFetching ? " …" : null}
-    </div>
-  );
-}
-
 export function MessageTimeline() {
   const { db, accountKey, sync } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
-  const setReply = useUiStore((s) => s.setReplyTarget);
-  const setEditing = useUiStore((s) => s.setEditingMessageId);
-  const setForward = useUiStore((s) => s.setForwardTarget);
-  const setContext = useUiStore((s) => s.setContextResource);
+  const members = useConversationMembers(conversationId);
+  const profiles = useDirectoryProfiles(!!conversationId);
   const parentRef = useRef<HTMLDivElement | null>(null);
+  const menuTrigger = useRef<HTMLElement | null>(null);
   const [menu, setMenu] = useState<{
     message: LocalMessage;
     anchor: DOMRect;
     quote: string;
   } | null>(null);
+  const [historyWindows, setHistoryWindows] = useState<
+    Record<string, { through?: number; limit: number }>
+  >({});
+  const history = conversationId ? historyWindows[conversationId] : undefined;
+  const through = history?.through;
+  const limit = history?.limit ?? RECENT_MESSAGES;
 
   const messages = useLiveQuery(async () => {
-    if (!db || !accountKey || !conversationId) return [] as LocalMessage[];
+    if (!db || !accountKey || !conversationId) return null;
     const rows = await db.messages
-      .where("[accountKey+conversationId]")
-      .equals([accountKey, conversationId])
+      .where("[accountKey+conversationId+createdSeq]")
+      .between(
+        [accountKey, conversationId, 0],
+        [accountKey, conversationId, through ?? Number.MAX_SAFE_INTEGER],
+        true,
+        true,
+      )
+      .reverse()
+      .limit(limit)
       .toArray();
-    return rows.sort((a, b) => (a.createdSeq ?? a.createdAt) - (b.createdSeq ?? b.createdAt));
-  }, [db, accountKey, conversationId]);
+    rows.reverse();
+    if (through === undefined) {
+      const sends = await db.outbox
+        .where("accountKey")
+        .equals(accountKey)
+        .filter(
+          (item) =>
+            item.command.type === "message.send" &&
+            item.command.payload.conversationId === conversationId,
+        )
+        .toArray();
+      const pending = await db.messages.bulkGet(
+        sends.flatMap((item) =>
+          item.command.type === "message.send"
+            ? [item.command.payload.clientMessageId]
+            : [],
+        ),
+      );
+      rows.push(
+        ...pending
+          .filter((row): row is LocalMessage => !!row && row.createdSeq === undefined)
+          .sort((a, b) => a.createdAt - b.createdAt),
+      );
+    }
+    return { conversationId, rows };
+  }, [db, accountKey, conversationId, through, limit]);
 
-  const items = messages ?? [];
+  const items = useMemo(
+    () => (messages?.conversationId === conversationId ? (messages?.rows ?? []) : []),
+    [messages, conversationId],
+  );
+  const byId = useMemo(() => {
+    const map = new Map<string, LocalMessage>();
+    for (const message of items) {
+      map.set(message.localId, message);
+      if (message.serverId) map.set(message.serverId, message);
+    }
+    return map;
+  }, [items]);
   useReadCursor(conversationId, items, parentRef);
+  const target = useUiStore((s) => s.messageTarget);
+  const setTarget = useUiStore((s) => s.setMessageTarget);
+  const [highlight, setHighlight] = useState<string | null>(null);
+  const [navigationError, setNavigationError] = useState("");
+  const [newMessages, setNewMessages] = useState(0);
+  const [ticketSource, setTicketSource] = useState<{
+    conversationId: string;
+    id: string;
+  } | null>(null);
+  const myRole = members.data?.find(
+    (member) => member.principalId === session?.userId,
+  )?.role;
+  const positions = useRef(
+    new Map<string, { id: string; offset: number; bottom: boolean }>(),
+  );
+  const nearBottom = useRef(true);
+  const previous = useRef<{ conversationId: string; lastId?: string } | null>(null);
 
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => 64,
+    getItemKey: (index) => items[index]?.localId ?? index,
     overscan: 12,
     measureElement: (el) => el.getBoundingClientRect().height,
   });
+
+  useLayoutEffect(() => {
+    if (!conversationId || !items.length) return;
+    const last = items.at(-1);
+    const prior = previous.current;
+    previous.current = { conversationId, lastId: last?.localId };
+    if (prior?.conversationId !== conversationId) {
+      setNewMessages(0);
+      const saved = positions.current.get(conversationId);
+      nearBottom.current = !saved || saved.bottom;
+      const index = saved
+        ? items.findIndex((message) => message.localId === saved.id)
+        : -1;
+      if (!nearBottom.current && index >= 0) {
+        const offset = virtualizer.getOffsetForIndex(index, "start");
+        if (offset) virtualizer.scrollToOffset(offset[0] + (saved?.offset ?? 0));
+      } else {
+        virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+      }
+    } else if (prior.lastId !== last?.localId && !target) {
+      const previousIndex = items.findIndex(
+        (message) => message.localId === prior.lastId,
+      );
+      const count = previousIndex >= 0 ? items.length - previousIndex - 1 : 0;
+      if (nearBottom.current || last?.isOutgoing)
+        virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+      else if (count > 0) setNewMessages((value) => value + count);
+    }
+  }, [conversationId, items, target, virtualizer]);
+
+  const targetIndex = target
+    ? items.findIndex(
+        (message) => message.serverId === target.id || message.localId === target.id,
+      )
+    : -1;
+
+  useEffect(() => {
+    if (!conversationId || !target || targetIndex >= 0 || !sync) return;
+    let cancelled = false;
+    setNavigationError("");
+    const window = target.seq
+      ? { beforeSeq: target.seq + 1 }
+      : { aroundMessageId: target.id };
+    void sync
+      .loadHistory(conversationId, window)
+      .then((rows) => {
+        if (cancelled) return;
+        const original = rows.find((row) => row.id === target.id);
+        if (original) {
+          setHistoryWindows((current) => ({
+            ...current,
+            [conversationId]: { through: original.createdSeq, limit: RECENT_MESSAGES },
+          }));
+        } else {
+          setNavigationError("Исходное сообщение недоступно");
+          setTarget(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNavigationError("Не удалось открыть сообщение");
+          setTarget(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, target, targetIndex, sync, setTarget]);
+
+  useLayoutEffect(() => {
+    if (!target || targetIndex < 0) return;
+    virtualizer.scrollToIndex(targetIndex, { align: "center" });
+    setHighlight(items[targetIndex]!.localId);
+    setNavigationError("");
+    setTarget(null);
+  }, [items, target, targetIndex, virtualizer, setTarget]);
+
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = setTimeout(() => setHighlight(null), 2_000);
+    return () => clearTimeout(timer);
+  }, [highlight]);
 
   useEffect(() => {
     if (!menu) return;
@@ -155,6 +240,10 @@ export function MessageTimeline() {
 
   const virtualItems = virtualizer.getVirtualItems();
 
+  useEffect(() => {
+    setMenu(null);
+  }, [conversationId]);
+
   if (!conversationId) {
     return (
       <div className={styles.empty}>
@@ -165,14 +254,64 @@ export function MessageTimeline() {
 
   return (
     <>
-      <div ref={parentRef} className={[styles.scroller, "dio-scroll"].join(" ")}>
+      {navigationError ? (
+        <p role="status" className={styles.jumpNotice}>
+          {navigationError}
+        </p>
+      ) : null}
+      {items[0]?.createdSeq && items[0].createdSeq > 1 && sync ? (
+        <button
+          className={styles.older}
+          type="button"
+          onClick={() => {
+            void sync
+              .loadHistory(conversationId, { beforeSeq: items[0]!.createdSeq })
+              .then((rows) => {
+                if (rows.length) {
+                  setHistoryWindows((current) => ({
+                    ...current,
+                    [conversationId]: { through, limit: limit + RECENT_MESSAGES },
+                  }));
+                } else setNavigationError("Это начало доступной переписки");
+              })
+              .catch(() => setNavigationError("Не удалось загрузить историю"));
+          }}
+        >
+          Загрузить предыдущие сообщения
+        </button>
+      ) : null}
+      <div
+        ref={parentRef}
+        className={[styles.scroller, "dio-scroll"].join(" ")}
+        onScroll={(event) => {
+          const root = event.currentTarget;
+          nearBottom.current =
+            root.scrollHeight - root.clientHeight - root.scrollTop < 48;
+          if (nearBottom.current) setNewMessages(0);
+          const anchor = virtualizer
+            .getVirtualItems()
+            .find((row) => row.end > root.scrollTop);
+          const message = anchor && items[anchor.index];
+          if (anchor && message)
+            positions.current.set(conversationId, {
+              id: message.localId,
+              offset: root.scrollTop - anchor.start,
+              bottom: nearBottom.current,
+            });
+        }}
+      >
         <div
           className={styles.inner}
           style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
         >
           {virtualItems.map((row) => {
-            const message = items[row.index];
-            if (!message) return null;
+            const entry = items[row.index];
+            if (!entry) return null;
+            const message = {
+              ...entry,
+              authorDisplayName:
+                entry.authorDisplayName ?? profiles.data?.[entry.authorId],
+            };
             const prev = items[row.index - 1];
             const showDate = !prev || !sameDay(prev.createdAt, message.createdAt);
             const grouped =
@@ -186,7 +325,6 @@ export function MessageTimeline() {
               next.authorId !== message.authorId ||
               !sameDay(message.createdAt, next.createdAt);
             const status = statusLabel(message.sendStatus);
-            const ticket = findTicketResource(message);
             const readSeq = message.createdSeq ?? 0;
 
             return (
@@ -197,6 +335,7 @@ export function MessageTimeline() {
                 data-read-seq={readSeq > 0 ? String(readSeq) : undefined}
                 className={[
                   styles.row,
+                  highlight === message.localId ? styles.highlight : "",
                   grouped ? styles.rowGrouped : "",
                   authorBreak ? styles.rowBreak : "",
                 ]
@@ -222,16 +361,44 @@ export function MessageTimeline() {
                   <MessageBubble
                     message={message}
                     status={status}
-                    ticket={ticket}
-                    blocks={messageBlocks(message)}
+                    receiptCount={
+                      message.isOutgoing && readSeq > 0 && members.data
+                        ? {
+                            total: members.data.filter(
+                              (member) =>
+                                member.principalId !== session?.userId &&
+                                member.historyFromSeq <= readSeq,
+                            ).length,
+                            seen: members.data.filter(
+                              (member) =>
+                                member.principalId !== session?.userId &&
+                                member.historyFromSeq <= readSeq &&
+                                member.lastReadMessageSeq >= readSeq,
+                            ).length,
+                          }
+                        : undefined
+                    }
+                    blocks={readMessageBlocks(message)}
                     grouped={grouped}
-                    setReply={setReply}
-                    setEditing={setEditing}
-                    setForward={setForward}
-                    setContext={setContext}
+                    replyPreview={
+                      message.replyToId
+                        ? byId.get(message.replyToId)?.content
+                        : undefined
+                    }
                     openMenu={(e) => {
                       e.preventDefault();
-                      const selected = window.getSelection()?.toString().trim() ?? "";
+                      menuTrigger.current = e.currentTarget as HTMLElement;
+                      const selection = window.getSelection();
+                      const body = e.currentTarget
+                        .closest(`.${styles.bubble}`)
+                        ?.querySelector(`.${styles.blockStack}`);
+                      const selected =
+                        selection?.anchorNode &&
+                        selection.focusNode &&
+                        body?.contains(selection.anchorNode) &&
+                        body.contains(selection.focusNode)
+                          ? selection.toString().trim()
+                          : "";
                       setMenu({
                         message,
                         anchor: e.currentTarget.getBoundingClientRect(),
@@ -250,326 +417,55 @@ export function MessageTimeline() {
           })}
         </div>
       </div>
+      {through !== undefined || newMessages > 0 ? (
+        <button
+          type="button"
+          className={styles.jumpNotice}
+          onClick={() => {
+            if (through !== undefined) {
+              setHistoryWindows((current) => ({
+                ...current,
+                [conversationId]: { limit: RECENT_MESSAGES },
+              }));
+              previous.current = null;
+              positions.current.delete(conversationId);
+            } else {
+              virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+            }
+            setNewMessages(0);
+          }}
+        >
+          {through !== undefined
+            ? "К последним сообщениям"
+            : `Новые сообщения · ${newMessages}`}
+        </button>
+      ) : null}
       {menu ? (
-        <ContextMenu
+        <MessageContextMenu
           anchor={menu.anchor}
           quote={menu.quote}
           message={menu.message}
           conversationId={conversationId}
           userId={session?.userId}
-          onClose={() => setMenu(null)}
+          onCreateTicket={
+            myRole && myRole !== "guest"
+              ? (id) => setTicketSource({ conversationId, id })
+              : undefined
+          }
+          onClose={() => {
+            setMenu(null);
+            menuTrigger.current?.focus({ preventScroll: true });
+          }}
+        />
+      ) : null}
+      {ticketSource?.conversationId === conversationId ? (
+        <TicketFromMessageDialog
+          key={ticketSource.id}
+          conversationId={conversationId}
+          messageId={ticketSource.id}
+          onClose={() => setTicketSource(null)}
         />
       ) : null}
     </>
-  );
-}
-
-function ContextMenu(props: {
-  anchor: DOMRect;
-  quote: string;
-  message: LocalMessage;
-  conversationId: string;
-  userId?: string;
-  onClose: () => void;
-}) {
-  const { db, accountKey, sync } = useRuntime();
-  const setReply = useUiStore((s) => s.setReplyTarget);
-  const setEditing = useUiStore((s) => s.setEditingMessageId);
-  const setForward = useUiStore((s) => s.setForwardTarget);
-  const { message, conversationId, userId, onClose, anchor, quote } = props;
-  const rootRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: anchor.left, top: Math.max(8, anchor.top - 8) });
-
-  useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    const box = el.getBoundingClientRect();
-    let left = anchor.left + anchor.width / 2 - box.width / 2;
-    // Sit just above the bubble, overlapping it by a few pixels (Telegram-style).
-    let top = anchor.top - box.height + 28;
-    left = Math.max(8, Math.min(left, window.innerWidth - box.width - 8));
-    top = Math.max(8, Math.min(top, window.innerHeight - box.height - 8));
-    setPos({ left, top });
-  }, [anchor]);
-
-  const act = (fn: () => void) => {
-    fn();
-    onClose();
-  };
-
-  const react = (emoji: string) => {
-    if (!db || !accountKey || !userId || message.deletedAt) return;
-    void toggleReaction(db, accountKey, {
-      conversationId,
-      localId: message.localId,
-      emoji,
-      userId,
-    }).then(() => sync?.requestFlush());
-  };
-
-  const fragment = quote || message.content;
-
-  return (
-    <div
-      ref={rootRef}
-      className={styles.contextPopover}
-      style={{ top: pos.top, left: pos.left }}
-      onClick={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {!message.deletedAt && userId ? (
-        <div className={styles.reactionBar} role="toolbar" aria-label="Реакции">
-          {MENU_REACTIONS.map((emoji) => (
-            <button key={emoji} type="button" className={styles.reactionPick} onClick={() => act(() => react(emoji))}>
-              {emoji}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div className={styles.contextMenu} role="menu">
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() =>
-            act(() =>
-              setReply({
-                localId: message.localId,
-                serverId: message.serverId,
-                preview: message.content,
-              }),
-            )
-          }
-        >
-          <Icon name="reply" size={18} /> Ответить
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          disabled={!fragment.trim() || !!message.deletedAt}
-          onClick={() =>
-            act(() =>
-              setReply({
-                localId: message.localId,
-                serverId: message.serverId,
-                preview: message.content,
-                quoteText: fragment.slice(0, 280),
-              }),
-            )
-          }
-        >
-          <Icon name="quote" size={18} /> Цитировать фрагмент
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() =>
-            act(() => {
-              const text = (quote || message.content).trim();
-              if (text) void navigator.clipboard.writeText(text);
-            })
-          }
-        >
-          <Icon name="copy" size={18} /> Копировать текст
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          onClick={() =>
-            act(() =>
-              setForward({
-                localId: message.localId,
-                serverId: message.serverId,
-                preview: message.content,
-                conversationId,
-              }),
-            )
-          }
-        >
-          <Icon name="forward" size={18} /> Переслать
-        </button>
-        {!message.deletedAt && db && accountKey ? (
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() =>
-              act(() =>
-                void pinMessage(db, accountKey, {
-                  conversationId,
-                  localId: message.localId,
-                  pin: !message.isPinned,
-                }).then(() => sync?.requestFlush()),
-              )
-            }
-          >
-            <Icon name="pin" size={18} /> {message.isPinned ? "Открепить" : "Закрепить"}
-          </button>
-        ) : null}
-        {message.isOutgoing && !message.deletedAt ? (
-          <button type="button" role="menuitem" onClick={() => act(() => setEditing(message.localId))}>
-            <Icon name="edit" size={18} /> Редактировать
-          </button>
-        ) : null}
-        {message.isOutgoing && !message.deletedAt && userId && db && accountKey ? (
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() =>
-              act(() => {
-                void deleteMessage(db, accountKey, {
-                  conversationId,
-                  localId: message.localId,
-                  authorId: userId,
-                }).then(() => sync?.requestFlush());
-              })
-            }
-          >
-            Удалить
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function MessageBubble(props: {
-  message: LocalMessage;
-  status: string;
-  ticket: { number: string | null; uuid: string | null };
-  blocks: ContentBlock[];
-  grouped?: boolean;
-  setReply: ReturnType<typeof useUiStore.getState>["setReplyTarget"];
-  setEditing: ReturnType<typeof useUiStore.getState>["setEditingMessageId"];
-  setForward: ReturnType<typeof useUiStore.getState>["setForwardTarget"];
-  setContext: ReturnType<typeof useUiStore.getState>["setContextResource"];
-  openMenu: (e: React.MouseEvent) => void;
-  db: ReturnType<typeof useRuntime>["db"];
-  accountKey: string | null;
-  conversationId: string;
-  userId?: string;
-  sync: ReturnType<typeof useRuntime>["sync"];
-}) {
-  const { message, status, ticket, blocks, grouped } = props;
-
-  const receipt = useMemo(() => {
-    if (!message.isOutgoing || message.sendStatus !== "sent") return null;
-    if (message.deliveryStatus === "read") {
-      return <Icon name="check-double" context="status" className={styles.checksRead} />;
-    }
-    if (message.deliveryStatus === "delivered") {
-      return <Icon name="check-double" context="status" className={styles.checks} />;
-    }
-    return <Icon name="check" context="status" className={styles.checks} />;
-  }, [message]);
-
-  const openTicket = () => {
-    const label = ticket.number ?? ticket.uuid ?? "";
-    props.setContext(label, ticket.uuid);
-  };
-
-  return (
-    <div
-      className={[
-        styles.bubble,
-        "dio-message-text",
-        message.isOutgoing ? styles.outgoing : styles.incoming,
-        message.deletedAt ? styles.deleted : "",
-        message.isPinned ? styles.pinned : "",
-      ].join(" ")}
-      tabIndex={-1}
-      onContextMenu={props.openMenu}
-    >
-      {!message.isOutgoing && !message.deletedAt && !grouped ? (
-        <span className={styles.author}>
-          {message.authorDisplayName ?? message.authorId.slice(0, 8)}
-        </span>
-      ) : null}
-      {message.forwardedFrom ? (
-        <span className={styles.forwarded}>
-          Переслано
-          {message.forwardedFrom.text ? ` · ${message.forwardedFrom.text.slice(0, 80)}` : ""}
-        </span>
-      ) : null}
-      {(message.replyPreview || message.quoteText) && !message.deletedAt ? (
-        <span className={styles.reply}>
-          {message.quoteText ? `«${message.quoteText}»` : message.replyPreview}
-        </span>
-      ) : null}
-      {!message.deletedAt ? (
-        <MessageBody blocks={blocks} />
-      ) : (
-        <p className={styles.text}>Сообщение удалено</p>
-      )}
-      {ticket.number || ticket.uuid ? (
-        <button type="button" className={styles.ticketCard} onClick={openTicket}>
-          <span className={styles.ticketLabel}>Заявка</span>
-          <strong>#{ticket.number ?? ticket.uuid}</strong>
-          <span className={styles.ticketHint}>Открыть контекст →</span>
-        </button>
-      ) : null}
-      <div className={styles.footer}>
-        {status ? <Badge tone="neutral">{status}</Badge> : null}
-        {message.reactions
-          ? Object.entries(message.reactions).map(([emoji, users]) => (
-              <button
-                type="button"
-                key={emoji}
-                className={styles.reaction}
-                title={users.join(", ")}
-                onClick={() => {
-                  if (!props.db || !props.accountKey || !props.userId) return;
-                  void toggleReaction(props.db, props.accountKey, {
-                    conversationId: props.conversationId,
-                    localId: message.localId,
-                    emoji,
-                    userId: props.userId,
-                  }).then(() => props.sync?.requestFlush());
-                }}
-              >
-                {emoji} {users.length}
-              </button>
-            ))
-          : null}
-        <span className={styles.meta}>
-          <time dateTime={new Date(message.createdAt).toISOString()}>
-            {formatClock(message.createdAt)}
-          </time>
-          {receipt}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function MessageBody({ blocks }: { blocks: ContentBlock[] }) {
-  return (
-    <div className={styles.blockStack}>
-      {blocks.map((block, index) => {
-        if (block.type === "text") {
-          return (
-            <p key={`t-${index}`} className={styles.text}>
-              {block.text}
-            </p>
-          );
-        }
-        if (block.type === "media") {
-          return <MediaBlock key={`m-${block.assetId}`} assetId={block.assetId} />;
-        }
-        if (block.type === "quote") {
-          return (
-            <blockquote key={`q-${index}`} className={styles.quoteBlock}>
-              {block.text}
-            </blockquote>
-          );
-        }
-        if (block.type === "resource") {
-          return (
-            <p key={`r-${index}`} className={styles.text}>
-              {block.number ? `#${block.number}` : block.resourceId}
-            </p>
-          );
-        }
-        return null;
-      })}
-    </div>
   );
 }

@@ -1,11 +1,7 @@
 import type { HttpClient } from "../transport/httpClient.js";
 
 export type MediaUploadStatus =
-  | "pending"
-  | "uploading"
-  | "completing"
-  | "ready"
-  | "failed";
+  "pending" | "uploading" | "completing" | "ready" | "failed";
 
 export interface MediaUploadJob {
   id: string;
@@ -34,7 +30,14 @@ export class MediaUploadManager {
   private jobs = new Map<string, MediaUploadJob>();
   private listeners = new Set<() => void>();
 
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly saveReady?: (
+      conversationId: string,
+      assetId: string,
+      filename: string,
+    ) => Promise<void>,
+  ) {}
 
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -43,6 +46,17 @@ export class MediaUploadManager {
 
   getJobs(): MediaUploadJob[] {
     return [...this.jobs.values()];
+  }
+
+  dismiss(id: string): void {
+    this.jobs.delete(id);
+  }
+
+  retry(id: string): void {
+    const job = this.jobs.get(id);
+    if (job?.status !== "failed") return;
+    job.error = undefined;
+    void this.runUpload(id);
   }
 
   async enqueue(file: File, conversationId: string): Promise<string> {
@@ -106,9 +120,27 @@ export class MediaUploadManager {
       job.progress = 90;
       this.notify();
 
-      const completed = await this.http.post<CompleteUploadResponse>(
+      let completed = await this.http.post<CompleteUploadResponse>(
         `/v1/media/uploads/${session.uploadId}/complete`,
       );
+      for (
+        let attempt = 0;
+        attempt < 60 && ["uploaded", "scanning"].includes(completed.status);
+        attempt++
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        completed = await this.http.get<CompleteUploadResponse>(
+          `/v1/media/${completed.id}`,
+        );
+      }
+      if (completed.status !== "ready") {
+        throw new Error(
+          completed.status === "rejected"
+            ? "Проверка файла отклонена"
+            : "Не удалось дождаться проверки файла",
+        );
+      }
+      await this.saveReady?.(job.conversationId, completed.id, job.file.name);
 
       job.progress = 100;
       job.assetId = completed.id;

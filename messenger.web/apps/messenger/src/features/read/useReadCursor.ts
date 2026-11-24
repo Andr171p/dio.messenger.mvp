@@ -23,6 +23,7 @@ export function useReadCursor(
 
     const markVisible = () => {
       if (document.visibilityState !== "visible") return;
+      if (!root.getClientRects().length || root.closest("[inert]")) return;
       const rootRect = root.getBoundingClientRect();
       let maxSeq = 0;
       root.querySelectorAll("[data-read-seq]").forEach((el) => {

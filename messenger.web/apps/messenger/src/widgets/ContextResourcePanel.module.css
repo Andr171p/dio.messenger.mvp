@@ -64,3 +64,28 @@
   margin-top: var(--dio-space-4);
   width: 100%;
 }
+.root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: auto;
+}
+
+.openDesk {
+  position: sticky;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  margin-top: auto;
+}
+
+.description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.root h3 {
+  font-size: 14px;
+  margin: 12px 0 4px;
+}
+.root ul {
+  overflow-wrap: anywhere;
+  padding-inline-start: 20px;
+}

@@ -1,11 +1,6 @@
 export type AccountKey = string;
 
-export type MessageSendStatus =
-  | "queued"
-  | "sending"
-  | "sent"
-  | "retrying"
-  | "failed";
+export type MessageSendStatus = "queued" | "sending" | "sent" | "retrying" | "failed";
 
 export type OutboxStatus = "pending" | "processing" | "done" | "failed";
 
@@ -45,6 +40,7 @@ export interface LocalMessage {
   mentionAll?: boolean;
   isPinned?: boolean;
   sendStatus: MessageSendStatus;
+  sendError?: string;
   deliveryStatus?: "sent" | "delivered" | "read";
   isOutgoing: boolean;
   authorId: string;
@@ -62,6 +58,7 @@ export interface Conversation {
   lastMessagePreview?: string;
   lastMessageAt?: number;
   unreadCount: number;
+  lastReadMessageSeq?: number;
   isGuest: boolean;
   hasExternalMembers?: boolean;
   kind?: ConversationKind;
@@ -77,6 +74,14 @@ export interface Draft {
   content: string;
   replyToId?: string;
   editingMessageId?: string;
+  draftReply?: {
+    localId: string;
+    serverId?: string;
+    preview: string;
+    quoteText?: string;
+  };
+  attachments?: { label: string; block: import("../content/blocks.js").ContentBlock }[];
+  mentionTokens?: Record<string, string>;
   updatedAt: number;
 }
 
@@ -109,11 +114,42 @@ export interface SendMessageOutboxCommand {
 
 export type OutboxCommandPayload =
   | { type: "message.send"; payload: SendMessageOutboxCommand }
-  | { type: "message.edit"; payload: { conversationId: string; messageId: string; content: string; expectedRevision: number } }
-  | { type: "message.delete"; payload: { conversationId: string; messageId: string; localId: string; previousContent: string } }
-  | { type: "reaction.toggle"; payload: { conversationId: string; messageId: string; emoji: string; remove?: boolean } }
-  | { type: "reaction.add"; payload: { conversationId: string; messageId: string; emoji: string } }
-  | { type: "reaction.remove"; payload: { conversationId: string; messageId: string; emoji: string } }
+  | {
+      type: "message.edit";
+      payload: {
+        conversationId: string;
+        messageId: string;
+        content: string;
+        expectedRevision: number;
+        blocksJson?: string;
+      };
+    }
+  | {
+      type: "message.delete";
+      payload: {
+        conversationId: string;
+        messageId: string;
+        localId: string;
+        previousContent: string;
+      };
+    }
+  | {
+      type: "reaction.toggle";
+      payload: {
+        conversationId: string;
+        messageId: string;
+        emoji: string;
+        remove?: boolean;
+      };
+    }
+  | {
+      type: "reaction.add";
+      payload: { conversationId: string; messageId: string; emoji: string };
+    }
+  | {
+      type: "reaction.remove";
+      payload: { conversationId: string; messageId: string; emoji: string };
+    }
   | { type: "message.pin"; payload: { conversationId: string; messageId: string } }
   | { type: "message.unpin"; payload: { conversationId: string; messageId: string } };
 
@@ -199,12 +235,7 @@ export interface AuthSession {
 }
 
 export type SyncRuntimeStatus =
-  | "idle"
-  | "starting"
-  | "syncing"
-  | "connected"
-  | "disconnected"
-  | "error";
+  "idle" | "starting" | "syncing" | "connected" | "disconnected" | "error";
 
 export interface SyncStatus {
   runtime: SyncRuntimeStatus;

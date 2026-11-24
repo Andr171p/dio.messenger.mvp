@@ -1,26 +1,6 @@
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--dio-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 85;
-  padding: var(--dio-space-4);
-}
-
-.dialog {
-  width: min(440px, 100%);
-  max-height: min(80vh, 640px);
-  overflow: auto;
-  background: var(--dio-sidebar);
-  border: 1px solid var(--dio-border);
-  border-radius: var(--dio-radius-lg);
-  padding: var(--dio-space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--dio-space-3);
-  box-shadow: var(--dio-shadow-sm);
+.forwardBody {
+  display: grid;
+  gap: 12px;
 }
 
 .preview {
@@ -76,4 +56,39 @@
   color: var(--dio-status-error);
   font-size: 13px;
   margin: 0;
+}
+.nativeDialog {
+  width: min(480px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 20px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-lg);
+  color: var(--dio-text);
+  background: var(--dio-sidebar);
+}
+
+.nativeDialog::backdrop {
+  background: var(--dio-overlay);
+}
+.nativeDialog h2 {
+  margin: 0;
+}
+.nativeDialog form,
+.nativeDialog label {
+  display: grid;
+  gap: 8px;
+}
+.nativeDialog textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  background: var(--dio-field);
+  color: inherit;
+  font: inherit;
+}
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

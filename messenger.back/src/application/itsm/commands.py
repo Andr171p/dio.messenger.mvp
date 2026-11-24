@@ -302,6 +302,8 @@ async def create_ticket_from_chat(
                     "eventSeq": seq,
                     "senderId": str(actor.user.id),
                     "clientMessageId": str(client_message_id),
+                    "createdAt": message.created_at.isoformat(),
+                    "content": content,
                 },
             )
         )
@@ -369,7 +371,12 @@ async def confirm_ticket_suggestion(
         raise PermissionDeniedError("Guests cannot create tickets from chat.")
 
     message = await message_repository.read(message_id)
-    if message is None or message.conversation_id != conversation_id or message.is_tombstone:
+    if (
+        message is None
+        or message.conversation_id != conversation_id
+        or message.is_tombstone
+        or message.created_seq < membership.history_from_seq
+    ):
         raise MessageNotFoundError("Message not found.")
 
     fields = build_ticket_suggestion_fields(message.content)

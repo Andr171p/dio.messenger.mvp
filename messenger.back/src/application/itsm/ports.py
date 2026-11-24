@@ -11,6 +11,7 @@ class ResourcePreviewResolver(Protocol):
         *,
         access_token: str,
         guest: bool = False,
+        include_activity: bool = False,
     ) -> ResourcePreviewDTO: ...
 
 

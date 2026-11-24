@@ -50,6 +50,7 @@ async def get_resource_preview(
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
     preview_resolver: ResourcePreviewResolver,
+    include_activity: bool = False,
 ) -> ResourcePreviewDTO:
     _validate_ref(ref)
     guest = False
@@ -62,6 +63,8 @@ async def get_resource_preview(
         )
         guest = is_guest_role(membership.role)
 
+    if include_activity:
+        return await preview_resolver.preview(ref, access_token=access_token, guest=guest, include_activity=True)
     return await preview_resolver.preview(ref, access_token=access_token, guest=guest)
 
 

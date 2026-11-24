@@ -23,10 +23,20 @@ export interface QuoteContentBlock {
 }
 
 export type ContentBlock =
-  | TextContentBlock
-  | MediaContentBlock
-  | ResourceContentBlock
-  | QuoteContentBlock;
+  TextContentBlock | MediaContentBlock | ResourceContentBlock | QuoteContentBlock;
+
+export function readMessageBlocks(message: {
+  content: string;
+  contentBlocks?: string;
+}): ContentBlock[] {
+  try {
+    const blocks: unknown = JSON.parse(message.contentBlocks ?? "[]");
+    if (Array.isArray(blocks) && blocks.length) return extractBlocks({ blocks });
+  } catch {
+    // Legacy projections may contain only a plain-text preview.
+  }
+  return textBlocks(message.content);
+}
 
 export function textBlocks(text: string): TextContentBlock[] {
   return [{ type: "text", text }];

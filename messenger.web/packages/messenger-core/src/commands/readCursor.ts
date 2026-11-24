@@ -9,13 +9,28 @@ export async function markConversationRead(
   conversationId: string,
   lastReadMessageSeq: number,
 ): Promise<void> {
-  await http.put(`/v1/conversations/${conversationId}/read-cursor`, {
-    lastReadMessageSeq,
-  });
+  const receipt = await http.put<{ lastReadMessageSeq: number }>(
+    `/v1/conversations/${conversationId}/read-cursor`,
+    {
+      lastReadMessageSeq,
+    },
+  );
 
-  const conv = await db.conversations.get(conversationId);
-  if (conv && conv.accountKey === accountKey) {
-    const next: Conversation = { ...conv, unreadCount: 0 };
+  await db.transaction("rw", db.conversations, db.messages, async () => {
+    const conv = await db.conversations.get(conversationId);
+    if (conv?.accountKey !== accountKey) return;
+    const readSeq = Math.max(conv.lastReadMessageSeq ?? 0, receipt.lastReadMessageSeq);
+    const unreadCount = await db.messages
+      .where("[accountKey+conversationId+createdSeq]")
+      .between(
+        [accountKey, conversationId, readSeq],
+        [accountKey, conversationId, Number.MAX_SAFE_INTEGER],
+        false,
+        true,
+      )
+      .filter((message) => !message.isOutgoing && !message.deletedAt)
+      .count();
+    const next: Conversation = { ...conv, unreadCount, lastReadMessageSeq: readSeq };
     await db.conversations.put(next);
-  }
+  });
 }

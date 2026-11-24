@@ -16,7 +16,9 @@ export function PinBar() {
       .equals([accountKey, conversationId])
       .filter((m) => !!m.isPinned && !m.deletedAt)
       .toArray();
-    return rows.sort((a, b) => (b.createdSeq ?? b.createdAt) - (a.createdSeq ?? a.createdAt));
+    return rows.sort(
+      (a, b) => (b.createdSeq ?? b.createdAt) - (a.createdSeq ?? a.createdAt),
+    );
   }, [db, accountKey, conversationId]);
 
   const items = pinned ?? [];
@@ -24,29 +26,37 @@ export function PinBar() {
 
   return (
     <div className={styles.root} aria-label="Закреплённые сообщения">
-        {items.map((message) => (
-          <div key={message.localId} className={styles.item}>
-            <Icon name="bookmark" size={14} />
-            <span className={styles.text}>
-              {message.replyPreview ?? message.content.slice(0, 120)}
-            </span>
-            <button
-              type="button"
-              className={styles.unpin}
-              aria-label="Открепить"
-              onClick={() => {
-                if (!db || !accountKey) return;
-                void pinMessage(db, accountKey, {
-                  conversationId,
-                  localId: message.localId,
-                  pin: false,
-                }).then(() => sync?.requestFlush());
-              }}
-            >
-              ×
-            </button>
-          </div>
-        ))}
+      {items.map((message) => (
+        <div key={message.localId} className={styles.item}>
+          <Icon name="bookmark" size={14} />
+          <button
+            type="button"
+            className={styles.text}
+            onClick={() =>
+              useUiStore
+                .getState()
+                .setMessageTarget({ id: message.serverId ?? message.localId })
+            }
+          >
+            {message.replyPreview ?? message.content.slice(0, 120)}
+          </button>
+          <button
+            type="button"
+            className={styles.unpin}
+            aria-label="Открепить"
+            onClick={() => {
+              if (!db || !accountKey) return;
+              void pinMessage(db, accountKey, {
+                conversationId,
+                localId: message.localId,
+                pin: false,
+              }).then(() => sync?.requestFlush());
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

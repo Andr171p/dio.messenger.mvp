@@ -20,7 +20,7 @@ from src.application.messaging.content import (
     extract_media_asset_ids,
     same_send_fingerprint,
 )
-from src.application.messaging.enrich import build_send_content
+from src.application.messaging.enrich import build_send_content, snapshot_text_from_content
 from src.application.messaging.validate_send import resolve_forward_snapshot, validate_mentions
 from src.application.policies.repositories import ConversationPolicyRepository
 from src.application.threads.commands import ensure_thread_sendable
@@ -37,6 +37,7 @@ from src.application.audit.service import log_audit
 from src.application.receipts.cursors import monotonic_receipt_cursor
 from src.application.messaging.exceptions import (
     IdempotencyConflictError,
+    MessageContentInvalidError,
     MessageEditWindowExpiredError,
     MessageNotFoundError,
 )
@@ -64,13 +65,26 @@ async def _ensure_reply_target(
     *,
     conversation_id: UUID,
     reply_to_id: UUID | None,
+    quote_text: str | None,
+    history_from_seq: int,
     message_repository: MessageRepository,
 ) -> None:
     if reply_to_id is None:
+        if quote_text is not None:
+            raise MessageContentInvalidError("A quote requires a reply target.")
         return
     reply = await message_repository.read(reply_to_id)
-    if reply is None or reply.conversation_id != conversation_id:
+    if (
+        reply is None
+        or reply.conversation_id != conversation_id
+        or reply.created_seq < history_from_seq
+    ):
         raise MessageNotFoundError("Reply target message not found.")
+    if quote_text is not None:
+        if reply.is_tombstone:
+            raise MessageNotFoundError("Quoted message not found.")
+        if quote_text not in snapshot_text_from_content(reply.content):
+            raise MessageContentInvalidError("Quoted text must be a fragment of the original message.")
 
 
 async def _ensure_media_attachable(
@@ -99,6 +113,7 @@ def _message_created_payload(message: Message, *, seq: int, command: SendMessage
         "senderId": str(message.sender_id),
         "clientMessageId": str(command.client_message_id),
         "revision": message.revision,
+        "createdAt": message.created_at.isoformat(),
         "content": message.content,
         "replyToId": str(command.reply_to_id) if command.reply_to_id else None,
     }
@@ -134,6 +149,14 @@ async def send_message(
     )
 
     base_content = build_message_content(list(command.blocks))
+    existing = await message_repository.get_by_client_message_id(
+        conversation_id=conversation_id,
+        sender_id=actor.user.id,
+        client_message_id=command.client_message_id,
+    )
+    if existing is not None:
+        return _idempotent_or_conflict(existing, command)
+
     forwarded_snapshot = None
     if command.forwarded_from is not None:
         forwarded_snapshot = await resolve_forward_snapshot(
@@ -154,13 +177,6 @@ async def send_message(
         membership_repository=membership_repository,
     )
     content = build_send_content(command, base_content, forwarded_snapshot=forwarded_snapshot)
-    existing = await message_repository.get_by_client_message_id(
-        conversation_id=conversation_id,
-        sender_id=actor.user.id,
-        client_message_id=command.client_message_id,
-    )
-    if existing is not None:
-        return _idempotent_or_conflict(existing, command)
 
     if command.thread_id is not None:
         if thread_repository is None:
@@ -178,6 +194,8 @@ async def send_message(
     await _ensure_reply_target(
         conversation_id=conversation_id,
         reply_to_id=command.reply_to_id,
+        quote_text=command.quote_text.strip() if command.quote_text is not None else None,
+        history_from_seq=membership.history_from_seq,
         message_repository=message_repository,
     )
     linked_ids = await _ensure_media_attachable(
@@ -338,6 +356,9 @@ async def edit_message(
     _ensure_edit_window(message, config=settings)
 
     content = build_message_content(list(command.blocks), config=settings)
+    for key in ("quoteText", "forwardedFrom", "mentions"):
+        if key in message.content:
+            content[key] = message.content[key]
     # Validate only: message_media links создаются при send; повторный link на edit дал бы дубли.
     await _ensure_media_attachable(
         asset_ids=extract_media_asset_ids(content),

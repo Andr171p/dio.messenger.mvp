@@ -573,6 +573,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resources/tickets/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Поиск доступных заявок DIO Desk */
+        get: operations["search_tickets_v1_resources_tickets_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/resources/preview": {
         parameters: {
             query?: never;
@@ -1520,6 +1537,25 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ResourceActivityDTO */
+        ResourceActivityDTO: {
+            /** Action */
+            action: string;
+            /**
+             * Occurredat
+             * Format: date-time
+             */
+            occurredAt: string;
+        };
+        /** ResourceAttachmentDTO */
+        ResourceAttachmentDTO: {
+            /** Filename */
+            filename: string;
+            /** Contenttype */
+            contentType: string;
+            /** Size */
+            size: number;
+        };
         /** ResourceBlock */
         ResourceBlock: {
             /**
@@ -1557,6 +1593,14 @@ export interface components {
              * @enum {string}
              */
             access: "full" | "limited" | "denied";
+            /** Description */
+            description?: string | null;
+            /** Updatedat */
+            updatedAt?: string | null;
+            /** Attachments */
+            attachments?: components["schemas"]["ResourceAttachmentDTO"][] | null;
+            /** Activity */
+            activity?: components["schemas"]["ResourceActivityDTO"][] | null;
         };
         /** ResourceReference */
         ResourceReference: {
@@ -1648,6 +1692,8 @@ export interface components {
             blocks: (components["schemas"]["TextBlock"] | components["schemas"]["MediaBlock"] | components["schemas"]["ResourceBlock"])[];
             /** Replytoid */
             replyToId?: string | null;
+            /** Quotetext */
+            quoteText?: string | null;
             /** Mentions */
             mentions?: string[];
             /**
@@ -2250,6 +2296,7 @@ export interface operations {
         parameters: {
             query?: {
                 beforeSeq?: number | null;
+                aroundMessageId?: string | null;
                 limit?: number;
             };
             header?: never;
@@ -3188,6 +3235,38 @@ export interface operations {
             };
         };
     };
+    search_tickets_v1_resources_tickets_search_get: {
+        parameters: {
+            query: {
+                conversationId: string;
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourcePreviewDTO"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_resource_preview_v1_resources_preview_get: {
         parameters: {
             query: {
@@ -3195,6 +3274,7 @@ export interface operations {
                 resourceType: string;
                 resourceId: string;
                 conversationId?: string | null;
+                includeActivity?: boolean;
             };
             header?: never;
             path?: never;

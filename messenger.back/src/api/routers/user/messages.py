@@ -191,12 +191,14 @@ async def get_messages(
     membership_repository: MembershipRepositoryDep,
     message_repository: MessageRepositoryDep,
     before_seq: Annotated[int | None, Query(alias="beforeSeq")] = None,
+    around_message_id: Annotated[UUID | None, Query(alias="aroundMessageId")] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> list[MessageDTO]:
     return await queries.get_history(
         conversation_id,
         actor=auth,
         before_seq=before_seq,
+        around_message_id=around_message_id,
         limit=limit,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,

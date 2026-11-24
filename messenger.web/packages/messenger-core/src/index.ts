@@ -1,8 +1,10 @@
 export type * from "./models/index.js";
+export type { components } from "./transport/generated/messenger-api.js";
 
 export {
   textBlocks,
   parseComposerContent,
+  readMessageBlocks,
   blocksToPlainPreview,
   extractPlainText,
   extractBlocks,
@@ -23,13 +25,10 @@ export {
 export { sendMessage, type SendMessageInput } from "./commands/sendMessage.js";
 export { editMessage, type EditMessageInput } from "./commands/editMessage.js";
 export { deleteMessage, type DeleteMessageInput } from "./commands/deleteMessage.js";
-export {
-  toggleReaction,
-  type ToggleReactionInput,
-} from "./commands/toggleReaction.js";
+export { toggleReaction, type ToggleReactionInput } from "./commands/toggleReaction.js";
 export { pinMessage, type PinMessageInput } from "./commands/pinMessage.js";
 export { markConversationRead } from "./commands/readCursor.js";
-export { upsertDraft, clearDraft } from "./commands/drafts.js";
+export { upsertDraft, clearDraft, saveDraftUpload } from "./commands/drafts.js";
 
 export { applyEvent } from "./sync/applyEvent.js";
 export { applyEventProjection } from "./sync/applyEventProjection.js";
@@ -42,10 +41,7 @@ export { OutboxProcessor } from "./outbox/outboxProcessor.js";
 export { computeBackoffMs } from "./outbox/backoff.js";
 
 export { HttpClient, HttpError } from "./transport/httpClient.js";
-export {
-  WebSocketClient,
-  normalizeDurableEvent,
-} from "./transport/websocketClient.js";
+export { WebSocketClient, normalizeDurableEvent } from "./transport/websocketClient.js";
 
 export { DioDeskAuthAdapter } from "./auth/DioDeskAuthAdapter.js";
 export { MessengerAuthAdapter } from "./auth/MessengerAuthAdapter.js";

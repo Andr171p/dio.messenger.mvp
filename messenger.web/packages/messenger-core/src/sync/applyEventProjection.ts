@@ -1,5 +1,5 @@
-import { extractPlainText } from "../content/blocks.js";
-import type { AccountKey, ConversationEvent, LocalMessage } from "../models/types.js";
+import { projectContent, projectMessage } from "./projectMessage.js";
+import type { AccountKey, ConversationEvent } from "../models/types.js";
 import type { MessengerDatabase } from "../storage/database.js";
 
 function asString(value: unknown): string | undefined {
@@ -14,62 +14,38 @@ export async function applyEventProjection(
   db: MessengerDatabase,
   accountKey: AccountKey,
   event: ConversationEvent,
+  currentUserId?: string,
 ): Promise<void> {
   const payload = event.payload;
 
   switch (event.type) {
     case "message.created": {
-      const clientMessageId = asString(payload.clientMessageId);
-      const messageId = asString(payload.messageId);
-      const createdSeq = asNumber(payload.createdSeq) ?? 0;
-      const content = extractPlainText(payload.content ?? payload);
-      const authorId =
-        asString(payload.senderId) ?? asString(payload.authorId) ?? "unknown";
-      const createdAt = asNumber(payload.createdAt) ?? Date.now();
-      const revision = asNumber(payload.revision) ?? 1;
-
-      if (clientMessageId) {
-        const existing = await db.messages
-          .where("[accountKey+clientMessageId]")
-          .equals([accountKey, clientMessageId])
-          .first();
-        if (existing) {
-          await db.messages.put({
-            ...existing,
-            serverId: messageId ?? existing.serverId,
-            createdSeq,
-            revision,
-            sendStatus: "sent",
-            content: content || existing.content,
-            authorId: existing.authorId || authorId,
-          });
-          return;
-        }
-      }
-
-      const localId = clientMessageId ?? messageId ?? crypto.randomUUID();
-      const isOutgoing = false;
-      const authorDisplayName =
-        asString(payload.senderDisplayName) ?? asString(payload.authorName);
-      const message: LocalMessage = {
+      const message = projectMessage(
+        {
+          id: asString(payload.messageId),
+          clientMessageId: asString(payload.clientMessageId),
+          senderId:
+            asString(payload.senderId) ?? asString(payload.authorId) ?? "unknown",
+          senderDisplayName:
+            asString(payload.senderDisplayName) ?? asString(payload.authorName),
+          createdSeq: asNumber(payload.createdSeq) ?? 0,
+          createdAt: asNumber(payload.createdAt) ?? asString(payload.createdAt),
+          revision: asNumber(payload.revision),
+          content: payload.content ?? payload,
+          replyToId: asString(payload.replyToId),
+        },
         accountKey,
-        localId,
-        clientMessageId: clientMessageId ?? localId,
-        conversationId: event.conversationId,
-        serverId: messageId,
-        content,
-        createdAt,
-        createdSeq,
-        revision,
-        sendStatus: "sent",
-        isOutgoing,
-        authorId,
-        ...(authorDisplayName ? { authorDisplayName } : {}),
-        ...(asString(payload.replyToId)
-          ? { replyToId: asString(payload.replyToId) }
-          : {}),
-      };
-      await db.messages.put(message);
+        event.conversationId,
+        currentUserId,
+      );
+      const existing = await db.messages.get(message.localId);
+      if (existing && existing.revision > message.revision) return;
+      const { content, createdAt } = message;
+      await db.messages.put({
+        ...existing,
+        ...message,
+        isOutgoing: message.isOutgoing || existing?.isOutgoing === true,
+      });
 
       const conv = await db.conversations.get(event.conversationId);
       await db.conversations.put({
@@ -78,7 +54,8 @@ export async function applyEventProjection(
         title: conv?.title ?? event.conversationId,
         lastMessagePreview: content.slice(0, 120),
         lastMessageAt: createdAt,
-        unreadCount: conv?.unreadCount ?? 0,
+        unreadCount:
+          (conv?.unreadCount ?? 0) + (message.isOutgoing || existing ? 0 : 1),
         isGuest: conv?.isGuest ?? false,
         hasExternalMembers: conv?.hasExternalMembers,
         kind: conv?.kind,
@@ -97,7 +74,7 @@ export async function applyEventProjection(
       if (!row || row.accountKey !== accountKey) return;
       await db.messages.put({
         ...row,
-        content: extractPlainText(payload.content ?? payload) || row.content,
+        ...projectContent(payload.content ?? payload),
         revision: asNumber(payload.revision) ?? row.revision + 1,
       });
       break;
@@ -110,6 +87,9 @@ export async function applyEventProjection(
       await db.messages.put({
         ...row,
         deletedAt: Date.now(),
+        contentBlocks: undefined,
+        quoteText: undefined,
+        forwardedFrom: undefined,
         content: "",
       });
       break;

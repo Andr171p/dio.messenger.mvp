@@ -1,5 +1,10 @@
 import type { AccountKey } from "../models/types.js";
 import type { MessengerDatabase } from "../storage/database.js";
+import {
+  blocksToPlainPreview,
+  parseComposerContent,
+  readMessageBlocks,
+} from "../content/blocks.js";
 
 export interface EditMessageInput {
   conversationId: string;
@@ -12,19 +17,30 @@ export async function editMessage(
   accountKey: AccountKey,
   input: EditMessageInput,
 ): Promise<void> {
-  const row = await db.messages.get(input.localId);
-  if (!row || row.accountKey !== accountKey) {
-    throw new Error("Message not found");
-  }
-
-  const messageId = row.serverId ?? row.localId;
-  const now = Date.now();
-  const nextRevision = row.revision + 1;
-
   await db.transaction("rw", db.messages, db.outbox, async () => {
+    const row = await db.messages.get(input.localId);
+    if (
+      !row?.serverId ||
+      row.accountKey !== accountKey ||
+      row.conversationId !== input.conversationId ||
+      row.deletedAt
+    ) {
+      throw new Error("Message not found");
+    }
+    const messageId = row.serverId;
+    const now = Date.now();
+    const nextRevision = row.revision + 1;
+    const blocks = [
+      ...parseComposerContent(input.content),
+      ...readMessageBlocks(row).filter(
+        (block) => block.type === "resource" || block.type === "media",
+      ),
+    ];
+    const blocksJson = JSON.stringify(blocks);
     await db.messages.put({
       ...row,
-      content: input.content,
+      content: blocksToPlainPreview(blocks),
+      contentBlocks: blocksJson,
       revision: nextRevision,
     });
     await db.outbox.put({
@@ -41,6 +57,7 @@ export async function editMessage(
           conversationId: input.conversationId,
           messageId,
           content: input.content,
+          blocksJson,
           expectedRevision: nextRevision,
         },
       },

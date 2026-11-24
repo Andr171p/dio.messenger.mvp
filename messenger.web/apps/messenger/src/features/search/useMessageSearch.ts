@@ -6,6 +6,7 @@ export interface SearchHit {
   conversationId: string;
   snippet: string;
   createdAt: string;
+  createdSeq: number;
 }
 
 interface ApiSearchHit {
@@ -13,6 +14,7 @@ interface ApiSearchHit {
   conversationId: string;
   snippet: string;
   createdAt: string;
+  createdSeq: number;
 }
 
 interface ApiSearchResult {
@@ -20,17 +22,16 @@ interface ApiSearchResult {
   limit: number;
 }
 
-export function useMessageSearch(query: string) {
+export function useMessageSearch(query: string, conversationId: string | null) {
   const { http } = useRuntime();
 
   return useQuery({
-    queryKey: ["search", query],
-    enabled: !!http && query.trim().length >= 2,
+    queryKey: ["search", query.trim(), conversationId],
+    enabled: !!http && query.trim().length >= 3,
     queryFn: async (): Promise<{ items: SearchHit[]; limit: number }> => {
-      const q = encodeURIComponent(query.trim());
-      const result = await http!.get<ApiSearchResult>(
-        `/v1/search/messages?q=${q}`,
-      );
+      const params = new URLSearchParams({ q: query.trim() });
+      if (conversationId) params.set("conversationId", conversationId);
+      const result = await http!.get<ApiSearchResult>(`/v1/search/messages?${params}`);
       return {
         limit: result.limit,
         items: result.items.map((item) => ({
@@ -38,6 +39,7 @@ export function useMessageSearch(query: string) {
           conversationId: item.conversationId,
           snippet: item.snippet,
           createdAt: item.createdAt,
+          createdSeq: item.createdSeq,
         })),
       };
     },

@@ -7,6 +7,7 @@ export async function applyEvent(
   db: MessengerDatabase,
   accountKey: AccountKey,
   event: ConversationEvent,
+  userId?: string,
 ): Promise<void> {
   await db.transaction(
     "rw",
@@ -24,7 +25,7 @@ export async function applyEvent(
         throw new SyncGapError(last, event.eventSeq);
       }
 
-      await applyEventProjection(db, accountKey, event);
+      await applyEventProjection(db, accountKey, event, userId);
       await db.syncCursors.put({
         accountKey,
         conversationId: event.conversationId,

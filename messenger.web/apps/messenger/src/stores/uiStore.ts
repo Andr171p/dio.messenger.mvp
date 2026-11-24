@@ -32,9 +32,10 @@ interface UiState {
   replyTarget: ReplyTarget | null;
   editingMessageId: string | null;
   forwardTarget: ForwardTarget | null;
-  listSearch: string;
   listCategory: ListCategory;
   searchPanelOpen: boolean;
+  searchConversationId: string | null;
+  messageTarget: { id: string; seq?: number } | null;
   newChatOpen: boolean;
   setTheme: (theme: DioTheme) => void;
   toggleTheme: () => void;
@@ -46,9 +47,9 @@ interface UiState {
   setReplyTarget: (target: ReplyTarget | null) => void;
   setEditingMessageId: (id: string | null) => void;
   setForwardTarget: (target: ForwardTarget | null) => void;
-  setListSearch: (value: string) => void;
   setListCategory: (category: ListCategory) => void;
-  setSearchPanelOpen: (open: boolean) => void;
+  setSearchPanelOpen: (open: boolean, conversationId?: string) => void;
+  setMessageTarget: (target: UiState["messageTarget"]) => void;
   setNewChatOpen: (open: boolean) => void;
 }
 
@@ -65,13 +66,13 @@ export const useUiStore = create<UiState>()(
       replyTarget: null,
       editingMessageId: null,
       forwardTarget: null,
-      listSearch: "",
       listCategory: "all",
       searchPanelOpen: false,
+      searchConversationId: null,
+      messageTarget: null,
       newChatOpen: false,
       setTheme: (theme) => set({ theme }),
-      toggleTheme: () =>
-        set({ theme: get().theme === "light" ? "dark" : "light" }),
+      toggleTheme: () => set({ theme: get().theme === "light" ? "dark" : "light" }),
       setNavActive: (nav) => set({ navActive: nav }),
       setSelectedConversation: (id) =>
         set({
@@ -79,6 +80,10 @@ export const useUiStore = create<UiState>()(
           replyTarget: null,
           editingMessageId: null,
           forwardTarget: null,
+          contextDrawerOpen: false,
+          contextResourceId: null,
+          contextResourceUuid: null,
+          messageTarget: null,
           mobilePane: id ? "chat" : "list",
         }),
       setMobilePane: (pane) => set({ mobilePane: pane }),
@@ -88,14 +93,26 @@ export const useUiStore = create<UiState>()(
           contextResourceId: id,
           contextResourceUuid: uuid,
           contextDrawerOpen: !!id,
-          mobilePane: id ? "context" : get().mobilePane,
+          mobilePane: id ? "context" : get().selectedConversationId ? "chat" : "list",
         }),
       setReplyTarget: (target) => set({ replyTarget: target, editingMessageId: null }),
       setEditingMessageId: (id) => set({ editingMessageId: id, replyTarget: null }),
       setForwardTarget: (target) => set({ forwardTarget: target }),
-      setListSearch: (value) => set({ listSearch: value }),
       setListCategory: (category) => set({ listCategory: category }),
-      setSearchPanelOpen: (open) => set({ searchPanelOpen: open }),
+      setSearchPanelOpen: (open, conversationId) =>
+        set({
+          searchPanelOpen: open,
+          searchConversationId: conversationId ?? null,
+          mobilePane: open ? "list" : get().selectedConversationId ? "chat" : "list",
+          ...(open
+            ? {
+                contextDrawerOpen: false,
+                contextResourceId: null,
+                contextResourceUuid: null,
+              }
+            : {}),
+        }),
+      setMessageTarget: (messageTarget) => set({ messageTarget }),
       setNewChatOpen: (open) => set({ newChatOpen: open }),
     }),
     {

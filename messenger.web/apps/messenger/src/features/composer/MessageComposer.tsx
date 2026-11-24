@@ -1,8 +1,9 @@
 import {
-  clearDraft,
   editMessage,
+  readMessageBlocks,
   sendMessage,
   upsertDraft,
+  type ContentBlock,
 } from "@dio/messenger-core";
 import { Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -14,26 +15,47 @@ import { useUiStore } from "../../stores/uiStore.js";
 import styles from "./MessageComposer.module.css";
 
 export function MessageComposer() {
+  const conversationId = useUiStore((state) => state.selectedConversationId);
+  const { accountKey } = useRuntime();
+  if (!conversationId || !accountKey) return null;
+  return (
+    <ConversationComposer
+      key={JSON.stringify([accountKey, conversationId])}
+      conversationId={conversationId}
+    />
+  );
+}
+
+function ConversationComposer({ conversationId }: { conversationId: string }) {
   const { db, sync, accountKey, media, http } = useRuntime();
   const { session } = useAuth();
-  const conversationId = useUiStore((s) => s.selectedConversationId);
   const reply = useUiStore((s) => s.replyTarget);
   const clearReply = useUiStore((s) => s.setReplyTarget);
   const editingId = useUiStore((s) => s.editingMessageId);
   const setEditing = useUiStore((s) => s.setEditingMessageId);
   const [text, setText] = useState("");
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  const [failedUpload, setFailedUpload] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const draftConvRef = useRef<string | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [attachments, setAttachments] = useState<
+    NonNullable<import("@dio/messenger-core").Draft["attachments"]>
+  >([]);
+  const [mentions, setMentions] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState(false);
+  const sendLock = useRef(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resizeInput = () => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const max = 24 * 6; // ~6 lines at 15/1.45
+    const max = 5 * 22 + 18;
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   };
 
@@ -43,89 +65,161 @@ export function MessageComposer() {
 
   const draft = useLiveQuery(async () => {
     if (!db || !accountKey || !conversationId) return null;
-    return db.drafts.get(`${accountKey}::${conversationId}`);
+    const stored = await db.drafts.get(`${accountKey}::${conversationId}`);
+    if (!stored) return null;
+    if (stored.draftReply || !stored.replyToId) return stored;
+    const source = await db.messages.get(stored.replyToId);
+    if (source?.conversationId !== conversationId) return stored;
+    return {
+      ...stored,
+      draftReply: {
+        localId: source.localId,
+        serverId: source.serverId,
+        preview: source.content,
+      },
+    };
   }, [db, accountKey, conversationId]);
 
-  // Load draft only for the conversation being entered
   useEffect(() => {
-    if (!conversationId) {
-      setText("");
-      draftConvRef.current = null;
-      return;
-    }
-    if (draftConvRef.current === conversationId) return;
-    draftConvRef.current = conversationId;
+    if (hydrated || draft === undefined || !db) return;
     setText(draft?.content ?? "");
-  }, [conversationId, draft?.content]);
+    setDraftText(draft?.content ?? "");
+    setAttachments(draft?.attachments ?? []);
+    setMentions(draft?.mentionTokens ?? {});
+    if (draft?.draftReply && !useUiStore.getState().replyTarget)
+      clearReply(draft.draftReply);
+    setHydrated(true);
+  }, [draft, hydrated, db, clearReply]);
 
-  // Persist draft bound to the conversation that owned the debounce start
   useEffect(() => {
-    if (!db || !accountKey || !conversationId || editingId) return;
-    const boundConversationId = conversationId;
-    const boundText = text;
-    const boundReply = reply?.localId;
-    const timer = setTimeout(() => {
-      if (draftConvRef.current !== boundConversationId) return;
-      void upsertDraft(db, accountKey, boundConversationId, boundText, boundReply);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [db, accountKey, conversationId, text, reply?.localId, editingId]);
+    if (!db || !accountKey || !hydrated || editingId || sending) return;
+    void upsertDraft(
+      db,
+      accountKey,
+      conversationId,
+      draftText,
+      reply?.localId,
+      reply ?? undefined,
+      attachments,
+      mentions,
+    ).catch(() => setSendError("Не удалось сохранить черновик"));
+  }, [
+    db,
+    accountKey,
+    conversationId,
+    draftText,
+    reply,
+    editingId,
+    hydrated,
+    sending,
+    attachments,
+    mentions,
+  ]);
 
   useEffect(() => {
     if (!editingId || !db) return;
+    let cancelled = false;
     void db.messages.get(editingId).then((row) => {
-      if (row) setText(row.content);
+      if (!cancelled && row) {
+        setText(
+          readMessageBlocks(row)
+            .flatMap((block) => (block.type === "text" ? [block.text] : []))
+            .join("\n"),
+        );
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, [editingId, db]);
 
   useEffect(() => {
-    if (!conversationId || !sync || !text) return;
-    sync.sendTyping(conversationId, true);
-    if (typingTimer.current) clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      sync.sendTyping(conversationId, false);
-    }, 2_500);
-    return () => {
-      if (typingTimer.current) clearTimeout(typingTimer.current);
-    };
-  }, [text, conversationId, sync]);
-
-  const onSend = async () => {
-    if (!db || !accountKey || !conversationId || !session || !text.trim()) return;
-    const boundConversationId = conversationId;
-
-    if (editingId) {
-      await editMessage(db, accountKey, {
-        conversationId: boundConversationId,
-        localId: editingId,
-        content: text.trim(),
-      });
-      setEditing(null);
-      setText("");
-      sync?.requestFlush();
+    if (!sync || !hydrated) return;
+    const previous = typingTimer.current;
+    if (previous) clearTimeout(previous);
+    if (!text.trim() || editingId) {
+      if (previous) sync.sendTyping(conversationId, false);
+      typingTimer.current = null;
       return;
     }
+    if (!previous) sync.sendTyping(conversationId, true);
+    typingTimer.current = setTimeout(() => {
+      typingTimer.current = null;
+      sync.sendTyping(conversationId, false);
+    }, 2_500);
+  }, [text, conversationId, sync, hydrated, editingId]);
 
-    await sendMessage(db, accountKey, {
-      conversationId: boundConversationId,
-      content: text.trim(),
-      authorId: session.userId,
-      ...(reply
-        ? {
-            replyToLocalId: reply.localId,
-            replyToId: reply.serverId,
-            replyPreview: reply.preview,
-            quoteText: reply.quoteText,
-          }
-        : {}),
-    });
-    if (draftConvRef.current === boundConversationId) {
-      await clearDraft(db, accountKey, boundConversationId);
-      setText("");
-      clearReply(null);
+  useEffect(() => {
+    return () => {
+      if (!typingTimer.current) return;
+      clearTimeout(typingTimer.current);
+      typingTimer.current = null;
+      sync?.sendTyping(conversationId, false);
+    };
+  }, [conversationId, sync]);
+
+  const onSend = async () => {
+    if (!db || !accountKey || !session || !hydrated || sendLock.current) return;
+    if (!text.trim() && (!attachments.length || editingId)) return;
+    sendLock.current = true;
+    setSending(true);
+    setSendError(null);
+
+    try {
+      if (editingId) {
+        await editMessage(db, accountKey, {
+          conversationId,
+          localId: editingId,
+          content: text.trim(),
+        });
+        if (useUiStore.getState().editingMessageId === editingId) setEditing(null);
+        setText(draftText);
+        sync?.requestFlush();
+        return;
+      }
+
+      const usedMentions = new Set(
+        text
+          .match(/@[\p{L}\p{N}_.-]+/gu)
+          ?.map((handle) => handle.replace(/[.-]+$/, "")),
+      );
+      await sendMessage(db, accountKey, {
+        conversationId,
+        clearConversationDraft: true,
+        content: text.trim(),
+        authorId: session.userId,
+        extraBlocks: attachments.map((attachment): ContentBlock => attachment.block),
+        mentions: [
+          ...new Set(
+            Object.entries(mentions)
+              .filter(([token]) => usedMentions.has(token))
+              .map(([, id]) => id),
+          ),
+        ],
+        ...(reply
+          ? {
+              replyToLocalId: reply.localId,
+              replyToId: reply.serverId,
+              replyPreview: reply.preview,
+              quoteText: reply.quoteText,
+            }
+          : {}),
+      });
+      setDraftText("");
+      setAttachments([]);
+      setMentions({});
+      if (useUiStore.getState().selectedConversationId === conversationId) {
+        setText("");
+        clearReply(null);
+      }
+      sync?.sendTyping(conversationId, false);
+      sync?.requestFlush();
+    } catch {
+      setSendError("Не удалось сохранить сообщение для отправки");
+    } finally {
+      sendLock.current = false;
+      setSending(false);
     }
-    sync?.sendTyping(boundConversationId, false);
-    sync?.requestFlush();
   };
 
   const onAttach = async (fileList: FileList | null) => {
@@ -134,24 +228,7 @@ export function MessageComposer() {
     if (!file) return;
     setUploadNote(`Загрузка ${file.name}…`);
     try {
-      const jobId = await media.enqueue(file, conversationId);
-      for (let i = 0; i < 60; i += 1) {
-        const job = media.getJobs().find((j) => j.id === jobId);
-        if (!job) break;
-        if (job.status === "ready" && job.assetId) {
-          setUploadNote(`Вложение: ${file.name}`);
-          setText((prev) =>
-            prev.trim() ? `${prev}\n[media:${job.assetId}]` : `[media:${job.assetId}]`,
-          );
-          return;
-        }
-        if (job.status === "failed") {
-          setUploadNote(job.error ?? "Ошибка загрузки");
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      setUploadNote("Таймаут загрузки");
+      await media.enqueue(file, conversationId);
     } catch (error) {
       setUploadNote(error instanceof Error ? error.message : "Ошибка загрузки");
     } finally {
@@ -159,7 +236,37 @@ export function MessageComposer() {
     }
   };
 
-  if (!conversationId) return null;
+  useEffect(() => {
+    if (!media || !hydrated || editingId || sending) return;
+    const updateJobs = () => {
+      for (const job of media.getJobs()) {
+        if (job.conversationId !== conversationId) continue;
+        if (job.status === "ready" && job.assetId) {
+          const assetId = job.assetId;
+          media.dismiss(job.id);
+          setAttachments((items) =>
+            items.some(
+              ({ block }) => block.type === "media" && block.assetId === assetId,
+            )
+              ? items
+              : [...items, { label: job.file.name, block: { type: "media", assetId } }],
+          );
+          setUploadNote(null);
+          setFailedUpload((current) => (current === job.id ? null : current));
+        } else if (job.status === "failed") {
+          setUploadNote(job.error ?? "Ошибка загрузки");
+          setFailedUpload(job.id);
+        }
+      }
+    };
+    updateJobs();
+    return media.subscribe(updateJobs);
+  }, [media, conversationId, hydrated, editingId, sending]);
+
+  function updateText(value: string) {
+    setText(value);
+    if (!editingId) setDraftText(value);
+  }
 
   return (
     <div className={styles.root}>
@@ -181,7 +288,7 @@ export function MessageComposer() {
             type="button"
             onClick={() => {
               setEditing(null);
-              setText("");
+              setText(draftText);
             }}
           >
             Отмена
@@ -194,18 +301,46 @@ export function MessageComposer() {
           conversationId={conversationId}
           http={http}
           query={text}
-          onPick={(token) => {
-            setText((prev) => {
-              if (pickerMode === "mention") {
-                return prev.replace(/@[\w.-]*$/, token + " ");
-              }
-              return prev.replace(/#[\w-]*$/, token + " ");
-            });
+          onPick={(token, id) => {
+            if (pickerMode === "mention") {
+              updateText(text.replace(/@[\p{L}\p{N}_.-]*$/u, token + " "));
+              setMentions((current) => ({ ...current, [token]: id }));
+            } else {
+              updateText(text.replace(/#[\p{L}\p{N}_-]*$/u, ""));
+              setAttachments((items) => [
+                ...items,
+                {
+                  label: token,
+                  block: {
+                    type: "resource",
+                    provider: "dio-desk",
+                    resourceType: "ticket",
+                    resourceId: id,
+                    number: token.slice(1),
+                  },
+                },
+              ]);
+            }
             setPickerMode(null);
           }}
           onClose={() => setPickerMode(null)}
         />
       ) : null}
+      {!editingId
+        ? attachments.map((attachment, index) => (
+            <button
+              key={index}
+              type="button"
+              className={styles.attachment}
+              aria-label={`Убрать ${attachment.label}`}
+              onClick={() =>
+                setAttachments((items) => items.filter((_, i) => i !== index))
+              }
+            >
+              {attachment.label} ×
+            </button>
+          ))
+        : null}
       <div className={styles.composerShell}>
         <div className={styles.composerRow}>
           <textarea
@@ -213,17 +348,24 @@ export function MessageComposer() {
             className={[styles.input, "dio-scroll"].join(" ")}
             value={text}
             rows={1}
+            disabled={!hydrated || sending}
+            aria-label="Текст сообщения"
             placeholder="Написать сообщение…"
             onChange={(e) => {
               const value = e.target.value;
-              setText(value);
-              if (/@[\w.-]*$/.test(value)) setPickerMode("mention");
-              else if (/#[\w-]*$/.test(value)) setPickerMode("ticket");
+              updateText(value);
+              if (/@[\p{L}\p{N}_.-]*$/u.test(value) && !editingId)
+                setPickerMode("mention");
+              else if (/#[\p{L}\p{N}_-]*$/u.test(value) && !editingId)
+                setPickerMode("ticket");
               else setPickerMode(null);
             }}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing) return;
-              if (pickerMode && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")) {
+              if (
+                pickerMode &&
+                (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape")
+              ) {
                 return;
               }
               if (e.key === "Enter" && !e.shiftKey && !pickerMode) {
@@ -238,16 +380,36 @@ export function MessageComposer() {
               icon="emoji"
               size="sm"
               iconSize={20}
-              onClick={() => setText((p) => p + "😊 ")}
+              onClick={() => {
+                setEmojiOpen((value) => !value);
+                setPickerMode(null);
+              }}
+              disabled={!hydrated || sending}
+            />
+            <IconButton
+              label="Упомянуть участника"
+              icon="mention"
+              size="sm"
+              iconSize={20}
+              disabled={!hydrated || sending || !!editingId}
+              onClick={() => {
+                updateText(text + (text && !text.endsWith(" ") ? " @" : "@"));
+                setPickerMode("mention");
+                setEmojiOpen(false);
+                inputRef.current?.focus();
+              }}
             />
             <IconButton
               label="Заявка"
               icon="hash"
               size="sm"
               iconSize={20}
+              disabled={!hydrated || sending || !!editingId}
               onClick={() => {
-                setText((p) => (p.endsWith(" ") || !p ? p + "#" : `${p} #`));
+                updateText(text.endsWith(" ") || !text ? text + "#" : text + " #");
                 setPickerMode("ticket");
+                setEmojiOpen(false);
+                inputRef.current?.focus();
               }}
             />
             <input
@@ -261,6 +423,7 @@ export function MessageComposer() {
               icon="attach"
               size="sm"
               iconSize={20}
+              disabled={!!editingId || sending || !hydrated}
               onClick={() => fileInputRef.current?.click()}
             />
           </div>
@@ -272,11 +435,63 @@ export function MessageComposer() {
             variant="send"
             iconSize={18}
             onClick={() => void onSend()}
-            disabled={!text.trim()}
+            disabled={
+              !hydrated ||
+              sending ||
+              (!text.trim() && (!attachments.length || !!editingId))
+            }
           />
         </div>
       </div>
-      {uploadNote ? <p className={styles.note}>{uploadNote}</p> : null}
+      {emojiOpen ? (
+        <div
+          className={styles.emojiPicker}
+          role="group"
+          aria-label="Выбрать эмодзи"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setEmojiOpen(false);
+              inputRef.current?.focus();
+            }
+          }}
+        >
+          {["😊", "👍", "❤️", "🎉", "👀", "🤝", "✅", "🔥"].map((emoji) => (
+            <button
+              type="button"
+              key={emoji}
+              onClick={() => {
+                updateText(text + emoji);
+                setEmojiOpen(false);
+                inputRef.current?.focus();
+              }}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {uploadNote ? (
+        <p className={styles.note} role="status">
+          {uploadNote}{" "}
+          {failedUpload ? (
+            <button
+              type="button"
+              onClick={() => {
+                media?.retry(failedUpload);
+                setFailedUpload(null);
+                setUploadNote("Повторная загрузка…");
+              }}
+            >
+              Повторить
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      {sendError ? (
+        <p role="alert" className={styles.note}>
+          {sendError}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import type { AccountKey, SendMessageAck } from "../models/types.js";
-import { parseComposerContent, textBlocks } from "../content/blocks.js";
+import { parseComposerContent } from "../content/blocks.js";
 import type { MessengerDatabase } from "../storage/database.js";
 import { HttpClient, HttpError } from "../transport/httpClient.js";
 import { reconcileSendAck } from "../sync/reconcileAck.js";
@@ -140,7 +140,10 @@ export class OutboxProcessor {
           blocksJson,
         } = item.command.payload;
 
-        const resolvedReply = await this.resolveReplyServerId(replyToId, replyToLocalId);
+        const resolvedReply = await this.resolveReplyServerId(
+          replyToId,
+          replyToLocalId,
+        );
         if ((replyToId || replyToLocalId) && !resolvedReply) {
           // Wait for parent ACK
           await this.deps.db.outbox.update(id, {
@@ -170,10 +173,7 @@ export class OutboxProcessor {
         if (mentionAll) body.mentionAll = true;
         if (forwardedFrom) body.forwardedFrom = forwardedFrom;
         if (quoteText) {
-          body.blocks = [
-            { type: "quote", text: quoteText },
-            ...((body.blocks as unknown[]) ?? textBlocks(content)),
-          ];
+          body.quoteText = quoteText;
         }
 
         const dto = await this.deps.http.post<ServerMessageDTO>(
@@ -190,17 +190,25 @@ export class OutboxProcessor {
 
         await reconcileSendAck(this.deps.db, this.deps.accountKey, ack, id);
       } else if (item.type === "message.edit" && item.command.type === "message.edit") {
-        const { conversationId, messageId, content } = item.command.payload;
+        const { conversationId, messageId, content, blocksJson } = item.command.payload;
         await this.deps.http.request(
           `/v1/conversations/${conversationId}/messages/${messageId}`,
           {
             method: "PATCH",
-            json: { blocks: parseComposerContent(content) },
+            json: {
+              blocks: blocksJson
+                ? JSON.parse(blocksJson)
+                : parseComposerContent(content),
+            },
           },
         );
         await this.deps.db.outbox.delete(id);
-      } else if (item.type === "message.delete" && item.command.type === "message.delete") {
-        const { conversationId, messageId, localId, previousContent } = item.command.payload;
+      } else if (
+        item.type === "message.delete" &&
+        item.command.type === "message.delete"
+      ) {
+        const { conversationId, messageId, localId, previousContent } =
+          item.command.payload;
         try {
           await this.deps.http.request(
             `/v1/conversations/${conversationId}/messages/${messageId}`,
@@ -208,7 +216,10 @@ export class OutboxProcessor {
           );
           await this.deps.db.outbox.delete(id);
         } catch (error) {
-          if (error instanceof HttpError && (error.status === 403 || error.status === 404)) {
+          if (
+            error instanceof HttpError &&
+            (error.status === 403 || error.status === 404)
+          ) {
             await this.deps.db.messages.update(localId, {
               deletedAt: undefined,
               content: previousContent,
@@ -251,7 +262,10 @@ export class OutboxProcessor {
           messageId,
         });
         await this.deps.db.outbox.delete(id);
-      } else if (item.type === "message.unpin" && item.command.type === "message.unpin") {
+      } else if (
+        item.type === "message.unpin" &&
+        item.command.type === "message.unpin"
+      ) {
         const { conversationId, messageId } = item.command.payload;
         await this.deps.http.request(
           `/v1/conversations/${conversationId}/messages/${messageId}/pins`,
@@ -279,13 +293,21 @@ export class OutboxProcessor {
 
       if (
         error instanceof HttpError &&
-        (error.status === 403 || error.status === 409 || error.status === 422)
+        [400, 403, 404, 409, 410, 413, 422].includes(error.status)
       ) {
         if (item.command.type === "message.send") {
           await this.deps.db.messages
             .where("[accountKey+clientMessageId]")
             .equals([this.deps.accountKey, item.command.payload.clientMessageId])
-            .modify({ sendStatus: "failed" });
+            .modify({
+              sendStatus: "failed",
+              sendError:
+                error.status === 404 && item.command.payload.replyToId
+                  ? "Исходное сообщение недоступно"
+                  : error.status === 422 && item.command.payload.quoteText
+                    ? "Цитата не совпадает с исходным сообщением"
+                    : "Сервер отклонил отправку",
+            });
         }
         if (item.command.type === "message.delete") {
           await this.deps.db.messages.update(item.command.payload.localId, {
@@ -321,7 +343,5 @@ export class OutboxProcessor {
 }
 
 function looksLikeUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

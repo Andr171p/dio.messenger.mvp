@@ -47,6 +47,7 @@ class SendMessageDTO(BaseModel):
     client_message_id: UUID
     blocks: list[ContentBlock] = Field(min_length=1)
     reply_to_id: UUID | None = None
+    quote_text: str | None = Field(default=None, min_length=1, max_length=280, pattern=r"\S")
     mentions: list[UUID] = Field(default_factory=list)
     mention_all: bool = False
     forwarded_from: ForwardedFromRefDTO | None = None

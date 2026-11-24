@@ -1,10 +1,14 @@
 import type { Conversation } from "@dio/messenger-core";
-import { Avatar, Badge, IconButton } from "@dio/messenger-ui";
+import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
+import {
+  useConversationMembers,
+  useDirectoryProfiles,
+} from "../features/read/useConversationMembers.js";
 import styles from "./ChatHeader.module.css";
 
 function presenceLabel(
@@ -22,9 +26,11 @@ function presenceLabel(
 }
 
 export function ChatHeader() {
-  const { db, sync, accountKey } = useRuntime();
+  const { db, sync } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
+  const members = useConversationMembers(conversationId);
+  const profiles = useDirectoryProfiles(!!conversationId);
   const mobilePane = useUiStore((s) => s.mobilePane);
   const setMobilePane = useUiStore((s) => s.setMobilePane);
   const setSearchOpen = useUiStore((s) => s.setSearchPanelOpen);
@@ -40,16 +46,9 @@ export function ChatHeader() {
     return db.conversations.get(conversationId);
   }, [db, conversationId]);
 
-  const peerId = useLiveQuery(async () => {
-    if (!db || !accountKey || !conversationId || !session?.userId) return null;
-    if (conversation?.kind !== "direct") return null;
-    const recent = await db.messages
-      .where("[accountKey+conversationId]")
-      .equals([accountKey, conversationId])
-      .toArray();
-    const other = recent.find((m) => m.authorId && m.authorId !== session.userId);
-    return other?.authorId ?? null;
-  }, [db, accountKey, conversationId, conversation?.kind, session?.userId]);
+  const peerId = members.data?.find(
+    (member) => member.principalId !== session?.userId,
+  )?.principalId;
 
   const typing =
     conversationId && sync ? (sync.getTyping(conversationId)?.userIds ?? []) : [];
@@ -71,7 +70,11 @@ export function ChatHeader() {
         ? peerPresence.status === "online"
         : null
       : null;
-  const baseSubtitle = presenceLabel(conversation?.kind, conversation?.memberCount, peerOnline);
+  const baseSubtitle = presenceLabel(
+    conversation?.kind,
+    members.data?.length || conversation?.memberCount,
+    peerOnline,
+  );
   const groupKind =
     conversation?.kind === "group"
       ? guest
@@ -87,19 +90,25 @@ export function ChatHeader() {
           <IconButton
             className={styles.backBtn}
             label="Назад к списку"
-            icon="menu"
+            icon="back"
             size="sm"
             onClick={() => setMobilePane("list")}
           />
         ) : null}
         <Avatar name={conversation?.title ?? "Chat"} size="md" />
         <div className={styles.copy}>
-          <h1 className={styles.title}>{conversation?.title ?? "Беседа"}</h1>
+          <h1 className={styles.title}>
+            {conversation?.kind === "direct" && peerId
+              ? (profiles.data?.[peerId] ?? "Личный чат")
+              : (conversation?.title ?? "Беседа")}
+          </h1>
           <p className={styles.subtitle}>
             {typingOthers.length ? (
               <span className={styles.typing}>печатает…</span>
             ) : (
-              <span className={peerOnline === true ? styles.online : undefined}>{subtitle}</span>
+              <span className={peerOnline === true ? styles.online : undefined}>
+                {subtitle}
+              </span>
             )}
           </p>
           {guest ? (
@@ -110,14 +119,35 @@ export function ChatHeader() {
         </div>
       </div>
       <div className={styles.actions}>
+        <details className={styles.members}>
+          <summary aria-label="Участники беседы">
+            <Icon name="people" size={20} />
+          </summary>
+          <div className={styles.membersPanel}>
+            <strong>Участники</strong>
+            {members.isError ? (
+              <p>Список участников недоступен</p>
+            ) : (
+              <ul>
+                {members.data?.map((member) => (
+                  <li key={member.principalId}>
+                    {member.principalId === session?.userId
+                      ? "Вы"
+                      : (profiles.data?.[member.principalId] ?? "Участник")}
+                    {member.role === "guest" ? " · внешний участник" : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
         <IconButton
           label="Поиск в беседе"
           icon="search"
           size="sm"
           iconSize={20}
-          onClick={() => setSearchOpen(true)}
+          onClick={() => setSearchOpen(true, conversationId)}
         />
-        <IconButton label="Ещё" icon="more-vertical" size="sm" iconSize={22} />
       </div>
     </header>
   );

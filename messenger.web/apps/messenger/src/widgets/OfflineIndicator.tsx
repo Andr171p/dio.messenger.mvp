@@ -22,7 +22,7 @@ function getOnlineSnapshot() {
  */
 export function OfflineIndicator() {
   const online = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
-  const { syncStatus } = useRuntime();
+  const { syncStatus, sync } = useRuntime();
 
   if (!online) {
     return (
@@ -47,6 +47,14 @@ export function OfflineIndicator() {
       <div className={[styles.banner, styles.warning].join(" ")} role="status">
         <Icon name="offline" size={16} />
         <span>Не удалось обновить данные — показан локальный кэш</span>
+        <button
+          type="button"
+          onClick={() => {
+            void sync?.synchronize().catch(() => undefined);
+          }}
+        >
+          Повторить
+        </button>
       </div>
     );
   }

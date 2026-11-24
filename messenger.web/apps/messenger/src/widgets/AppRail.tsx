@@ -5,22 +5,24 @@ import styles from "./AppRail.module.css";
 
 const NAV: { id: NavItem; icon: IconName; label: string }[] = [
   { id: "chats", icon: "chat", label: "Чаты" },
-  { id: "people", icon: "people", label: "Люди" },
-  { id: "bookmarks", icon: "bookmark", label: "Закладки" },
-  { id: "settings", icon: "settings", label: "Настройки" },
 ];
 
 export function AppRail() {
   const { session } = useAuth();
   const active = useUiStore((s) => s.navActive);
-  const setActive = useUiStore((s) => s.setNavActive);
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
 
   return (
     <nav className={styles.root} aria-label="Навигация DIO Chat">
       <div className={styles.brand} aria-hidden>
-        <img className={styles.mark} src="/brand/dios-mark.png" alt="" width={28} height={28} />
+        <img
+          className={styles.mark}
+          src="/brand/dios-mark.png"
+          alt=""
+          width={28}
+          height={28}
+        />
       </div>
       <ul className={styles.list}>
         {NAV.map((item) => (
@@ -33,7 +35,11 @@ export function AppRail() {
               title={item.label}
               aria-label={item.label}
               aria-current={active === item.id ? "page" : undefined}
-              onClick={() => setActive(item.id)}
+              onClick={() => {
+                const ui = useUiStore.getState();
+                ui.setSearchPanelOpen(false);
+                ui.setMobilePane("list");
+              }}
             >
               <Icon name={item.icon} size={20} filled={active === item.id} />
             </button>

@@ -52,6 +52,19 @@ class DioDeskTicketsClient:
             expected=(HTTPStatus.CREATED, HTTPStatus.OK),
         )
 
+    async def search_tickets(self, query: str, *, access_token: str) -> list[dict[str, Any]]:
+        response = await self._request(
+            "POST", "/api/v1/tickets/search?size=10", access_token=access_token,
+            json_body={"search_query": query},
+        )
+        return [item for item in response.get("items", []) if isinstance(item, dict)]
+
+    async def ticket_activity(self, ticket_id: UUID, *, access_token: str) -> list[dict[str, Any]]:
+        response = await self._request(
+            "GET", f"/api/v1/tickets/{ticket_id}/history?size=5", access_token=access_token,
+        )
+        return [item for item in response.get("items", []) if isinstance(item, dict)]
+
     async def assign(
         self,
         ticket_id: UUID,

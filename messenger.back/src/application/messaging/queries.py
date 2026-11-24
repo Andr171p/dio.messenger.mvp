@@ -5,7 +5,7 @@ from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.messaging.builders import build_conversation_event_dto, build_message_dto
 from src.application.messaging.dtos import ConversationEventDTO, MessageDTO
-from src.application.messaging.exceptions import SnapshotRequiredError
+from src.application.messaging.exceptions import MessageNotFoundError, SnapshotRequiredError
 from src.infra.observability.metrics import inc_sync_gap
 from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 
@@ -18,6 +18,7 @@ async def get_history(
     *,
     actor: AuthUser,
     before_seq: int | None = None,
+    around_message_id: UUID | None = None,
     limit: int = DEFAULT_PAGE_LIMIT,
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
@@ -29,6 +30,16 @@ async def get_history(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
+
+    if around_message_id is not None:
+        target = await message_repository.read(around_message_id)
+        if (
+            target is None
+            or target.conversation_id != conversation_id
+            or target.created_seq < membership.history_from_seq
+        ):
+            raise MessageNotFoundError("Message not found.")
+        before_seq = target.created_seq + 1
 
     page_limit = min(max(limit, 1), MAX_PAGE_LIMIT)
     items = await message_repository.get_history(

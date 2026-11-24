@@ -25,7 +25,7 @@ interface MentionTicketPickerProps {
   conversationId: string;
   http: HttpClient | null;
   query: string;
-  onPick: (token: string) => void;
+  onPick: (token: string, id: string) => void;
   onClose: () => void;
 }
 
@@ -34,22 +34,22 @@ function userLabel(user: DirectoryUser): string {
 }
 
 function mentionToken(user: DirectoryUser): string {
-  const handle = user.username?.trim() || user.email.split("@")[0] || user.id.slice(0, 8);
+  const handle =
+    user.username?.trim() || user.email.split("@")[0] || user.id.slice(0, 8);
   return `@${handle}`;
 }
 
 function extractMentionQuery(text: string): string {
-  const match = /@([\w.-]*)$/.exec(text);
+  const match = /@([\p{L}\p{N}_.-]*)$/u.exec(text);
   return match ? match[1]! : "";
 }
 
 function extractTicketQuery(text: string): string {
-  const match = /#([\w-]*)$/.exec(text);
+  const match = /#([\p{L}\p{N}_-]*)$/u.exec(text);
   return match ? match[1]! : "";
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function MentionTicketPicker({
   mode,
@@ -64,23 +64,48 @@ export function MentionTicketPicker({
 
   const mentionQ = extractMentionQuery(query);
   const ticketQ = extractTicketQuery(query);
+  const [ticketTerm, setTicketTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setTicketTerm(ticketQ), 250);
+    return () => clearTimeout(timer);
+  }, [ticketQ]);
+
+  const ticketSearch = useQuery({
+    queryKey: ["picker-tickets", conversationId, ticketTerm],
+    enabled:
+      mode === "ticket" &&
+      !!http &&
+      ticketTerm.length >= 3 &&
+      !UUID_RE.test(ticketTerm),
+    queryFn: () => {
+      const params = new URLSearchParams({ conversationId, q: ticketTerm });
+      return http!.get<ResourcePreview[]>(`/v1/resources/tickets/search?${params}`);
+    },
+    retry: false,
+  });
 
   const directory = useQuery({
     queryKey: ["picker-directory", mentionQ],
-    enabled: mode === "mention" && !!http && mentionQ.length >= 0,
+    enabled: mode === "mention" && !!http,
     queryFn: async () => {
       const q = encodeURIComponent(mentionQ);
       return http!.get<DirectoryUser[]>(`/v1/directory/users?q=${q}`);
     },
   });
 
+  const members = useQuery({
+    queryKey: ["picker-members", conversationId],
+    enabled: mode === "mention" && !!http,
+    queryFn: () =>
+      http!.get<{ principalId: string }[]>(
+        `/v1/conversations/${conversationId}/members`,
+      ),
+  });
+
   const ticketPreview = useQuery({
     queryKey: ["picker-ticket-preview", conversationId, ticketQ],
     enabled:
-      mode === "ticket" &&
-      !!http &&
-      ticketQ.length >= 2 &&
-      (UUID_RE.test(ticketQ) || /^inc/i.test(ticketQ) || /^req/i.test(ticketQ)),
+      mode === "ticket" && !!http && ticketQ.length >= 2 && UUID_RE.test(ticketQ),
     queryFn: async () => {
       const params = new URLSearchParams({
         provider: DIODESK_PROVIDER,
@@ -117,21 +142,42 @@ export function MentionTicketPicker({
 
     const items: { id: string; label: string; sub?: string }[] = [];
     const needle = ticketQ.toLowerCase();
+    if (ticketQ === ticketTerm) {
+      for (const ticket of ticketSearch.data ?? []) {
+        if (
+          ticket.number &&
+          ticket.ref?.resourceId &&
+          UUID_RE.test(ticket.ref.resourceId)
+        ) {
+          items.push({
+            id: ticket.ref.resourceId,
+            label: `#${ticket.number}`,
+            sub: ticket.title,
+          });
+        }
+      }
+    }
 
-    if (ticketPreview.data?.number || ticketPreview.data?.title) {
+    if (
+      ticketPreview.data?.number &&
+      UUID_RE.test(ticketPreview.data.ref?.resourceId ?? ticketQ)
+    ) {
       const id = ticketPreview.data.ref?.resourceId ?? ticketQ;
       const num = ticketPreview.data.number ?? `#${ticketQ}`;
       items.push({
-        id: `preview-${id}`,
+        id,
         label: num.startsWith("#") ? num : `#${num}`,
         sub: ticketPreview.data.title,
       });
     }
 
     const link = contextLink.data;
-    if (link?.number || link?.resourceId) {
+    if (link?.resourceId && UUID_RE.test(link.resourceId)) {
       const label = link.number ?? link.resourceId ?? "";
-      if (!needle || label.toLowerCase().includes(needle)) {
+      if (
+        (!needle || label.toLowerCase().includes(needle)) &&
+        !items.some((row) => row.id === link.resourceId)
+      ) {
         items.push({
           id: `link-${link.resourceId ?? label}`,
           label: label.startsWith("#") ? label : `#${label}`,
@@ -140,30 +186,28 @@ export function MentionTicketPicker({
       }
     }
 
-    const stem = ticketQ.replace(/^(inc|req)-?/i, "").trim();
-    const placeholders = [
-      stem ? `#INC-${stem.toUpperCase()}` : "#INC-…",
-      stem ? `#REQ-${stem.toUpperCase()}` : "#REQ-…",
-    ];
-    for (const label of placeholders) {
-      if (needle && !label.toLowerCase().includes(needle)) continue;
-      if (!items.some((row) => row.label.toLowerCase() === label.toLowerCase())) {
-        items.push({ id: label, label, sub: "Вставить ссылку" });
-      }
-    }
-
     return items;
-  }, [mode, ticketQ, ticketPreview.data, contextLink.data]);
+  }, [
+    mode,
+    ticketQ,
+    ticketTerm,
+    ticketSearch.data,
+    ticketPreview.data,
+    contextLink.data,
+  ]);
 
   const mentionItems = useMemo(() => {
     if (mode !== "mention") return [];
-    return (directory.data ?? []).map((user) => ({
-      id: user.id,
-      label: userLabel(user),
-      sub: user.email,
-      token: mentionToken(user),
-    }));
-  }, [mode, directory.data]);
+    const active = new Set(members.data?.map((member) => member.principalId));
+    return (directory.data ?? [])
+      .filter((user) => active.has(user.id))
+      .map((user) => ({
+        id: user.id,
+        label: userLabel(user),
+        sub: user.email,
+        token: mentionToken(user),
+      }));
+  }, [mode, directory.data, members.data]);
 
   const rows =
     mode === "mention"
@@ -186,6 +230,7 @@ export function MentionTicketPicker({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing || !(e.target instanceof HTMLTextAreaElement)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
@@ -201,7 +246,7 @@ export function MentionTicketPicker({
       } else if (e.key === "Enter") {
         e.preventDefault();
         const row = rows[activeIndex];
-        if (row) onPick(row.token);
+        if (row) onPick(row.token, row.id);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -216,11 +261,16 @@ export function MentionTicketPicker({
   }, [activeIndex]);
 
   const loading =
-    (mode === "mention" && directory.isFetching) ||
-    (mode === "ticket" && (ticketPreview.isFetching || contextLink.isFetching));
+    (mode === "mention" && (directory.isFetching || members.isFetching)) ||
+    (mode === "ticket" &&
+      (ticketPreview.isFetching || contextLink.isFetching || ticketSearch.isFetching));
 
   return (
-    <div className={styles.root} role="listbox" aria-label={mode === "mention" ? "Упоминания" : "Заявки"}>
+    <div
+      className={styles.root}
+      role="listbox"
+      aria-label={mode === "mention" ? "Упоминания" : "Заявки"}
+    >
       {loading ? (
         <>
           <p className={styles.hint}>
@@ -231,7 +281,13 @@ export function MentionTicketPicker({
       ) : null}
       {!rows.length && !loading ? (
         <p className={styles.empty}>
-          {mode === "mention" ? "Пользователи не найдены" : "Введите номер заявки"}
+          {mode === "mention"
+            ? "Участники не найдены"
+            : ticketSearch.isError
+              ? "Поиск заявок недоступен"
+              : ticketQ.length < 3
+                ? "Введите название заявки или её UUID"
+                : "Заявки не найдены"}
         </p>
       ) : (
         <ul className={styles.list} ref={listRef}>
@@ -242,14 +298,11 @@ export function MentionTicketPicker({
                 role="option"
                 aria-selected={index === activeIndex}
                 data-active={index === activeIndex ? "true" : undefined}
-                className={[
-                  styles.row,
-                  index === activeIndex ? styles.rowActive : "",
-                ]
+                className={[styles.row, index === activeIndex ? styles.rowActive : ""]
                   .filter(Boolean)
                   .join(" ")}
                 onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => onPick(row.token)}
+                onClick={() => onPick(row.token, row.id)}
               >
                 <span className={styles.label}>{row.label}</span>
                 {row.sub ? <span className={styles.sub}>{row.sub}</span> : null}

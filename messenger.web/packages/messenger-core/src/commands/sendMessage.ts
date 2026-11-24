@@ -4,12 +4,19 @@ import type {
   LocalMessage,
   SendMessageOutboxCommand,
 } from "../models/types.js";
-import { blocksToPlainPreview, parseComposerContent } from "../content/blocks.js";
+import {
+  blocksToPlainPreview,
+  parseComposerContent,
+  type ContentBlock,
+} from "../content/blocks.js";
 import type { MessengerDatabase } from "../storage/database.js";
+import { conversationKey } from "../storage/keys.js";
 
 export interface SendMessageInput {
   conversationId: string;
   content: string;
+  extraBlocks?: ContentBlock[];
+  clearConversationDraft?: boolean;
   /** Prefer server UUID; if localId of pending message, set replyToLocalId */
   replyToId?: string;
   replyToLocalId?: string;
@@ -30,7 +37,11 @@ export async function sendMessage(
   const clientMessageId = input.clientMessageId ?? crypto.randomUUID();
   const now = Date.now();
   const outboxId = crypto.randomUUID();
-  const blocks = parseComposerContent(input.content);
+  const blocks = [
+    ...(input.content.trim() ? parseComposerContent(input.content) : []),
+    ...(input.extraBlocks ?? []),
+  ];
+  if (!blocks.length) throw new Error("Message content is empty");
   const preview = blocksToPlainPreview(blocks);
 
   let replyToServerId = input.replyToId;
@@ -80,34 +91,42 @@ export async function sendMessage(
     ...(input.quoteText ? { quoteText: input.quoteText } : {}),
   };
 
-  await db.transaction("rw", db.messages, db.outbox, db.conversations, async () => {
-    await db.messages.put(message);
-    await db.outbox.put({
-      id: outboxId,
-      accountKey,
-      type: "message.send",
-      status: "pending",
-      attempts: 0,
-      nextAttemptAt: now,
-      command: { type: "message.send", payload: command },
-      createdAt: now,
-    });
-    const conv = await db.conversations.get(input.conversationId);
-    if (conv) {
-      await db.conversations.put({
-        ...conv,
-        lastMessagePreview: preview.slice(0, 120),
-        lastMessageAt: now,
-        updatedAt: now,
+  await db.transaction(
+    "rw",
+    db.messages,
+    db.outbox,
+    db.conversations,
+    db.drafts,
+    async () => {
+      await db.messages.put(message);
+      await db.outbox.put({
+        id: outboxId,
+        accountKey,
+        type: "message.send",
+        status: "pending",
+        attempts: 0,
+        nextAttemptAt: now,
+        command: { type: "message.send", payload: command },
+        createdAt: now,
       });
-    }
-  });
+      const conv = await db.conversations.get(input.conversationId);
+      if (conv) {
+        await db.conversations.put({
+          ...conv,
+          lastMessagePreview: preview.slice(0, 120),
+          lastMessageAt: now,
+          updatedAt: now,
+        });
+      }
+      if (input.clearConversationDraft) {
+        await db.drafts.delete(conversationKey(accountKey, input.conversationId));
+      }
+    },
+  );
 
   return clientMessageId;
 }
 
 function looksLikeUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

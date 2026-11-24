@@ -126,6 +126,9 @@ def same_send_fingerprint(existing_content: dict[str, Any], command: SendMessage
         return False
     if content_fingerprint(existing_content) != content_fingerprint(expected_base):
         return False
+    quote = command.quote_text.strip() if command.quote_text is not None else None
+    if existing_content.get("quoteText") != quote:
+        return False
 
     existing_fwd = existing_content.get("forwardedFrom")
     if command.forwarded_from is None:

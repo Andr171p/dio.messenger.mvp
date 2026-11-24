@@ -1,19 +1,11 @@
-import { DIODESK_PROVIDER } from "@dio/messenger-core";
+import { DIODESK_PROVIDER, type components } from "@dio/messenger-core";
 import { Badge, Button, Icon, Spinner } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import styles from "./ContextResourcePanel.module.css";
 
-interface ResourcePreview {
-  number?: string;
-  title?: string;
-  status?: string;
-  priority?: string;
-  assigneeDisplayName?: string;
-  access?: "full" | "limited" | "denied";
-  ref?: { resourceId?: string };
-}
+type ResourcePreview = components["schemas"]["ResourcePreviewDTO"];
 
 export function ContextResourcePanel() {
   const resourceId = useUiStore((s) => s.contextResourceId);
@@ -30,11 +22,24 @@ export function ContextResourcePanel() {
   const preview = useQuery({
     queryKey: ["resource-preview", apiResourceId, conversationId],
     enabled: !!http && !!apiResourceId && !!open,
+    refetchOnMount: "always",
     queryFn: async () => {
+      let id = resourceUuid ?? undefined;
+      if (!id && conversationId && resourceId) {
+        const lookup = new URLSearchParams({ conversationId, q: resourceId });
+        const matches = await http!.get<ResourcePreview[]>(
+          `/v1/resources/tickets/search?${lookup}`,
+        );
+        id = matches.find(
+          (row) => row.number.toLowerCase() === resourceId.toLowerCase(),
+        )?.ref.resourceId;
+      }
+      if (!id) throw new Error("Заявка недоступна");
       const params = new URLSearchParams({
         provider: DIODESK_PROVIDER,
         resourceType: "ticket",
-        resourceId: apiResourceId!,
+        resourceId: id,
+        includeActivity: "true",
       });
       if (conversationId) params.set("conversationId", conversationId);
       return http!.get<ResourcePreview>(`/v1/resources/preview?${params}`);
@@ -49,15 +54,19 @@ export function ContextResourcePanel() {
     );
   }
 
-  const limited = preview.data?.access === "limited" || preview.data?.access === "denied";
+  const denied = preview.data?.access === "denied";
+  const limited = preview.data?.access === "limited";
+  const visible = !!preview.data && !denied && !preview.isError && !preview.isFetching;
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Заявка DIO Desk</p>
-          <h2>{preview.data?.number ?? resourceId}</h2>
-          {preview.data?.title ? <p className={styles.title}>{preview.data.title}</p> : null}
+          <h2>{visible ? (preview.data?.number ?? resourceId) : resourceId}</h2>
+          {visible && preview.data?.title ? (
+            <p className={styles.title}>{preview.data.title}</p>
+          ) : null}
         </div>
         <Button
           variant="ghost"
@@ -74,41 +83,91 @@ export function ContextResourcePanel() {
       </div>
       {preview.isFetching ? <Spinner size="sm" /> : null}
       {preview.isError ? (
-        <p className={styles.note}>Не удалось загрузить preview (проверьте ACL).</p>
+        <p role="alert" className={styles.note}>
+          Не удалось открыть заявку.{" "}
+          <button type="button" onClick={() => void preview.refetch()}>
+            Повторить
+          </button>
+        </p>
       ) : null}
-      {limited ? (
+      {denied ? (
+        <Badge tone="warning">Заявка недоступна</Badge>
+      ) : visible && limited ? (
         <Badge tone="warning">Ограниченный доступ</Badge>
-      ) : preview.data ? (
-        <Badge tone="success">Preview</Badge>
       ) : null}
-      <dl className={styles.meta}>
-        <dt>Статус</dt>
-        <dd>{preview.data?.status ?? "—"}</dd>
-        <dt>Приоритет</dt>
-        <dd>{preview.data?.priority ?? "—"}</dd>
-        <dt>Исполнитель</dt>
-        <dd>{preview.data?.assigneeDisplayName ?? "—"}</dd>
-      </dl>
-      <p className={styles.note}>
-        Карточка не расширяет права: данные только из безопасного preview API (
-        {DIODESK_PROVIDER}).
-      </p>
-      <Button
-        variant="primary"
-        className={styles.openDesk}
-        onClick={() => {
-          const desk = import.meta.env.VITE_DIODESK_WEB_URL ?? "http://localhost:3000";
-          const id = preview.data?.ref?.resourceId ?? apiResourceId;
-          const number = preview.data?.number ?? resourceId;
-          window.open(
-            `${desk.replace(/\/$/, "")}/tickets/${encodeURIComponent(String(id ?? number))}`,
-            "_blank",
-            "noopener,noreferrer",
-          );
-        }}
-      >
-        Открыть в DIO Desk
-      </Button>
+      {visible ? (
+        <>
+          <dl className={styles.meta}>
+            <dt>Статус</dt>
+            <dd>{preview.data?.status ?? "—"}</dd>
+            <dt>Приоритет</dt>
+            <dd>{preview.data?.priority ?? "—"}</dd>
+            <dt>Исполнитель</dt>
+            <dd>{preview.data?.assigneeDisplayName ?? "—"}</dd>
+          </dl>
+          {preview.data?.updatedAt ? (
+            <p className={styles.note}>
+              Обновлено {new Date(preview.data.updatedAt).toLocaleString("ru-RU")}
+            </p>
+          ) : null}
+          {preview.data?.description ? (
+            <section>
+              <h3>Описание</h3>
+              <p className={styles.description}>{preview.data.description}</p>
+            </section>
+          ) : null}
+          {preview.data?.attachments ? (
+            <section>
+              <h3>Вложения</h3>
+              {preview.data.attachments.length ? (
+                <ul>
+                  {preview.data.attachments.map((item, index) => (
+                    <li key={index}>
+                      {item.filename} · {Math.max(1, Math.round(item.size / 1024))} КБ
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.note}>Вложений пока нет</p>
+              )}
+            </section>
+          ) : null}
+          {preview.data?.activity ? (
+            <section>
+              <h3>Активность</h3>
+              {preview.data.activity.length ? (
+                <ul>
+                  {preview.data.activity.map((item, index) => (
+                    <li key={index}>
+                      {item.action} ·{" "}
+                      {new Date(item.occurredAt).toLocaleString("ru-RU")}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.note}>Событий пока нет</p>
+              )}
+            </section>
+          ) : null}
+          <Button
+            variant="primary"
+            className={styles.openDesk}
+            onClick={() => {
+              const desk =
+                import.meta.env.VITE_DIODESK_WEB_URL ?? "http://localhost:3000";
+              const id = preview.data?.ref?.resourceId ?? apiResourceId;
+              const number = preview.data?.number ?? resourceId;
+              window.open(
+                `${desk.replace(/\/$/, "")}/tickets/${encodeURIComponent(String(id ?? number))}`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+            }}
+          >
+            Открыть в DIO Desk
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 }

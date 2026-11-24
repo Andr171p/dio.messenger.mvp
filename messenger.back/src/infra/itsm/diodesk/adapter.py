@@ -4,10 +4,18 @@ from uuid import UUID
 from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
 from src.application.itsm.dtos import (
     ResourceActionResultDTO,
+    ResourceActivityDTO,
+    ResourceAttachmentDTO,
     ResourcePreviewDTO,
     ResourceReference,
 )
-from src.application.itsm.exceptions import UnsupportedItsmActionError, UnsupportedResourceError
+from src.application.itsm.exceptions import (
+    ItsmForbiddenError,
+    ItsmNotFoundError,
+    ItsmProviderError,
+    UnsupportedItsmActionError,
+    UnsupportedResourceError,
+)
 from src.application.itsm.policies import apply_preview_visibility
 from src.infra.services.diodesk import DioDeskTicketsClient
 
@@ -43,6 +51,12 @@ def _map_preview(ref: ResourceReference, raw: dict[str, Any], *, guest: bool) ->
         ticket_type=str(raw["type"]) if raw.get("type") is not None else None,
         assignee_display_name=assignee_name,
         access="full",
+        description=raw.get("description"),
+        updated_at=raw.get("updated_at"),
+        attachments=[
+            ResourceAttachmentDTO(filename=item["original_filename"], content_type=item["mime_type"], size=item["size_bytes"])
+            for item in raw["attachments"]
+        ] if "attachments" in raw else None,
     )
     return apply_preview_visibility(preview, guest=guest)
 
@@ -59,10 +73,31 @@ class DioDeskItsmAdapter:
         *,
         access_token: str,
         guest: bool = False,
+        include_activity: bool = False,
     ) -> ResourcePreviewDTO:
         ticket_id = _require_ticket_ref(ref)
         raw = await self._client.get_ticket(ticket_id, access_token=access_token)
-        return _map_preview(ref, raw, guest=guest)
+        preview = _map_preview(ref, raw, guest=guest)
+        if guest or not include_activity:
+            return preview
+        try:
+            rows = await self._client.ticket_activity(ticket_id, access_token=access_token)
+        except (ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError):
+            return preview
+        activity = [
+            ResourceActivityDTO(action=row["action"], occurred_at=row["occurred_on"])
+            for row in rows
+        ]
+        return preview.model_copy(update={"activity": activity})
+
+    async def search(self, query: str, *, access_token: str) -> list[ResourcePreviewDTO]:
+        results = await self._client.search_tickets(query, access_token=access_token)
+        return [
+            _map_preview(ResourceReference(
+                provider=DIODESK_PROVIDER, resource_type=TICKET_RESOURCE_TYPE, resource_id=item["id"],
+            ), item, guest=True)
+            for item in results
+        ]
 
     async def execute(
         self,

@@ -13,6 +13,7 @@
 5a. [**architecture/FRONTEND_ARCHITECTURE.md**](architecture/FRONTEND_ARCHITECTURE.md) · [**development/FRONTEND_CODE_STANDARDS.md**](development/FRONTEND_CODE_STANDARDS.md) — frontend.
 5b. [**status/STATUS-frontend-mvp.md**](status/STATUS-frontend-mvp.md) — статус frontend MVP.
 5c. [**development/FRONTEND_PRODUCTION_ITERATIONS.md**](development/FRONTEND_PRODUCTION_ITERATIONS.md) — итерации production frontend (I0–I14).
+5d. [**development/FRONTEND_DESIGN_REVIEW_PLAN.md**](development/FRONTEND_DESIGN_REVIEW_PLAN.md) — сверка с Penpot, воспроизведённые дефекты и порядок исправлений на фронте и API.
 6. [**adr/**](adr/) — Architecture Decision Records (устойчивые решения с trade-offs).
 7. [**decisions/**](decisions/) — рабочие решения итераций (не ADR).
 8. [**status/**](status/) — отчёты о реализации и проверках по итерациям.

@@ -13,11 +13,13 @@ import { WebSocketClient } from "../transport/websocketClient.js";
 import { applyEvent } from "./applyEvent.js";
 import { SnapshotRequiredError } from "./errors.js";
 import { wipeConversation } from "./wipeConversation.js";
-import { extractPlainText } from "../content/blocks.js";
+import { projectMessage, type ServerMessage } from "./projectMessage.js";
 
 export interface SyncEngineOptions {
   db: MessengerDatabase;
   accountKey: AccountKey;
+  userId?: string;
+  onAccessRevoked?: (conversationId: string) => void;
   http: HttpClient;
   wsBaseUrl: string;
 }
@@ -28,6 +30,10 @@ export interface SyncEngine {
   requestFlush(): void;
   synchronize(): Promise<void>;
   watchConversation(conversationId: string): void;
+  loadHistory(
+    conversationId: string,
+    options?: { beforeSeq?: number; aroundMessageId?: string },
+  ): Promise<ServerMessage[]>;
   sendTyping(conversationId: string, started: boolean): void;
   getStatus(): SyncStatus;
   subscribe(listener: (status: SyncStatus) => void): () => void;
@@ -57,16 +63,7 @@ interface SnapshotResponse {
     lastReadMessageSeq?: number;
     lastDeliveredMessageSeq?: number;
   };
-  messages: Array<{
-    id: string;
-    clientMessageId?: string;
-    createdSeq: number;
-    revision?: number;
-    senderId: string;
-    content?: unknown;
-    replyToId?: string | null;
-    createdAt?: string;
-  }>;
+  messages: ServerMessage[];
   messagesTruncated?: boolean;
   snapshotEventSeq: number;
 }
@@ -132,12 +129,16 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     http: options.http,
     wsBaseUrl: options.wsBaseUrl,
     onConnectionChange: (connected) => {
-      notify({ wsConnected: connected, runtime: connected ? "connected" : "disconnected" });
+      notify({
+        wsConnected: connected,
+        runtime: connected ? "connected" : "disconnected",
+      });
       if (connected) {
         void synchronize();
       }
     },
     onAccessRevoked: ({ conversationId }) => {
+      options.onAccessRevoked?.(conversationId);
       void (async () => {
         ws.unsubscribeConversation(conversationId);
         await wipeConversation(options.db, options.accountKey, conversationId);
@@ -228,7 +229,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     });
   };
 
-  async function upsertConversationsFromDirectory(): Promise<Map<string, ApiConversation>> {
+  async function upsertConversationsFromDirectory(): Promise<
+    Map<string, ApiConversation>
+  > {
     const list = await options.http.get<ApiConversation[]>("/v1/conversations");
     const map = new Map<string, ApiConversation>();
     for (const row of list) {
@@ -272,40 +275,48 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           .filter((m) => m.sendStatus === "sent" || m.serverId !== undefined)
           .delete();
 
+        const messages = snap.messages
+          .filter((message) => message.createdSeq >= historyFromSeq)
+          .map((message) =>
+            projectMessage(message, options.accountKey, conversationId, options.userId),
+          );
+        const latest = messages
+          .filter((message) => !message.deletedAt)
+          .reduce<(typeof messages)[number] | undefined>(
+            (last, message) =>
+              !last || (message.createdSeq ?? 0) > (last.createdSeq ?? 0)
+                ? message
+                : last,
+            undefined,
+          );
         const existing = await options.db.conversations.get(conversationId);
         await options.db.conversations.put({
           accountKey: options.accountKey,
           id: conversationId,
           title: snap.conversation.title?.trim() || existing?.title || conversationId,
-          lastMessagePreview: existing?.lastMessagePreview,
-          lastMessageAt: existing?.lastMessageAt,
-          unreadCount: existing?.unreadCount ?? 0,
+          lastMessagePreview: latest?.content.slice(0, 120),
+          lastMessageAt: latest?.createdAt,
+          unreadCount: messages.filter(
+            (message) =>
+              !message.isOutgoing &&
+              !message.deletedAt &&
+              (message.createdSeq ?? 0) > (snap.membership.lastReadMessageSeq ?? 0),
+          ).length,
+          lastReadMessageSeq: snap.membership.lastReadMessageSeq,
           isGuest: existing?.isGuest ?? false,
           hasExternalMembers: existing?.hasExternalMembers,
           kind: mapConversationKind(snap.conversation.type) ?? existing?.kind,
           memberCount: existing?.memberCount,
           isPinned: existing?.isPinned ?? false,
-          updatedAt: Date.now(),
+          updatedAt: latest?.createdAt ?? existing?.updatedAt ?? Date.now(),
         });
 
-        for (const msg of snap.messages) {
-          if (msg.createdSeq < historyFromSeq) continue;
-          const clientMessageId = msg.clientMessageId ?? msg.id;
-          const content = extractPlainText(msg.content) || "";
+        for (const message of messages) {
+          const local = await options.db.messages.get(message.localId);
           await options.db.messages.put({
-            accountKey: options.accountKey,
-            localId: clientMessageId,
-            clientMessageId,
-            conversationId,
-            serverId: msg.id,
-            content,
-            createdAt: msg.createdAt ? Date.parse(msg.createdAt) : Date.now(),
-            createdSeq: msg.createdSeq,
-            revision: msg.revision ?? 1,
-            replyToId: msg.replyToId ?? undefined,
-            sendStatus: "sent",
-            isOutgoing: false,
-            authorId: msg.senderId,
+            ...local,
+            ...message,
+            isOutgoing: message.isOutgoing || local?.isOutgoing === true,
           });
         }
 
@@ -334,6 +345,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     for (const local of localConversations) {
       if (!allowed.has(local.id)) {
         ws.unsubscribeConversation(local.id);
+        options.onAccessRevoked?.(local.id);
         await wipeConversation(options.db, options.accountKey, local.id);
       }
     }
@@ -349,10 +361,13 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         lastMessagePreview: existing?.lastMessagePreview,
         lastMessageAt: existing?.lastMessageAt,
         unreadCount: existing?.unreadCount ?? 0,
+        lastReadMessageSeq: Math.max(
+          existing?.lastReadMessageSeq ?? 0,
+          entry.lastReadMessageSeq ?? 0,
+        ),
         isGuest:
           meta?.hasExternalMembers ?? entry.isGuest ?? existing?.isGuest ?? false,
-        hasExternalMembers:
-          meta?.hasExternalMembers ?? existing?.hasExternalMembers,
+        hasExternalMembers: meta?.hasExternalMembers ?? existing?.hasExternalMembers,
         kind: mapConversationKind(meta?.type) ?? existing?.kind,
         memberCount: meta?.memberCount ?? existing?.memberCount,
         isPinned: existing?.isPinned ?? false,
@@ -363,7 +378,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         options.accountKey,
         conversationId,
       ]);
-      let afterSeq = cursor?.eventSeq ?? 0;
+      const afterSeq = cursor?.eventSeq ?? 0;
       const historyFromSeq = entry.historyFromSeq ?? 1;
       if (afterSeq > 0 && afterSeq + 1 < historyFromSeq) {
         // Cursor behind retained history → snapshot
@@ -387,8 +402,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           } else {
             // Continue other conversations — one failure must not empty the list.
             notify({
-              lastError:
-                error instanceof Error ? error.message : String(error),
+              lastError: error instanceof Error ? error.message : String(error),
             });
           }
         }
@@ -402,7 +416,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   ): Promise<number> {
     const page = await options.http.get<
       ApiEvent[] | { events: ApiEvent[]; snapshotRequired?: boolean }
-    >(`/v1/conversations/${conversationId}/events?afterSeq=${afterSeq}&limit=${EVENTS_PAGE_LIMIT}`);
+    >(
+      `/v1/conversations/${conversationId}/events?afterSeq=${afterSeq}&limit=${EVENTS_PAGE_LIMIT}`,
+    );
 
     const events = Array.isArray(page) ? page : page.events;
     const snapshotRequired = Array.isArray(page)
@@ -415,7 +431,12 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
 
     let lastApplied = afterSeq;
     for (const raw of events) {
-      await applyEvent(options.db, options.accountKey, toConversationEvent(raw));
+      await applyEvent(
+        options.db,
+        options.accountKey,
+        toConversationEvent(raw),
+        options.userId,
+      );
       lastApplied = raw.seq;
     }
     return lastApplied;
@@ -507,6 +528,35 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     synchronize,
     watchConversation(conversationId: string) {
       ws.subscribeConversation(conversationId);
+    },
+    async loadHistory(conversationId, { beforeSeq, aroundMessageId } = {}) {
+      const params = new URLSearchParams({ limit: "50" });
+      if (beforeSeq !== undefined) params.set("beforeSeq", String(beforeSeq));
+      if (aroundMessageId) params.set("aroundMessageId", aroundMessageId);
+      const messages = await options.http.get<ServerMessage[]>(
+        `/v1/conversations/${conversationId}/messages?${params}`,
+      );
+      await options.db.transaction(
+        "rw",
+        options.db.messages,
+        options.db.conversations,
+        async () => {
+          if (!(await options.db.conversations.get(conversationId))) return;
+          for (const entry of messages) {
+            const message = projectMessage(
+              entry,
+              options.accountKey,
+              conversationId,
+              options.userId,
+            );
+            const existing = await options.db.messages.get(message.localId);
+            if (!existing || existing.revision < message.revision) {
+              await options.db.messages.put({ ...existing, ...message });
+            }
+          }
+        },
+      );
+      return messages;
     },
     sendTyping(conversationId: string, started: boolean) {
       ws.sendTyping(conversationId, started);

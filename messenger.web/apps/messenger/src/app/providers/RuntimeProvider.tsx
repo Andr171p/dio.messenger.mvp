@@ -3,6 +3,7 @@ import {
   MediaUploadManager,
   createSyncEngine,
   openMessengerDatabase,
+  saveDraftUpload,
   closeMessengerDatabase,
   type MessengerDatabase,
   type SyncEngine,
@@ -17,9 +18,10 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "./AuthProvider.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { useUiStore } from "../../stores/uiStore.js";
 
-const messengerApi =
-  import.meta.env.VITE_MESSENGER_API_URL ?? "http://127.0.0.1:8002";
+const messengerApi = import.meta.env.VITE_MESSENGER_API_URL ?? "http://127.0.0.1:8002";
 
 interface RuntimeContextValue {
   db: MessengerDatabase | null;
@@ -36,6 +38,7 @@ const idleStatus: SyncStatus = { runtime: "idle", wsConnected: false };
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
   const { session, adapter, isAuthenticated, onSessionExpired } = useAuth();
+  const queries = useQueryClient();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(idleStatus);
   const [runtime, setRuntime] = useState<{
     db: MessengerDatabase | null;
@@ -54,6 +57,10 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated || !session) {
+      const ui = useUiStore.getState();
+      ui.setSelectedConversation(null);
+      ui.setSearchPanelOpen(false);
+      ui.setNewChatOpen(false);
       const prev = activeAccountRef.current;
       activeAccountRef.current = null;
       setRuntime({
@@ -86,10 +93,20 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     const sync = createSyncEngine({
       db,
       accountKey,
+      userId: session.userId,
+      onAccessRevoked: (conversationId) => {
+        const ui = useUiStore.getState();
+        if (ui.selectedConversationId === conversationId)
+          ui.setSelectedConversation(null);
+        ui.setSearchPanelOpen(false);
+        queries.clear();
+      },
       http,
       wsBaseUrl: wsBase,
     });
-    const media = new MediaUploadManager(http);
+    const media = new MediaUploadManager(http, (conversationId, assetId, filename) =>
+      saveDraftUpload(db, accountKey, conversationId, assetId, filename),
+    );
 
     setRuntime({ db, sync, http, media, accountKey });
 
@@ -107,7 +124,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       void sync.stop();
       // Keep IndexedDB open across Strict Mode remount; close only on logout.
     };
-  }, [isAuthenticated, session, adapter, onSessionExpired]);
+  }, [isAuthenticated, session, adapter, onSessionExpired, queries]);
 
   const value: RuntimeContextValue = {
     db: runtime.db,
