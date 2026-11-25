@@ -6,6 +6,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt, PositiveInt
 from pydantic.alias_generators import to_camel
 
+from src.domain.media.types import MediaPresentation
+
 
 class TextBlock(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
@@ -19,6 +21,7 @@ class MediaBlock(BaseModel):
 
     type: Literal["media"] = "media"
     asset_id: UUID
+    presentation: MediaPresentation = MediaPresentation.FILE
 
 
 class ResourceBlock(BaseModel):

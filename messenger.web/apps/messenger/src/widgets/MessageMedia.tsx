@@ -1,8 +1,13 @@
 import { Icon } from "@dio/messenger-ui";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
-import { HttpError, type components } from "@dio/messenger-core";
+import {
+  HttpError,
+  type MediaPresentation,
+  type components,
+} from "@dio/messenger-core";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { requiresMediaProxy, useMediaSource } from "./useMediaSource.js";
+import { VoicePlayer } from "./VoicePlayer.js";
 import styles from "./MessageTimeline.module.css";
 
 type PreviewFile = Pick<
@@ -12,9 +17,11 @@ type PreviewFile = Pick<
 
 export function MessageMedia({
   assetId,
+  presentation,
   onPreview,
 }: {
   assetId: string;
+  presentation?: MediaPresentation;
   onPreview: (asset: PreviewFile) => void;
 }) {
   const { http } = useRuntime();
@@ -104,6 +111,10 @@ export function MessageMedia({
         {asset?.filename ?? "Вложение"} · {asset ? "Проверяется" : "Загрузка…"}
       </div>
     );
+  }
+
+  if (presentation === "voice") {
+    return <VoicePlayer assetId={assetId} />;
   }
 
   const showImage = image && source && failedSource !== source && !sourceError;

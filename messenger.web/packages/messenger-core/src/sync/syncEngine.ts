@@ -5,6 +5,7 @@ import type {
   SyncManifest,
   SyncStatus,
   TypingState,
+  ConversationActivity,
 } from "../models/types.js";
 import type { MessengerDatabase } from "../storage/database.js";
 import { OutboxProcessor } from "../outbox/outboxProcessor.js";
@@ -41,11 +42,16 @@ export interface SyncEngine {
       refreshReactions?: boolean;
     },
   ): Promise<ServerMessage[]>;
-  sendTyping(conversationId: string, started: boolean): void;
+  sendTyping(
+    conversationId: string,
+    started: boolean,
+    activity?: ConversationActivity,
+  ): void;
   getStatus(): SyncStatus;
   subscribe(listener: (status: SyncStatus) => void): () => void;
   getPresence(userId: string): PresenceState | undefined;
   getTyping(conversationId: string): TypingState | undefined;
+  getRecordingAudio(conversationId: string): TypingState | undefined;
   subscribePresence(listener: () => void): () => void;
 }
 
@@ -113,6 +119,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
   const presenceListeners = new Set<() => void>();
   const presenceByUser = new Map<string, PresenceState>();
   const typingByConversation = new Map<string, TypingState>();
+  const recordingByConversation = new Map<string, TypingState>();
   const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const delivered = new Map<string, number>();
   const pulling = new Map<string, Promise<void>>();
@@ -137,6 +144,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     for (const timer of typingTimers.values()) clearTimeout(timer);
     typingTimers.clear();
     typingByConversation.clear();
+    recordingByConversation.clear();
     notifyPresence();
   }
 
@@ -195,7 +203,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       })().catch(() => undefined);
     },
     onEphemeral: ({ type, payload }) => {
-      if (type === "typing.updated") {
+      if (type === "typing.updated" || type === "recording_audio.updated") {
+        const states =
+          type === "typing.updated" ? typingByConversation : recordingByConversation;
         const conversationId =
           typeof payload.conversationId === "string" ? payload.conversationId : null;
         if (!conversationId) return;
@@ -205,10 +215,10 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             ? [payload.userId]
             : [];
         const active = payload.active !== false && payload.status !== "stopped";
-        const prev = typingByConversation.get(conversationId);
+        const prev = states.get(conversationId);
         const nextIds = new Set(prev?.userIds ?? []);
         for (const id of userIds) {
-          const key = conversationId + ":" + id;
+          const key = type + ":" + conversationId + ":" + id;
           clearTimeout(typingTimers.get(key));
           typingTimers.delete(key);
           if (!active) {
@@ -220,18 +230,18 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             key,
             setTimeout(() => {
               typingTimers.delete(key);
-              const state = typingByConversation.get(conversationId);
+              const state = states.get(conversationId);
               if (state) {
                 state.userIds = state.userIds.filter((userId) => userId !== id);
-                if (!state.userIds.length) typingByConversation.delete(conversationId);
+                if (!state.userIds.length) states.delete(conversationId);
               }
               notifyPresence();
             }, 6_000),
           );
         }
-        if (!nextIds.size) typingByConversation.delete(conversationId);
+        if (!nextIds.size) states.delete(conversationId);
         else
-          typingByConversation.set(conversationId, {
+          states.set(conversationId, {
             conversationId,
             userIds: [...nextIds],
             updatedAt: Date.now(),
@@ -771,8 +781,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       );
       return messages;
     },
-    sendTyping(conversationId: string, started: boolean) {
-      ws.sendTyping(conversationId, started);
+    sendTyping(conversationId, started, activity) {
+      ws.sendTyping(conversationId, started, activity);
     },
     getStatus() {
       return { ...status };
@@ -786,6 +796,9 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     },
     getTyping(conversationId: string) {
       return typingByConversation.get(conversationId);
+    },
+    getRecordingAudio(conversationId: string) {
+      return recordingByConversation.get(conversationId);
     },
     subscribePresence(listener) {
       presenceListeners.add(listener);

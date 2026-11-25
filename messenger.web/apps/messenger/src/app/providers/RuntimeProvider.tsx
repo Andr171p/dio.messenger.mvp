@@ -5,6 +5,9 @@ import {
   createSyncEngine,
   openMessengerDatabase,
   saveDraftUpload,
+  removeVoiceRecording,
+  queueUploadedVoiceMessage,
+  resumePendingVoiceUploads,
   closeMessengerDatabase,
   type MessengerDatabase,
   type SyncEngine,
@@ -151,12 +154,40 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     });
     const media = new MediaUploadManager(
       http,
-      (conversationId, assetId, filename) =>
-        saveDraftUpload(db, accountKey, conversationId, assetId, filename),
+      async (job) => {
+        if (!job.assetId) return;
+        if (job.sendAsMessage && job.voiceUploadId) {
+          await queueUploadedVoiceMessage(
+            db,
+            accountKey,
+            job.voiceUploadId,
+            job.assetId,
+            session.userId,
+          );
+          sync.requestFlush();
+          return;
+        }
+        await saveDraftUpload(
+          db,
+          accountKey,
+          job.conversationId,
+          job.assetId,
+          job.file.name,
+          job.presentation,
+        );
+        if (job.voiceUploadId) {
+          await removeVoiceRecording(db, accountKey, job.voiceUploadId);
+        }
+      },
       lifetime.signal,
     );
 
     setRuntime({ db, sync, http, media, accountKey });
+
+    const resumeVoice = () => {
+      void resumePendingVoiceUploads(db, accountKey, media).catch(() => undefined);
+    };
+    resumeVoice();
 
     const unsub = sync.subscribe(setSyncStatus);
     const reconcile = () => {
@@ -167,6 +198,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         .catch(() => undefined);
     };
     window.addEventListener("online", reconcile);
+    window.addEventListener("online", resumeVoice);
     window.addEventListener("offline", sync.pauseSending);
     window.addEventListener("focus", reconcile);
     window.addEventListener("pageshow", reconcile);
@@ -183,6 +215,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       unsub();
       lifetime.abort();
       window.removeEventListener("online", reconcile);
+      window.removeEventListener("online", resumeVoice);
       window.removeEventListener("offline", sync.pauseSending);
       window.removeEventListener("focus", reconcile);
       window.removeEventListener("pageshow", reconcile);

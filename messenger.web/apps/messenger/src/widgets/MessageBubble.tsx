@@ -292,6 +292,7 @@ function MessageBody({
             <MessageMedia
               key={`m-${block.assetId}`}
               assetId={block.assetId}
+              presentation={block.presentation}
               onPreview={(media) => onPreview(block.assetId, media)}
             />
           );

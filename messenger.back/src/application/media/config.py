@@ -19,7 +19,14 @@ class MediaConfig(BaseSettings):
             "audio/mpeg",
             "audio/ogg",
             "audio/webm",
+            "audio/wav",
+            "audio/mp4",
             "application/octet-stream",
         }
     )
     max_filename_length: NonNegativeInt = Field(default=255)
+    waveform_bars: PositiveInt = Field(default=96)
+    waveform_sample_rate: PositiveInt = Field(default=8000)
+    # Переопределение путей к ffmpeg/ffprobe; пустое значение = поиск в PATH.
+    ffmpeg_path: str = Field(default="")
+    ffprobe_path: str = Field(default="")

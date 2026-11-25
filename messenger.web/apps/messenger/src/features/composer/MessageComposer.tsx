@@ -1,17 +1,19 @@
 import {
   editMessage,
   readMessageBlocks,
+  saveVoiceRecording,
   sendMessage,
   upsertDraft,
   type ContentBlock,
 } from "@dio/messenger-core";
 import { Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
+import { VoiceRecorder } from "./VoiceRecorder.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { maskSpoilers } from "../../widgets/MessageFormatting.js";
 import styles from "./MessageComposer.module.css";
@@ -68,6 +70,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTyping = useRef(0);
+  const reportVoiceRecording = useCallback(
+    (active: boolean) => sync?.sendTyping(conversationId, active, "recording_audio"),
+    [sync, conversationId],
+  );
 
   const resizeInput = () => {
     const el = inputRef.current;
@@ -258,6 +264,36 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     }
   };
 
+  const onVoiceRecording = async (file: File) => {
+    if (
+      !db ||
+      !accountKey ||
+      !media ||
+      !session ||
+      policy?.allowAttachments === false
+    ) {
+      throw new Error("Голосовое сообщение недоступно в этой беседе.");
+    }
+    let voiceUploadId: string;
+    try {
+      voiceUploadId = await saveVoiceRecording(db, accountKey, {
+        conversationId,
+        blob: file,
+        contentType: file.type || "audio/webm",
+        filename: file.name,
+        send: reply ? { draftReply: reply } : {},
+      });
+    } catch {
+      throw new Error("Не удалось сохранить голосовое для отправки.");
+    }
+    if (reply && useUiStore.getState().replyTarget === reply) clearReply(null);
+    await media.enqueue(file, conversationId, {
+      presentation: "voice",
+      voiceUploadId,
+      sendAsMessage: true,
+    });
+  };
+
   useEffect(() => {
     if (!media || !hydrated || editingId || sending) return;
     const updateJobs = () => {
@@ -266,12 +302,21 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         if (job.status === "ready" && job.assetId) {
           const assetId = job.assetId;
           media.dismiss(job.id);
+          if (job.sendAsMessage) {
+            setUploadNote(null);
+            setFailedUpload((current) => (current === job.id ? null : current));
+            continue;
+          }
+          const block =
+            job.presentation && job.presentation !== "file"
+              ? { type: "media" as const, assetId, presentation: job.presentation }
+              : { type: "media" as const, assetId };
           setAttachments((items) =>
             items.some(
               ({ block }) => block.type === "media" && block.assetId === assetId,
             )
               ? items
-              : [...items, { label: job.file.name, block: { type: "media", assetId } }],
+              : [...items, { label: job.file.name, block }],
           );
           setUploadNote(null);
           setFailedUpload((current) => (current === job.id ? null : current));
@@ -501,7 +546,37 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             </button>
           ))
         : null}
-      <div className={styles.composerShell}>
+      <VoiceRecorder
+        onStart={() => {
+          closeTools();
+          if (typingTimer.current) {
+            clearTimeout(typingTimer.current);
+            typingTimer.current = null;
+            sync?.sendTyping(conversationId, false);
+          }
+        }}
+        onRecording={reportVoiceRecording}
+        onSubmit={onVoiceRecording}
+        maxBytes={policy?.maxAttachmentBytes ?? 50 * 1024 * 1024}
+        disabled={attachDisabled || !media}
+        idleSend={
+          text.trim() || attachments.length || editingId ? (
+            <div className={styles.sendSlot}>
+              <IconButton
+                label="Отправить"
+                onMouseDown={(event) => event.preventDefault()}
+                icon="send"
+                variant="send"
+                iconSize={18}
+                onClick={() => void onSend()}
+                disabled={
+                  disabled || (!text.trim() && (!attachments.length || !!editingId))
+                }
+              />
+            </div>
+          ) : null
+        }
+      >
         <div className={styles.composerRow}>
           <input
             ref={fileInputRef}
@@ -631,22 +706,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             </span>
           </div>
         </div>
-        <div className={styles.sendSlot}>
-          <IconButton
-            label="Отправить"
-            onMouseDown={(event) => event.preventDefault()}
-            icon="send"
-            variant="send"
-            iconSize={18}
-            onClick={() => void onSend()}
-            disabled={
-              !hydrated ||
-              sending ||
-              (!text.trim() && (!attachments.length || !!editingId))
-            }
-          />
-        </div>
-      </div>
+      </VoiceRecorder>
       {tool === "emoji" ? (
         <div
           className={styles.emojiPicker}

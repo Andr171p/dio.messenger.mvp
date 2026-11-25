@@ -905,6 +905,8 @@ export interface components {
             type: "audio";
             /** Durationms */
             durationMs: number;
+            /** Waveform */
+            waveform?: number[];
         };
         /** AuditEventDTO */
         AuditEventDTO: {
@@ -1379,6 +1381,11 @@ export interface components {
              * Format: uuid
              */
             assetId: string;
+            /**
+             * Presentation
+             * @enum {string}
+             */
+            presentation?: "file" | "image" | "video" | "voice" | "video_note";
         };
         /** MediaGalleryKeyDTO */
         MediaGalleryKeyDTO: {

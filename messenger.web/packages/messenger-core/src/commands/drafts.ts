@@ -1,4 +1,5 @@
 import type { AccountKey, Draft } from "../models/types.js";
+import type { MediaPresentation } from "../content/blocks.js";
 import type { MessengerDatabase } from "../storage/database.js";
 import { conversationKey } from "../storage/keys.js";
 
@@ -44,6 +45,7 @@ export async function saveDraftUpload(
   conversationId: string,
   assetId: string,
   filename: string,
+  presentation?: MediaPresentation,
 ): Promise<void> {
   await db.transaction("rw", db.drafts, db.conversations, async () => {
     const conversation = await db.conversations.get(conversationId);
@@ -57,6 +59,10 @@ export async function saveDraftUpload(
       )
     )
       return;
+    const block =
+      presentation && presentation !== "file"
+        ? { type: "media" as const, assetId, presentation }
+        : { type: "media" as const, assetId };
     await db.drafts.put({
       id,
       accountKey,
@@ -64,10 +70,7 @@ export async function saveDraftUpload(
       content: "",
       ...draft,
       updatedAt: Date.now(),
-      attachments: [
-        ...attachments,
-        { label: filename, block: { type: "media", assetId } },
-      ],
+      attachments: [...attachments, { label: filename, block }],
     });
   });
 }

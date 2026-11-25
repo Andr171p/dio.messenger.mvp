@@ -1,0 +1,49 @@
+.player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 6px 8px;
+}
+
+.playButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  color: var(--dio-waveform-progress);
+  background: var(--dio-accent-muted);
+  flex: none;
+}
+
+.playButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dio-text-secondary);
+  white-space: nowrap;
+}
+
+.rate {
+  border: none;
+  background: transparent;
+  color: var(--dio-waveform-progress);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.rate:hover {
+  background: var(--dio-accent-muted);
+}

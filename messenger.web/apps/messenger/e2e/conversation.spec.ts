@@ -680,9 +680,7 @@ test("переключает два закрепа и загружает отс�
   ).toBeVisible();
 });
 
-test("рисует Markdown, не показывает троеточие и отображает presence", async ({
-  page,
-}) => {
+test("рисует Markdown и отображает активность участников", async ({ page }) => {
   let socket: WebSocketRoute | undefined;
   await page.routeWebSocket("**/v1/ws?*", (route) => {
     socket = route;
@@ -712,6 +710,9 @@ test("рисует Markdown, не показывает троеточие и о�
   await page.route("**/v1/conversations/" + chatId + "/presence", (route) =>
     route.fulfill({ json: [{ userId, status: "online" }] }),
   );
+  await page.route("**/v1/directory/users?*", (route) =>
+    route.fulfill({ json: [{ id: source.senderId, fullName: "Анна Смирнова" }] }),
+  );
   await page.goto("/");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
   await expect(
@@ -733,17 +734,25 @@ test("рисует Markdown, не показывает троеточие и о�
   );
   await expect(page.getByText(/1 в сети/)).toBeVisible();
   await expect.poll(() => !!socket).toBe(true);
-  const typing = (status: string) =>
+  const activity = (type: string, status: string) =>
     socket!.send(
       JSON.stringify({
-        type: "typing.updated",
+        type,
         payload: { conversationId: chatId, userId: source.senderId, status },
       }),
     );
-  typing("started");
-  await expect(page.getByText("Участник печатает…")).toBeVisible();
-  typing("stopped");
-  await expect(page.getByText("Участник печатает…")).toBeHidden();
+  activity("typing.updated", "started");
+  const typing = page.getByText("Анна Смирнова печатает…");
+  const recording = page.getByText("Анна Смирнова записывает аудио…");
+  await expect(typing).toBeVisible();
+  activity("recording_audio.updated", "started");
+  await expect(recording).toBeVisible();
+  await expect(typing).toBeHidden();
+  activity("recording_audio.updated", "stopped");
+  await expect(recording).toBeHidden();
+  await expect(typing).toBeVisible();
+  activity("typing.updated", "stopped");
+  await expect(typing).toBeHidden();
 });
 
 test("открывает заявку по номеру и запрашивает защищённую ссылку на её вложение", async ({

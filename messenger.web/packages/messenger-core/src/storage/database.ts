@@ -6,6 +6,7 @@ import type {
   LocalMessage,
   OutboxItem,
   SyncCursor,
+  VoiceUpload,
 } from "../models/types.js";
 
 export const DB_NAME_PREFIX = "dio-messenger";
@@ -16,6 +17,7 @@ export class MessengerDatabase extends Dexie {
   drafts!: Table<Draft, string>;
   outbox!: Table<OutboxItem, string>;
   syncCursors!: Table<SyncCursor, [AccountKey, string]>;
+  voiceUploads!: Table<VoiceUpload, string>;
 
   constructor(accountKey: AccountKey) {
     super(`${DB_NAME_PREFIX}:${accountKey}`);
@@ -26,6 +28,9 @@ export class MessengerDatabase extends Dexie {
       drafts: "&id, [accountKey+conversationId]",
       outbox: "&id, accountKey, [accountKey+status+nextAttemptAt], [accountKey+type]",
       syncCursors: "&[accountKey+conversationId]",
+    });
+    this.version(2).stores({
+      voiceUploads: "&id, accountKey",
     });
   }
 }

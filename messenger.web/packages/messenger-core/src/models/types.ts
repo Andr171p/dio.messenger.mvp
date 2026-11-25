@@ -85,6 +85,18 @@ export interface Draft {
   updatedAt: number;
 }
 
+/** Незавершённая голосовая запись, ждущая upload (offline-persist в IndexedDB). */
+export interface VoiceUpload {
+  id: string;
+  accountKey: AccountKey;
+  conversationId: string;
+  blob: Blob;
+  contentType: string;
+  filename: string;
+  send?: Pick<Draft, "draftReply">;
+  createdAt: number;
+}
+
 export interface OutboxItem {
   id: string;
   accountKey: AccountKey;
@@ -187,6 +199,8 @@ export interface PresenceState {
   status: "online" | "offline";
   lastSeenAt?: number;
 }
+
+export type ConversationActivity = "typing" | "recording_audio";
 
 export interface TypingState {
   conversationId: string;

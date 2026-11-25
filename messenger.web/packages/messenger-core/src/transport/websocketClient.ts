@@ -1,4 +1,4 @@
-import type { ConversationEvent } from "../models/types.js";
+import type { ConversationActivity, ConversationEvent } from "../models/types.js";
 import type { HttpClient } from "./httpClient.js";
 
 interface WsTicketResponse {
@@ -14,9 +14,7 @@ export type WsEphemeralHandler = (event: {
   payload: Record<string, unknown>;
 }) => void;
 
-export type WsAccessRevokedHandler = (payload: {
-  conversationId: string;
-}) => void;
+export type WsAccessRevokedHandler = (payload: { conversationId: string }) => void;
 
 export interface WebSocketClientOptions {
   http: HttpClient;
@@ -27,9 +25,7 @@ export interface WebSocketClientOptions {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 function pickConversationId(
@@ -64,7 +60,11 @@ export function normalizeDurableEvent(
   if (!type || type.startsWith("subscription.") || type === "access.revoked") {
     return null;
   }
-  if (type.startsWith("typing.") || type.startsWith("presence.") || type.startsWith("receipt.")) {
+  if (
+    type.startsWith("typing.") ||
+    type.startsWith("presence.") ||
+    type.startsWith("receipt.")
+  ) {
     return null;
   }
 
@@ -78,7 +78,9 @@ export function normalizeDurableEvent(
   return {
     conversationId,
     eventSeq,
-    eventId: String(envelope.id ?? envelope.eventId ?? payload.id ?? crypto.randomUUID()),
+    eventId: String(
+      envelope.id ?? envelope.eventId ?? payload.id ?? crypto.randomUUID(),
+    ),
     type: type as ConversationEvent["type"],
     payload: {
       ...payload,
@@ -122,13 +124,17 @@ export class WebSocketClient {
     );
   }
 
-  sendTyping(conversationId: string, started: boolean): void {
+  sendTyping(
+    conversationId: string,
+    started: boolean,
+    activity?: ConversationActivity,
+  ): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     this.socket.send(
       JSON.stringify({
         id: crypto.randomUUID(),
         type: started ? "typing.started" : "typing.stopped",
-        payload: { conversationId },
+        payload: { conversationId, activity },
       }),
     );
   }
@@ -233,7 +239,11 @@ export class WebSocketClient {
         const type = typeof envelope.type === "string" ? envelope.type : "";
         const payload = asRecord(envelope.payload) ?? {};
 
-        if (type.startsWith("subscription.") || type === "typing.ack" || type === "presence.pong") {
+        if (
+          type.startsWith("subscription.") ||
+          type === "typing.ack" ||
+          type === "presence.pong"
+        ) {
           return;
         }
 
@@ -247,6 +257,7 @@ export class WebSocketClient {
 
         if (
           type === "typing.updated" ||
+          type === "recording_audio.updated" ||
           type === "presence.changed" ||
           type === "receipt.delivered_updated" ||
           type.startsWith("typing.") ||
