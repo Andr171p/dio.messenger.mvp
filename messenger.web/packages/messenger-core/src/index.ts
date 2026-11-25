@@ -6,9 +6,11 @@ export {
   parseComposerContent,
   readMessageBlocks,
   blocksToPlainPreview,
+  mediaPreviewLabel,
   extractPlainText,
   extractBlocks,
   type ContentBlock,
+  type MediaPresentation,
 } from "./content/blocks.js";
 export {
   extractTicketResourceId,
@@ -29,6 +31,12 @@ export { toggleReaction, type ToggleReactionInput } from "./commands/toggleReact
 export { pinMessage, type PinMessageInput } from "./commands/pinMessage.js";
 export { markConversationRead } from "./commands/readCursor.js";
 export { upsertDraft, clearDraft, saveDraftUpload } from "./commands/drafts.js";
+export {
+  saveVoiceRecording,
+  removeVoiceRecording,
+  listPendingVoiceUploads,
+  resumePendingVoiceUploads,
+} from "./commands/voiceUploads.js";
 
 export { applyEvent } from "./sync/applyEvent.js";
 export { applyEventProjection } from "./sync/applyEventProjection.js";
@@ -49,3 +57,6 @@ export { memoryAuthStore } from "./auth/memoryAuthStore.js";
 export type { AuthAdapter, LoginCredentials } from "./auth/types.js";
 
 export { MediaUploadManager } from "./media/MediaUploadManager.js";
+export { createAudioRecorder } from "./media/capture/audioRecorder.js";
+export type { AudioRecorder, VoiceRecordingResult } from "./media/capture/audioRecorder.js";
+export { resampleWaveform } from "./media/waveform.js";

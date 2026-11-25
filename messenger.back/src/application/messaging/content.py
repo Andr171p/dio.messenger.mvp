@@ -2,6 +2,7 @@ from typing import Any
 
 from uuid import UUID
 
+from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
 from src.application.messaging.config import MessagingConfig
 from src.application.messaging.dtos import (
     ContentBlock,
@@ -12,7 +13,7 @@ from src.application.messaging.dtos import (
 )
 from src.application.messaging.enrich import mentions_wire
 from src.application.messaging.exceptions import EmptyMessageError, MessageContentInvalidError
-from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
+from src.domain.media.types import MediaPresentation
 
 
 def normalize_text_block(text: str, *, max_length: int) -> str:
@@ -22,6 +23,31 @@ def normalize_text_block(text: str, *, max_length: int) -> str:
     if len(normalized) > max_length:
         raise MessageContentInvalidError(f"Message content exceeds {max_length} characters.")
     return normalized
+
+
+def _media_wire(block: MediaBlock) -> dict[str, Any]:
+    wire: dict[str, Any] = {"type": "media", "assetId": str(block.asset_id)}
+    if block.presentation is not MediaPresentation.FILE:
+        wire["presentation"] = block.presentation.value
+    return wire
+
+
+def _resource_wire(block: ResourceBlock) -> dict[str, Any]:
+    if block.provider != DIODESK_PROVIDER or block.resource_type != TICKET_RESOURCE_TYPE:
+        raise MessageContentInvalidError("Unsupported resource reference.")
+    try:
+        UUID(block.resource_id)
+    except ValueError as exc:
+        raise MessageContentInvalidError("resourceId must be a UUID.") from exc
+    wire: dict[str, Any] = {
+        "type": "resource",
+        "provider": block.provider,
+        "resourceType": block.resource_type,
+        "resourceId": block.resource_id,
+    }
+    if block.number:
+        wire["number"] = block.number.strip()
+    return wire
 
 
 def build_message_content(
@@ -42,23 +68,9 @@ def build_message_content(
             wire_blocks.append({"type": "text", "text": text})
         elif isinstance(block, MediaBlock):
             media_ids.append(block.asset_id)
-            wire_blocks.append({"type": "media", "assetId": str(block.asset_id)})
+            wire_blocks.append(_media_wire(block))
         elif isinstance(block, ResourceBlock):
-            if block.provider != DIODESK_PROVIDER or block.resource_type != TICKET_RESOURCE_TYPE:
-                raise MessageContentInvalidError("Unsupported resource reference.")
-            try:
-                UUID(block.resource_id)
-            except ValueError as exc:
-                raise MessageContentInvalidError("resourceId must be a UUID.") from exc
-            wire: dict[str, Any] = {
-                "type": "resource",
-                "provider": block.provider,
-                "resourceType": block.resource_type,
-                "resourceId": block.resource_id,
-            }
-            if block.number:
-                wire["number"] = block.number.strip()
-            wire_blocks.append(wire)
+            wire_blocks.append(_resource_wire(block))
         else:
             raise MessageContentInvalidError("Unsupported content block.")
 
@@ -84,15 +96,29 @@ def extract_searchable_text(content: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
-def extract_media_asset_ids(content: dict[str, Any]) -> list[UUID]:
+def extract_media_blocks(
+    content: dict[str, Any],
+) -> list[tuple[UUID, MediaPresentation]]:
+    """Медиа-блоки в порядке следования: (asset_id, presentation)."""
     blocks = content.get("blocks") or []
-    asset_ids: list[UUID] = []
+    result: list[tuple[UUID, MediaPresentation]] = []
     for item in blocks:
-        if isinstance(item, dict) and item.get("type") == "media":
-            raw = item.get("assetId") or item.get("asset_id")
-            if isinstance(raw, str):
-                asset_ids.append(UUID(raw))
-    return asset_ids
+        if not isinstance(item, dict) or item.get("type") != "media":
+            continue
+        raw = item.get("assetId") or item.get("asset_id")
+        if not isinstance(raw, str):
+            continue
+        presentation_raw = item.get("presentation")
+        try:
+            presentation = (
+                MediaPresentation(presentation_raw)
+                if presentation_raw is not None
+                else MediaPresentation.FILE
+            )
+        except ValueError:
+            presentation = MediaPresentation.FILE
+        result.append((UUID(raw), presentation))
+    return result
 
 
 def content_fingerprint(content: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
@@ -106,7 +132,8 @@ def content_fingerprint(content: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
             fingerprint.append(("text", str(item.get("text") or "")))
         elif block_type == "media":
             asset_id = item.get("assetId") or item.get("asset_id") or ""
-            fingerprint.append(("media", str(asset_id)))
+            presentation = item.get("presentation") or MediaPresentation.FILE.value
+            fingerprint.append(("media", str(asset_id), str(presentation)))
         elif block_type == "resource":
             fingerprint.append(
                 (

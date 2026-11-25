@@ -1,0 +1,28 @@
+.waveform {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 32px;
+  flex: 1;
+  min-width: 0;
+}
+
+.waveform.interactive {
+  cursor: pointer;
+}
+
+.bar,
+.barPlayed {
+  flex: 1;
+  min-width: 1px;
+  border-radius: 1px;
+  transition: height 80ms linear;
+}
+
+.bar {
+  background: var(--dio-fill-muted, rgba(128, 128, 128, 0.35));
+}
+
+.barPlayed {
+  background: var(--dio-accent, #2f6fed);
+}

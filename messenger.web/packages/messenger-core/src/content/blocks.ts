@@ -1,3 +1,5 @@
+export type MediaPresentation = "file" | "image" | "video" | "voice" | "video_note";
+
 export interface TextContentBlock {
   type: "text";
   text: string;
@@ -6,6 +8,7 @@ export interface TextContentBlock {
 export interface MediaContentBlock {
   type: "media";
   assetId: string;
+  presentation?: MediaPresentation;
 }
 
 export interface ResourceContentBlock {
@@ -64,13 +67,20 @@ export function blocksToPlainPreview(blocks: ContentBlock[]): string {
   return blocks
     .map((b) => {
       if (b.type === "text") return b.text;
-      if (b.type === "media") return "📎 Вложение";
+      if (b.type === "media") return mediaPreviewLabel(b.presentation);
       if (b.type === "resource") return b.number ? `#${b.number}` : "Заявка";
       if (b.type === "quote") return `«${b.text}»`;
       return "";
     })
     .filter(Boolean)
     .join(" ");
+}
+
+export function mediaPreviewLabel(presentation?: MediaPresentation): string {
+  if (presentation === "voice") return "🎤 Голосовое сообщение";
+  if (presentation === "video_note") return "🎥 Видеосообщение";
+  if (presentation === "image") return "🖼 Изображение";
+  return "📎 Вложение";
 }
 
 export function extractPlainText(content: unknown): string {
@@ -98,9 +108,10 @@ export function extractPlainText(content: unknown): string {
         text?: string;
         assetId?: string;
         number?: string;
+        presentation?: MediaPresentation;
       };
       if (b.type === "text" && typeof b.text === "string") return b.text;
-      if (b.type === "media") return "📎 Вложение";
+      if (b.type === "media") return mediaPreviewLabel(b.presentation);
       if (b.type === "resource") return b.number ? `#${b.number}` : "Заявка";
       if (b.type === "quote" && typeof b.text === "string") return `«${b.text}»`;
       return "";

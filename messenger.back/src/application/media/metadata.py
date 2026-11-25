@@ -31,6 +31,7 @@ class AudioMeta(BaseModel):
 
     type: Literal["audio"] = "audio"
     duration_ms: NonNegativeInt
+    waveform: list[int] | None = None
 
 
 class DocumentMeta(BaseModel):
@@ -61,3 +62,24 @@ def parse_media_meta(raw: dict | None) -> MediaMeta | None:
             return DocumentMeta.model_validate(raw)
         case _:
             return None
+
+
+def build_audio_meta(*, duration_ms: int, waveform: list[int] | None = None) -> dict:
+    meta: dict = {"type": "audio", "duration_ms": duration_ms}
+    if waveform is not None:
+        meta["waveform"] = waveform
+    return meta
+
+
+def build_video_meta(
+    *,
+    duration_ms: int,
+    width: int,
+    height: int,
+) -> dict:
+    return {
+        "type": "video",
+        "duration_ms": duration_ms,
+        "width": width,
+        "height": height,
+    }

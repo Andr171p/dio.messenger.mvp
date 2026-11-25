@@ -1,4 +1,5 @@
 import { HttpError, type HttpClient } from "../transport/httpClient.js";
+import type { MediaPresentation } from "../content/blocks.js";
 
 export type MediaUploadStatus =
   "pending" | "uploading" | "completing" | "scanning" | "ready" | "failed";
@@ -14,6 +15,15 @@ export interface MediaUploadJob {
   error?: string;
   retryable?: boolean;
   uploaded?: boolean;
+  /** Желаемое представление media block (голосовое сообщение и т.п.). */
+  presentation?: MediaPresentation;
+  /** Ссылка на запись в IndexedDB для offline-возобновления голосовой записи. */
+  voiceUploadId?: string;
+}
+
+export interface MediaUploadEnqueueOptions {
+  presentation?: MediaPresentation;
+  voiceUploadId?: string;
 }
 
 interface CreateUploadSessionResponse {
@@ -40,6 +50,8 @@ const inlineTypes = new Set([
   "audio/webm",
 ]);
 const uploadTimeoutMs = 180_000;
+const readyPollIntervalMs = 200;
+const readyPollTimeoutMs = 60_000;
 
 export class MediaUploadManager {
   private jobs = new Map<string, MediaUploadJob>();
@@ -47,11 +59,7 @@ export class MediaUploadManager {
 
   constructor(
     private readonly http: HttpClient,
-    private readonly saveReady?: (
-      conversationId: string,
-      assetId: string,
-      filename: string,
-    ) => Promise<void>,
+    private readonly saveReady?: (job: MediaUploadJob) => Promise<void>,
     private readonly signal?: AbortSignal,
   ) {}
 
@@ -75,7 +83,20 @@ export class MediaUploadManager {
     void this.runUpload(id);
   }
 
-  async enqueue(file: File, conversationId: string): Promise<string> {
+  async enqueue(
+    file: File,
+    conversationId: string,
+    options: MediaUploadEnqueueOptions = {},
+  ): Promise<string> {
+    if (options.voiceUploadId) {
+      const existing = [...this.jobs.values()].find(
+        (job) => job.voiceUploadId === options.voiceUploadId,
+      );
+      if (existing) {
+        if (existing.status === "failed" && existing.retryable) this.retry(existing.id);
+        return existing.id;
+      }
+    }
     const id = crypto.randomUUID();
     const job: MediaUploadJob = {
       id,
@@ -83,6 +104,8 @@ export class MediaUploadManager {
       conversationId,
       status: "pending",
       progress: 0,
+      ...(options.presentation ? { presentation: options.presentation } : {}),
+      ...(options.voiceUploadId ? { voiceUploadId: options.voiceUploadId } : {}),
     };
     this.jobs.set(id, job);
     this.notify();
@@ -162,12 +185,12 @@ export class MediaUploadManager {
         job.status = "scanning";
         this.notify();
       }
-      for (
-        let attempt = 0;
-        attempt < 60 && ["uploaded", "scanning"].includes(completed.status);
-        attempt++
+      const readyPollStarted = Date.now();
+      while (
+        ["uploaded", "scanning"].includes(completed.status) &&
+        Date.now() - readyPollStarted < readyPollTimeoutMs
       ) {
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        await new Promise((resolve) => setTimeout(resolve, readyPollIntervalMs));
         this.signal?.throwIfAborted();
         completed = await this.http.get<CompleteUploadResponse>(
           `/v1/media/${completed.id}`,
@@ -186,7 +209,7 @@ export class MediaUploadManager {
       if (completed.status !== "ready")
         throw new Error("Не удалось дождаться проверки файла");
       this.signal?.throwIfAborted();
-      await this.saveReady?.(job.conversationId, completed.id, job.file.name);
+      await this.saveReady?.(job);
 
       job.progress = 100;
       job.assetId = completed.id;

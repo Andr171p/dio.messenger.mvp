@@ -1,6 +1,6 @@
-from collections.abc import Awaitable, Callable
 from typing import Any
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -8,6 +8,8 @@ from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.application.outbox import OutboxStore, save_events_to_outbox
 from ddf.application.uow import UnitOfWork
 
+from src.application.audit.repositories import AuditRepository
+from src.application.audit.service import log_audit
 from src.application.auth import AuthUser
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
@@ -15,17 +17,11 @@ from src.application.media.exceptions import MediaNotFoundError
 from src.application.media.repositories import MediaRepository
 from src.application.messaging.builders import build_message_dto
 from src.application.messaging.config import MessagingConfig
-from src.application.messaging.formatting import visible_formatted_text
 from src.application.messaging.content import (
     build_message_content,
-    extract_media_asset_ids,
+    extract_media_blocks,
     same_send_fingerprint,
 )
-from src.application.messaging.enrich import build_send_content, snapshot_text_from_content
-from src.application.messaging.validate_send import resolve_forward_snapshot, validate_mentions
-from src.application.policies.repositories import ConversationPolicyRepository
-from src.application.threads.commands import ensure_thread_sendable
-from src.application.threads.repositories import ThreadRepository
 from src.application.messaging.dtos import (
     DeliveryCursorDTO,
     EditMessageDTO,
@@ -33,18 +29,23 @@ from src.application.messaging.dtos import (
     ReadCursorDTO,
     SendMessageDTO,
 )
-from src.application.audit.repositories import AuditRepository
-from src.application.audit.service import log_audit
-from src.application.receipts.cursors import monotonic_receipt_cursor
+from src.application.messaging.enrich import build_send_content, snapshot_text_from_content
 from src.application.messaging.exceptions import (
     IdempotencyConflictError,
     MessageContentInvalidError,
     MessageEditWindowExpiredError,
     MessageNotFoundError,
 )
+from src.application.messaging.formatting import visible_formatted_text
 from src.application.messaging.repositories import ConversationEventStore, MessageRepository
+from src.application.messaging.validate_send import resolve_forward_snapshot, validate_mentions
+from src.application.policies.repositories import ConversationPolicyRepository
+from src.application.receipts.cursors import monotonic_receipt_cursor
+from src.application.threads.commands import ensure_thread_sendable
+from src.application.threads.repositories import ThreadRepository
 from src.domain.conversations import Conversation
 from src.domain.events import ConversationEvent
+from src.domain.media.types import MediaPresentation, presentation_matches_content_type
 from src.domain.messages import Message, create_message
 
 
@@ -91,20 +92,25 @@ async def _ensure_reply_target(
 
 async def _ensure_media_attachable(
     *,
-    asset_ids: list[UUID],
+    blocks: list[tuple[UUID, MediaPresentation]],
     actor: AuthUser,
     organization_id: UUID,
     conversation_id: UUID,
     media_repository: MediaRepository,
 ) -> list[UUID]:
-    unique_ids = list(dict.fromkeys(asset_ids))
-    for asset_id in unique_ids:
+    unique_ids = list(dict.fromkeys(asset_id for asset_id, _ in blocks))
+    for asset_id, presentation in blocks:
         asset = await media_repository.read(asset_id)
         if asset is None:
             raise MediaNotFoundError("Media asset not found.")
         if asset.conversation_id != conversation_id:
             raise MediaNotFoundError("Media asset does not belong to this conversation.")
         asset.ensure_attachable(owner_id=actor.user.id, organization_id=organization_id)
+        if not presentation_matches_content_type(presentation, asset.content_type):
+            raise MessageContentInvalidError(
+                f"Presentation {presentation.value!r} is incompatible with "
+                f"content type {asset.content_type!r}."
+            )
     return unique_ids
 
 
@@ -201,7 +207,7 @@ async def send_message(
         message_repository=message_repository,
     )
     linked_ids = await _ensure_media_attachable(
-        asset_ids=extract_media_asset_ids(content),
+        blocks=extract_media_blocks(content),
         actor=actor,
         organization_id=conversation.organization_id,
         conversation_id=conversation.id,
@@ -363,7 +369,7 @@ async def edit_message(
             content[key] = message.content[key]
     # Validate only: message_media links создаются при send; повторный link на edit дал бы дубли.
     await _ensure_media_attachable(
-        asset_ids=extract_media_asset_ids(content),
+        blocks=extract_media_blocks(content),
         actor=actor,
         organization_id=conversation.organization_id,
         conversation_id=conversation.id,

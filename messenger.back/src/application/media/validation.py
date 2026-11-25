@@ -21,6 +21,10 @@ _MAGIC: list[tuple[bytes, str]] = [
 
 _OCTET_STREAM = "application/octet-stream"
 
+# ISO-BMFF контейнер: audio-only и video MP4 различаются только потоками внутри.
+# Точный stream-тип подтверждает ffprobe в worker.
+_MP4_FAMILY = {"audio/mp4", "video/mp4"}
+
 
 @dataclass(frozen=True, slots=True)
 class SniffResult:
@@ -37,6 +41,8 @@ def sniff_content_type(header: bytes) -> SniffResult:
         offset = header.find(b"ftyp")
         if offset != -1 and offset <= 8:
             brand = header[offset + 4 : offset + 8]
+            if brand in {b"M4A ", b"M4B ", b"M4P "}:
+                return SniffResult(detected_content_type="audio/mp4", matched=True)
             if brand in {b"mp42", b"isom", b"iso2", b"avc1", b"MSNV"}:
                 return SniffResult(detected_content_type="video/mp4", matched=True)
     for prefix, content_type in _MAGIC:
@@ -66,6 +72,11 @@ def validate_declared_vs_sniffed(
     if declared_content_type == _OCTET_STREAM:
         if sniffed.detected_content_type not in settings.allowed_content_types:
             return f"Detected content type {sniffed.detected_content_type!r} is not allowed."
+        return None
+    if (
+        declared_content_type in _MP4_FAMILY
+        and sniffed.detected_content_type in _MP4_FAMILY
+    ):
         return None
     if declared_content_type != sniffed.detected_content_type:
         return (

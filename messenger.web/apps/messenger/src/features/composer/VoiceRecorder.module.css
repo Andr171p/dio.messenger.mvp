@@ -1,0 +1,43 @@
+.panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--dio-border, rgba(128, 128, 128, 0.25));
+  border-radius: 12px;
+  background: var(--dio-surface, #fff);
+  min-height: 44px;
+}
+
+.hint {
+  flex: 1;
+  font-size: 13px;
+  color: var(--dio-text-muted, #888);
+}
+
+.time {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dio-text-muted, #888);
+  white-space: nowrap;
+}
+
+.recordingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dio-danger, #e5484d);
+  flex: none;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

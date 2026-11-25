@@ -1,6 +1,7 @@
 import {
   editMessage,
   readMessageBlocks,
+  saveVoiceRecording,
   sendMessage,
   upsertDraft,
   type ContentBlock,
@@ -12,6 +13,7 @@ import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
+import { VoiceRecorder } from "./VoiceRecorder.js";
 import { useUiStore } from "../../stores/uiStore.js";
 import { maskSpoilers } from "../../widgets/MessageFormatting.js";
 import styles from "./MessageComposer.module.css";
@@ -52,6 +54,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [tool, setTool] = useState<ComposerTool | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hoverOpened = useRef(false);
@@ -258,6 +261,25 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     }
   };
 
+  const onVoiceRecording = async (file: File) => {
+    if (!db || !accountKey || !media) return;
+    setVoiceOpen(false);
+    try {
+      const voiceUploadId = await saveVoiceRecording(db, accountKey, {
+        conversationId,
+        blob: file,
+        contentType: file.type || "audio/webm",
+        filename: file.name,
+      });
+      await media.enqueue(file, conversationId, {
+        presentation: "voice",
+        voiceUploadId,
+      });
+    } catch (error) {
+      setUploadNote(error instanceof Error ? error.message : "Ошибка записи");
+    }
+  };
+
   useEffect(() => {
     if (!media || !hydrated || editingId || sending) return;
     const updateJobs = () => {
@@ -266,12 +288,16 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         if (job.status === "ready" && job.assetId) {
           const assetId = job.assetId;
           media.dismiss(job.id);
+          const block =
+            job.presentation && job.presentation !== "file"
+              ? { type: "media" as const, assetId, presentation: job.presentation }
+              : { type: "media" as const, assetId };
           setAttachments((items) =>
             items.some(
               ({ block }) => block.type === "media" && block.assetId === assetId,
             )
               ? items
-              : [...items, { label: job.file.name, block: { type: "media", assetId } }],
+              : [...items, { label: job.file.name, block }],
           );
           setUploadNote(null);
           setFailedUpload((current) => (current === job.id ? null : current));
@@ -501,6 +527,13 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             </button>
           ))
         : null}
+      {voiceOpen && !editingId ? (
+        <VoiceRecorder
+          onSubmit={(file) => void onVoiceRecording(file)}
+          onClose={() => setVoiceOpen(false)}
+          disabled={disabled}
+        />
+      ) : null}
       <div className={styles.composerShell}>
         <div className={styles.composerRow}>
           <input
@@ -584,6 +617,18 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             }}
           />
           <div className={styles.toolsTrailing}>
+            <IconButton
+              label="Голосовое сообщение"
+              icon="mic"
+              size="sm"
+              iconSize={20}
+              disabled={disabled || !!editingId}
+              aria-expanded={voiceOpen}
+              onClick={() => {
+                closeTools();
+                setVoiceOpen((open) => !open);
+              }}
+            />
             <span {...hoverTool("format", disabled)}>
               <button
                 type="button"
