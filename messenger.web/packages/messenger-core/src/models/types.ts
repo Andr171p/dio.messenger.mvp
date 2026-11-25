@@ -93,6 +93,7 @@ export interface VoiceUpload {
   blob: Blob;
   contentType: string;
   filename: string;
+  send?: Pick<Draft, "draftReply">;
   createdAt: number;
 }
 
@@ -198,6 +199,8 @@ export interface PresenceState {
   status: "online" | "offline";
   lastSeenAt?: number;
 }
+
+export type ConversationActivity = "typing" | "recording_audio";
 
 export interface TypingState {
   conversationId: string;

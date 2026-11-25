@@ -30,6 +30,8 @@
   --dio-pattern: #e2e5dc;
   --dio-details: #f7f8f6;
   --dio-accent-muted: rgba(182, 36, 55, 0.08);
+  --dio-waveform-neutral: #858d95;
+  --dio-waveform-progress: #ae4551;
   --dio-focus-ring: #b62437;
   --dio-overlay: rgba(24, 34, 48, 0.35);
   --dio-glass-bg: rgba(255, 255, 255, 0.78);
@@ -87,6 +89,8 @@
   --dio-pattern: #2b2c28;
   --dio-details: #252925;
   --dio-accent-muted: rgba(187, 37, 45, 0.16);
+  --dio-waveform-neutral: #89928b;
+  --dio-waveform-progress: #ec8792;
   --dio-focus-ring: #ffa5af;
   --dio-overlay: rgba(0, 0, 0, 0.55);
   --dio-glass-bg: rgba(36, 38, 36, 0.82);

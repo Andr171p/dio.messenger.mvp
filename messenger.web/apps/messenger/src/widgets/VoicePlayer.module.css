@@ -16,8 +16,8 @@
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  color: #fff;
-  background: var(--dio-accent, #2f6fed);
+  color: var(--dio-waveform-progress);
+  background: var(--dio-accent-muted);
   flex: none;
 }
 
@@ -29,14 +29,14 @@
 .time {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: var(--dio-text-muted, #888);
+  color: var(--dio-text-secondary);
   white-space: nowrap;
 }
 
 .rate {
   border: none;
   background: transparent;
-  color: var(--dio-accent, #2f6fed);
+  color: var(--dio-waveform-progress);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -45,5 +45,5 @@
 }
 
 .rate:hover {
-  background: rgba(47, 111, 237, 0.12);
+  background: var(--dio-accent-muted);
 }

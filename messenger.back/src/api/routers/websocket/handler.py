@@ -177,11 +177,13 @@ async def _handle_ephemeral(
         )
         return
 
+    activity = "recording_audio" if body.get("activity") == "recording_audio" else "typing"
     if msg_type == "typing.started":
         await ephemeral.typing_started(
             organization_id=claims.organization_id,
             conversation_id=conversation_id,
             user_id=claims.user_id,
+            activity=activity,
         )
         send_reply(connection, "typing.ack", {"status": "started"}, _as_uuid(command_id))
         return
@@ -190,6 +192,7 @@ async def _handle_ephemeral(
         organization_id=claims.organization_id,
         conversation_id=conversation_id,
         user_id=claims.user_id,
+        activity=activity,
     )
     send_reply(connection, "typing.ack", {"status": "stopped"}, _as_uuid(command_id))
 

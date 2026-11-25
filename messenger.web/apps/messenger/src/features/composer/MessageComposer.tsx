@@ -8,7 +8,7 @@ import {
 } from "@dio/messenger-core";
 import { Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
@@ -54,7 +54,6 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [tool, setTool] = useState<ComposerTool | null>(null);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hoverOpened = useRef(false);
@@ -71,6 +70,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTyping = useRef(0);
+  const reportVoiceRecording = useCallback(
+    (active: boolean) => sync?.sendTyping(conversationId, active, "recording_audio"),
+    [sync, conversationId],
+  );
 
   const resizeInput = () => {
     const el = inputRef.current;
@@ -262,22 +265,33 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   };
 
   const onVoiceRecording = async (file: File) => {
-    if (!db || !accountKey || !media) return;
-    setVoiceOpen(false);
+    if (
+      !db ||
+      !accountKey ||
+      !media ||
+      !session ||
+      policy?.allowAttachments === false
+    ) {
+      throw new Error("Голосовое сообщение недоступно в этой беседе.");
+    }
+    let voiceUploadId: string;
     try {
-      const voiceUploadId = await saveVoiceRecording(db, accountKey, {
+      voiceUploadId = await saveVoiceRecording(db, accountKey, {
         conversationId,
         blob: file,
         contentType: file.type || "audio/webm",
         filename: file.name,
+        send: reply ? { draftReply: reply } : {},
       });
-      await media.enqueue(file, conversationId, {
-        presentation: "voice",
-        voiceUploadId,
-      });
-    } catch (error) {
-      setUploadNote(error instanceof Error ? error.message : "Ошибка записи");
+    } catch {
+      throw new Error("Не удалось сохранить голосовое для отправки.");
     }
+    if (reply && useUiStore.getState().replyTarget === reply) clearReply(null);
+    await media.enqueue(file, conversationId, {
+      presentation: "voice",
+      voiceUploadId,
+      sendAsMessage: true,
+    });
   };
 
   useEffect(() => {
@@ -288,6 +302,11 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         if (job.status === "ready" && job.assetId) {
           const assetId = job.assetId;
           media.dismiss(job.id);
+          if (job.sendAsMessage) {
+            setUploadNote(null);
+            setFailedUpload((current) => (current === job.id ? null : current));
+            continue;
+          }
           const block =
             job.presentation && job.presentation !== "file"
               ? { type: "media" as const, assetId, presentation: job.presentation }
@@ -527,14 +546,37 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             </button>
           ))
         : null}
-      {voiceOpen && !editingId ? (
-        <VoiceRecorder
-          onSubmit={(file) => void onVoiceRecording(file)}
-          onClose={() => setVoiceOpen(false)}
-          disabled={disabled}
-        />
-      ) : null}
-      <div className={styles.composerShell}>
+      <VoiceRecorder
+        onStart={() => {
+          closeTools();
+          if (typingTimer.current) {
+            clearTimeout(typingTimer.current);
+            typingTimer.current = null;
+            sync?.sendTyping(conversationId, false);
+          }
+        }}
+        onRecording={reportVoiceRecording}
+        onSubmit={onVoiceRecording}
+        maxBytes={policy?.maxAttachmentBytes ?? 50 * 1024 * 1024}
+        disabled={attachDisabled || !media}
+        idleSend={
+          text.trim() || attachments.length || editingId ? (
+            <div className={styles.sendSlot}>
+              <IconButton
+                label="Отправить"
+                onMouseDown={(event) => event.preventDefault()}
+                icon="send"
+                variant="send"
+                iconSize={18}
+                onClick={() => void onSend()}
+                disabled={
+                  disabled || (!text.trim() && (!attachments.length || !!editingId))
+                }
+              />
+            </div>
+          ) : null
+        }
+      >
         <div className={styles.composerRow}>
           <input
             ref={fileInputRef}
@@ -617,18 +659,6 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             }}
           />
           <div className={styles.toolsTrailing}>
-            <IconButton
-              label="Голосовое сообщение"
-              icon="mic"
-              size="sm"
-              iconSize={20}
-              disabled={disabled || !!editingId}
-              aria-expanded={voiceOpen}
-              onClick={() => {
-                closeTools();
-                setVoiceOpen((open) => !open);
-              }}
-            />
             <span {...hoverTool("format", disabled)}>
               <button
                 type="button"
@@ -676,22 +706,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             </span>
           </div>
         </div>
-        <div className={styles.sendSlot}>
-          <IconButton
-            label="Отправить"
-            onMouseDown={(event) => event.preventDefault()}
-            icon="send"
-            variant="send"
-            iconSize={18}
-            onClick={() => void onSend()}
-            disabled={
-              !hydrated ||
-              sending ||
-              (!text.trim() && (!attachments.length || !!editingId))
-            }
-          />
-        </div>
-      </div>
+      </VoiceRecorder>
       {tool === "emoji" ? (
         <div
           className={styles.emojiPicker}

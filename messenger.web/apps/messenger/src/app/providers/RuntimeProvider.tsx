@@ -6,6 +6,7 @@ import {
   openMessengerDatabase,
   saveDraftUpload,
   removeVoiceRecording,
+  queueUploadedVoiceMessage,
   resumePendingVoiceUploads,
   closeMessengerDatabase,
   type MessengerDatabase,
@@ -155,6 +156,17 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       http,
       async (job) => {
         if (!job.assetId) return;
+        if (job.sendAsMessage && job.voiceUploadId) {
+          await queueUploadedVoiceMessage(
+            db,
+            accountKey,
+            job.voiceUploadId,
+            job.assetId,
+            session.userId,
+          );
+          sync.requestFlush();
+          return;
+        }
         await saveDraftUpload(
           db,
           accountKey,

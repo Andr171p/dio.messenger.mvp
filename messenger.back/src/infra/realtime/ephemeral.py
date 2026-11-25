@@ -1,5 +1,7 @@
 """Redis helpers for ephemeral typing / presence."""
 
+from typing import Literal
+
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -8,6 +10,8 @@ from redis.asyncio import Redis
 
 from src.application.realtime.config import RealtimeEphemeralConfig
 from src.infra.realtime.rooms import conversation_room, user_room
+
+ConversationActivity = Literal["typing", "recording_audio"]
 
 
 class EphemeralRealtimeStore:
@@ -22,8 +26,8 @@ class EphemeralRealtimeStore:
         self._publisher = publisher
         self._config = config or RealtimeEphemeralConfig()
 
-    def _typing_key(self, conversation_id: UUID, user_id: UUID) -> str:
-        return f"messenger:typing:{conversation_id}:{user_id}"
+    def _activity_key(self, conversation_id: UUID, user_id: UUID, activity: ConversationActivity) -> str:
+        return f"messenger:{activity}:{conversation_id}:{user_id}"
 
     def _presence_key(self, organization_id: UUID, user_id: UUID) -> str:
         return f"messenger:presence:{organization_id}:{user_id}"
@@ -44,22 +48,24 @@ class EphemeralRealtimeStore:
         organization_id: UUID,
         conversation_id: UUID,
         user_id: UUID,
+        activity: ConversationActivity = "typing",
     ) -> bool:
         """Возвращает True, если нужно fanout (новый/истёкший typing или throttle окно)."""
 
-        key = self._typing_key(conversation_id, user_id)
+        key = self._activity_key(conversation_id, user_id, activity)
         throttle_key = f"{key}:throttle"
-        if await self._redis.exists(throttle_key):
-            await self._redis.set(key, "1", ex=self._config.typing_ttl_seconds)
+        await self._redis.set(key, "1", ex=self._config.typing_ttl_seconds)
+        if not await self._redis.set(
+            throttle_key, "1", ex=max(1, int(self._config.typing_throttle_seconds)), nx=True
+        ):
             return False
 
-        await self._redis.set(key, "1", ex=self._config.typing_ttl_seconds)
-        await self._redis.set(throttle_key, "1", ex=max(1, int(self._config.typing_throttle_seconds)))
         await self._publish_typing(
             conversation_id=conversation_id,
             user_id=user_id,
             organization_id=organization_id,
             status="started",
+            activity=activity,
         )
         return True
 
@@ -69,15 +75,17 @@ class EphemeralRealtimeStore:
         organization_id: UUID,
         conversation_id: UUID,
         user_id: UUID,
+        activity: ConversationActivity = "typing",
     ) -> None:
-        key = self._typing_key(conversation_id, user_id)
-        deleted = await self._redis.delete(key)
+        key = self._activity_key(conversation_id, user_id, activity)
+        deleted = await self._redis.delete(key, f"{key}:throttle")
         if deleted:
             await self._publish_typing(
                 conversation_id=conversation_id,
                 user_id=user_id,
                 organization_id=organization_id,
                 status="stopped",
+                activity=activity,
             )
 
     async def presence_connected(self, *, organization_id: UUID, user_id: UUID) -> str:
@@ -131,9 +139,10 @@ class EphemeralRealtimeStore:
         user_id: UUID,
         organization_id: UUID,
         status: str,
+        activity: ConversationActivity,
     ) -> None:
         event = Event(
-            type="typing.updated",
+            type=f"{activity}.updated",
             payload={
                 "conversationId": str(conversation_id),
                 "userId": str(user_id),

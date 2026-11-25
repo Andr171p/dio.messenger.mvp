@@ -1,12 +1,3 @@
-/**
- * Обёртка над MediaRecorder + Web Audio API для записи голосового сообщения.
- *
- * Запись — в браузерном формате (Chrome: audio/webm;opus, Safari: audio/mp4).
- * Live уровень громкости для waveform во время записи приходит через `onLevel`
- * (RMS 0..1), сэмплируется ~20 раз в секунду. Канонические duration/waveform
- * вычисляет backend, здесь — только UI-таймер и превью.
- */
-
 export interface VoiceRecordingResult {
   blob: Blob;
   durationMs: number;
@@ -23,6 +14,8 @@ export interface AudioRecorder {
   readonly recording: boolean;
   start(): Promise<void>;
   stop(): Promise<VoiceRecordingResult>;
+  pause(): void;
+  resume(): void;
   cancel(): void;
   elapsedMs(): number;
 }
@@ -34,161 +27,166 @@ const MIME_TYPES = [
   "audio/ogg;codecs=opus",
 ];
 
-function pickMimeType(): string | undefined {
-  if (typeof MediaRecorder === "undefined") return undefined;
-  return MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
-}
-
 export function createAudioRecorder(options: AudioRecorderOptions = {}): AudioRecorder {
   let stream: MediaStream | null = null;
   let recorder: MediaRecorder | null = null;
   let audioContext: AudioContext | null = null;
-  let analyser: AnalyserNode | null = null;
-  let frameId: number | null = null;
+  let frameId = 0;
   let startedAt = 0;
-  let chunks: BlobPart[] = [];
-  let stopResolve: ((result: VoiceRecordingResult) => void) | null = null;
-  let stopReject: ((error: Error) => void) | null = null;
+  let pausedAt: number | null = null;
+  let starting = false;
   let cancelled = false;
+  let stopRecording: (() => Promise<VoiceRecordingResult>) | undefined;
+  let rejectStop: ((error: Error) => void) | undefined;
 
-  const state = { recording: false };
-
-  function setRecording(value: boolean): void {
-    state.recording = value;
-    options.onStateChange?.(value);
-  }
-
-  function release(): void {
-    if (frameId !== null) {
-      cancelAnimationFrame(frameId);
-      frameId = null;
-    }
-    analyser?.disconnect();
-    analyser = null;
+  function release() {
+    cancelAnimationFrame(frameId);
+    stream?.getTracks().forEach((track) => track.stop());
     if (audioContext && audioContext.state !== "closed") {
-      void audioContext.close();
+      void audioContext.close().catch(() => undefined);
     }
     audioContext = null;
-    stream?.getTracks().forEach((track) => track.stop());
     stream = null;
-    recorder = null;
-  }
-
-  function rmsFromAnalyser(buffer: Uint8Array<ArrayBuffer>): number {
-    let sum = 0;
-    for (let i = 0; i < buffer.length; i++) {
-      const normalized = (buffer[i]! - 128) / 128;
-      sum += normalized * normalized;
+    if (recorder) {
+      recorder.ondataavailable = null;
+      recorder.onerror = null;
+      recorder.onstop = null;
     }
-    return Math.sqrt(sum / buffer.length);
+    recorder = null;
+    stopRecording = undefined;
+    rejectStop = undefined;
   }
 
-  function loop(analyserNode: AnalyserNode, buffer: Uint8Array<ArrayBuffer>): void {
-    let lastEmit = 0;
-    const tick = (now: number) => {
-      if (!state.recording) return;
-      analyserNode.getByteTimeDomainData(buffer);
-      const rms = rmsFromAnalyser(buffer);
-      if (now - lastEmit >= 50) {
+  function monitorLevel(input: MediaStream) {
+    if (!audioContext) return;
+    const source = audioContext.createMediaStreamSource(input);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    const buffer = new Float32Array(analyser.fftSize);
+    let lastEmit = -Infinity;
+
+    function tick(now: number) {
+      if (pausedAt === null && now - lastEmit >= 50) {
         lastEmit = now;
-        options.onLevel?.(rms);
+        analyser.getFloatTimeDomainData(buffer);
+        let sum = 0;
+        for (const sample of buffer) sum += sample * sample;
+        options.onLevel?.(Math.sqrt(sum / buffer.length));
       }
       frameId = requestAnimationFrame(tick);
-    };
+    }
     frameId = requestAnimationFrame(tick);
   }
 
-  async function start(): Promise<void> {
-    if (state.recording) return;
+  async function start() {
+    if (starting || recorder) return;
+    starting = true;
+    cancelled = false;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      if (options.onLevel) {
+        try {
+          audioContext = new AudioContext();
+          void audioContext.resume().catch(() => undefined);
+        } catch {
+          // Запись доступна и без Web Audio.
+        }
+      }
+      const input = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
       });
+      if (cancelled) {
+        input.getTracks().forEach((track) => track.stop());
+        throw new Error("Recording cancelled");
+      }
+      stream = input;
+      const mimeType = MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+      const active = new MediaRecorder(input, mimeType ? { mimeType } : undefined);
+      recorder = active;
+      const chunks: Blob[] = [];
 
-      const mimeType = pickMimeType();
-      recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      chunks = [];
-      cancelled = false;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      recorder.onerror = () => {
-        const error = new Error("Audio recording failed");
-        options.onError?.(error);
-        stopReject?.(error);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder?.mimeType || mimeType || "audio/webm" });
+      function fail(error: Error) {
+        rejectStop?.(error);
         release();
-        setRecording(false);
-        if (cancelled) {
-          stopReject?.(new Error("Recording cancelled"));
-          return;
-        }
-        const durationMs = Date.now() - startedAt;
-        stopResolve?.({ blob, durationMs, mimeType: blob.type });
-        stopResolve = null;
-        stopReject = null;
+        options.onStateChange?.(false);
+        options.onError?.(error);
+      }
+
+      active.ondataavailable = (event) => {
+        if (event.data.size) chunks.push(event.data);
       };
+      active.onerror = () => fail(new Error("Audio recording failed"));
+      active.onstop = () => fail(new Error("Audio stream ended"));
 
-      recorder.start(200);
-      startedAt = Date.now();
-      setRecording(true);
-
+      active.start(200);
+      startedAt = performance.now();
+      pausedAt = null;
+      stopRecording = () =>
+        new Promise<VoiceRecordingResult>((resolve, reject) => {
+          const durationMs = (pausedAt ?? performance.now()) - startedAt;
+          rejectStop = reject;
+          active.onstop = () => {
+            const type = active.mimeType || mimeType || "audio/webm";
+            const blob = new Blob(chunks, { type });
+            release();
+            options.onStateChange?.(false);
+            resolve({ blob, durationMs, mimeType: type });
+          };
+          active.stop();
+          cancelAnimationFrame(frameId);
+        });
+      options.onStateChange?.(true);
       try {
-        const AudioContextCtor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (AudioContextCtor) {
-          audioContext = new AudioContextCtor();
-          const source = audioContext.createMediaStreamSource(stream);
-          analyser = audioContext.createAnalyser();
-          analyser.fftSize = 1024;
-          source.connect(analyser);
-          loop(analyser, new Uint8Array(analyser.fftSize));
-        }
+        monitorLevel(input);
       } catch {
-        // Визуализация best-effort: запись продолжается без уровня громкости.
+        // Запись доступна и без Web Audio.
       }
     } catch (error) {
-      const wrapped = error instanceof Error ? error : new Error("Microphone access denied");
-      options.onError?.(wrapped);
-      throw wrapped;
+      release();
+      const failure =
+        error instanceof Error ? error : new Error("Microphone access denied");
+      if (!cancelled) options.onError?.(failure);
+      throw failure;
+    } finally {
+      starting = false;
     }
-  }
-
-  async function stop(): Promise<VoiceRecordingResult> {
-    if (!state.recording || !recorder) throw new Error("Not recording");
-    return new Promise<VoiceRecordingResult>((resolve, reject) => {
-      stopResolve = resolve;
-      stopReject = reject;
-      recorder?.stop();
-    });
-  }
-
-  function cancel(): void {
-    if (!state.recording) return;
-    cancelled = true;
-    chunks = [];
-    recorder?.stop();
-  }
-
-  function elapsedMs(): number {
-    return state.recording ? Date.now() - startedAt : 0;
   }
 
   return {
     get recording() {
-      return state.recording;
+      return recorder?.state === "recording";
     },
     start,
-    stop,
-    cancel,
-    elapsedMs,
+    async stop() {
+      if (!stopRecording || recorder?.state === "inactive")
+        throw new Error("Not recording");
+      return stopRecording();
+    },
+    pause() {
+      if (recorder?.state !== "recording") return;
+      recorder.pause();
+      pausedAt = performance.now();
+    },
+    resume() {
+      if (recorder?.state !== "paused" || pausedAt === null) return;
+      recorder.resume();
+      startedAt += performance.now() - pausedAt;
+      pausedAt = null;
+    },
+    cancel() {
+      cancelled = true;
+      const active = recorder;
+      rejectStop?.(new Error("Recording cancelled"));
+      release();
+      if (active?.state === "recording" || active?.state === "paused") active.stop();
+      if (active) options.onStateChange?.(false);
+    },
+    elapsedMs() {
+      return recorder ? (pausedAt ?? performance.now()) - startedAt : 0;
+    },
   };
 }

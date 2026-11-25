@@ -19,6 +19,7 @@ class MediaConfig(BaseSettings):
             "audio/mpeg",
             "audio/ogg",
             "audio/webm",
+            "audio/wav",
             "audio/mp4",
             "application/octet-stream",
         }

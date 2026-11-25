@@ -19,11 +19,13 @@ export interface MediaUploadJob {
   presentation?: MediaPresentation;
   /** Ссылка на запись в IndexedDB для offline-возобновления голосовой записи. */
   voiceUploadId?: string;
+  sendAsMessage?: boolean;
 }
 
 export interface MediaUploadEnqueueOptions {
   presentation?: MediaPresentation;
   voiceUploadId?: string;
+  sendAsMessage?: boolean;
 }
 
 interface CreateUploadSessionResponse {
@@ -48,6 +50,7 @@ const inlineTypes = new Set([
   "audio/mpeg",
   "audio/ogg",
   "audio/webm",
+  "audio/wav",
 ]);
 const uploadTimeoutMs = 180_000;
 const readyPollIntervalMs = 200;
@@ -106,6 +109,7 @@ export class MediaUploadManager {
       progress: 0,
       ...(options.presentation ? { presentation: options.presentation } : {}),
       ...(options.voiceUploadId ? { voiceUploadId: options.voiceUploadId } : {}),
+      ...(options.sendAsMessage ? { sendAsMessage: true } : {}),
     };
     this.jobs.set(id, job);
     this.notify();
@@ -129,9 +133,11 @@ export class MediaUploadManager {
     try {
       if (!job.uploaded) {
         const declaredType = job.file.type.split(";", 1)[0] ?? "";
-        const contentType = inlineTypes.has(declaredType)
-          ? declaredType
-          : "application/octet-stream";
+        const contentType =
+          inlineTypes.has(declaredType) ||
+          (job.presentation === "voice" && declaredType === "audio/mp4")
+            ? declaredType
+            : "application/octet-stream";
         const session = await this.http.post<CreateUploadSessionResponse>(
           `/v1/media/uploads`,
           {
@@ -218,9 +224,22 @@ export class MediaUploadManager {
       if (this.signal?.aborted) return;
       job.status = "failed";
       const status = error instanceof HttpError ? error.status : null;
-      job.retryable = !status || status === 429 || status >= 500;
-      job.error =
-        status === 403 || status === 404
+      const details = error instanceof HttpError ? error.body : undefined;
+      const unsupportedRecording =
+        job.presentation === "voice" &&
+        status === 422 &&
+        details !== null &&
+        typeof details === "object" &&
+        "errorCode" in details &&
+        details.errorCode === "media_policy_violation" &&
+        "message" in details &&
+        typeof details.message === "string" &&
+        details.message.startsWith("Content type ");
+      job.retryable =
+        unsupportedRecording || !status || status === 429 || status >= 500;
+      job.error = unsupportedRecording
+        ? "Сервер пока не поддерживает формат этой записи"
+        : status === 403 || status === 404
           ? "Файл или беседа недоступны"
           : status === 413
             ? "Размер файла превышает лимит"

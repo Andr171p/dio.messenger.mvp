@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   blocksToPlainPreview,
   mediaPreviewLabel,
@@ -7,11 +7,15 @@ import {
 import { resampleWaveform } from "../media/waveform.js";
 import {
   listPendingVoiceUploads,
+  queueUploadedVoiceMessage,
   removeVoiceRecording,
   resumePendingVoiceUploads,
   saveVoiceRecording,
 } from "../commands/voiceUploads.js";
 import { openMessengerDatabase } from "../storage/database.js";
+import { trimVoiceAudio } from "../media/capture/trimVoiceAudio.js";
+import { MediaUploadManager } from "../media/MediaUploadManager.js";
+import { HttpError, type HttpClient } from "../transport/httpClient.js";
 
 describe("resampleWaveform", () => {
   it("keeps the same array when barCount matches", () => {
@@ -66,6 +70,46 @@ describe("media presentation previews", () => {
 });
 
 describe("voiceUploads persistence", () => {
+  it("queues one voice message after upload and preserves the text draft", async () => {
+    const accountKey = "voice-send";
+    const conversationId = "conv-1";
+    const db = openMessengerDatabase(accountKey);
+    await db.conversations.put({
+      accountKey,
+      id: conversationId,
+      title: "Support",
+      unreadCount: 0,
+      isGuest: false,
+      isPinned: false,
+      updatedAt: 1,
+    });
+    const draft = { accountKey, conversationId, content: "Черновик", updatedAt: 1 };
+    await db.drafts.put({ ...draft, id: `${accountKey}::${conversationId}` });
+    const id = await saveVoiceRecording(db, accountKey, {
+      conversationId,
+      blob: new Blob(["audio"], { type: "audio/wav" }),
+      contentType: "audio/wav",
+      filename: "voice.wav",
+      send: { draftReply: { localId: "source", preview: "Цитата" } },
+    });
+
+    await Promise.all([
+      queueUploadedVoiceMessage(db, accountKey, id, "asset-1", accountKey),
+      queueUploadedVoiceMessage(db, accountKey, id, "asset-1", accountKey),
+    ]);
+
+    const message = await db.messages.get(id);
+    expect(message?.replyToId).toBe("source");
+    expect(readMessageBlocks(message!)).toEqual([
+      { type: "media", assetId: "asset-1", presentation: "voice" },
+    ]);
+    expect(await db.outbox.count()).toBe(1);
+    expect(await db.voiceUploads.get(id)).toBeUndefined();
+    expect(await db.drafts.get(`${accountKey}::${conversationId}`)).toMatchObject(
+      draft,
+    );
+  });
+
   it("saves, lists and removes pending recordings", async () => {
     const accountKey = "user-1";
     const db = openMessengerDatabase(accountKey);
@@ -116,4 +160,44 @@ describe("voiceUploads persistence", () => {
     expect(enqueued[0]?.presentation).toBe("voice");
     expect(enqueued[0]?.file.name).toBe("voice.webm");
   });
+});
+
+it("encodes only the selected PCM frames without including neighbouring audio", async () => {
+  const audio = {
+    sampleRate: 4,
+    length: 4,
+    numberOfChannels: 1,
+    getChannelData: () => Float32Array.of(1, 0.5, -0.5, -1),
+  } as AudioBuffer;
+  const range = { start: 0.25, end: 0.75 };
+  const wav = trimVoiceAudio(audio, range, 48);
+  const bytes = new DataView(await wav.arrayBuffer());
+
+  expect(wav.type).toBe("audio/wav");
+  expect(bytes.getUint32(40, true)).toBe(4);
+  expect(bytes.getInt16(44, true)).toBe(16384);
+  expect(bytes.getInt16(46, true)).toBe(-16384);
+  expect(() => trimVoiceAudio(audio, range, 47)).toThrow();
+});
+
+it("keeps a voice upload retryable when the API rejects its format", async () => {
+  const http = {
+    post: vi.fn().mockRejectedValue(
+      new HttpError(422, "Unprocessable Entity", {
+        errorCode: "media_policy_violation",
+        message: "Content type 'audio/wav' is not allowed.",
+      }),
+    ),
+  } as unknown as HttpClient;
+  const media = new MediaUploadManager(http);
+  await media.enqueue(new File(["voice"], "voice.wav", { type: "audio/wav" }), "chat", {
+    presentation: "voice",
+  });
+  await vi.waitFor(() =>
+    expect(media.getJobs()[0]).toMatchObject({
+      status: "failed",
+      retryable: true,
+      error: "Сервер пока не поддерживает формат этой записи",
+    }),
+  );
 });

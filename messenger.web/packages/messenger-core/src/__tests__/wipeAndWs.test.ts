@@ -46,6 +46,18 @@ describe("wipeConversation", () => {
       },
     });
     await db.syncCursors.put({ accountKey, conversationId, eventSeq: 3 });
+    await db.voiceUploads.bulkPut(
+      [conversationId, "other-chat"].map((id) => ({
+        id,
+        accountKey,
+        conversationId: id,
+        blob: new Blob(["voice"], { type: "audio/webm" }),
+        contentType: "audio/webm",
+        filename: "voice.webm",
+        createdAt: Date.now(),
+        send: {},
+      })),
+    );
     await db.conversations.put({
       accountKey,
       id: conversationId,
@@ -62,6 +74,7 @@ describe("wipeConversation", () => {
     expect(await db.drafts.count()).toBe(0);
     expect(await db.outbox.count()).toBe(0);
     expect(await db.syncCursors.count()).toBe(0);
+    expect(await db.voiceUploads.toCollection().primaryKeys()).toEqual(["other-chat"]);
     expect(await db.conversations.get(conversationId)).toBeUndefined();
   });
 });

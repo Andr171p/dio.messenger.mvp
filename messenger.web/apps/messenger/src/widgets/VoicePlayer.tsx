@@ -2,17 +2,11 @@ import { Icon } from "@dio/messenger-ui";
 import { useEffect, useRef, useState } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { AudioWaveform } from "./AudioWaveform.js";
+import { formatVoiceTime } from "./formatVoiceTime.js";
 import { useMediaSource } from "./useMediaSource.js";
 import styles from "./VoicePlayer.module.css";
 
 const RATES = [1, 1.5, 2] as const;
-
-function formatTime(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
 
 export function VoicePlayer({ assetId }: { assetId: string }) {
   const { http } = useRuntime();
@@ -22,38 +16,45 @@ export function VoicePlayer({ assetId }: { assetId: string }) {
   const durationMs = meta?.durationMs ?? 0;
   const waveform = meta?.waveform ?? [];
 
-  const [src, setSrc] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [timeMs, setTimeMs] = useState(0);
   const [rate, setRate] = useState<(typeof RATES)[number]>(1);
   const [loadError, setLoadError] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loadingRef = useRef(false);
+  const source = useRef<string | null>(null);
+  const loading = useRef<AbortController | null>(null);
+  const pendingSeek = useRef(0);
 
   useEffect(
     () => () => {
-      if (src) URL.revokeObjectURL(src);
+      loading.current?.abort();
+      if (source.current) URL.revokeObjectURL(source.current);
+      source.current = null;
     },
-    [src],
+    [],
   );
 
-  async function ensureSource(): Promise<string | null> {
-    if (src) return src;
-    if (!http || loadingRef.current) return null;
-    loadingRef.current = true;
+  async function loadSource(audio: HTMLAudioElement): Promise<boolean> {
+    if (source.current) return true;
+    if (!http || loading.current) return false;
+    const controller = new AbortController();
+    loading.current = controller;
     try {
       const blob = await http.request<Blob>(`/v1/media/${assetId}/content`, {
         responseType: "blob",
         timeoutMs: 90_000,
+        signal: controller.signal,
       });
-      const url = URL.createObjectURL(blob);
-      setSrc(url);
-      return url;
+      if (controller.signal.aborted) return false;
+      source.current = URL.createObjectURL(blob);
+      audio.src = source.current;
+      audio.currentTime = pendingSeek.current;
+      return true;
     } catch {
-      setLoadError(true);
-      return null;
+      if (!controller.signal.aborted) setLoadError(true);
+      return false;
     } finally {
-      loadingRef.current = false;
+      loading.current = null;
     }
   }
 
@@ -64,8 +65,7 @@ export function VoicePlayer({ assetId }: { assetId: string }) {
       audio.pause();
       return;
     }
-    const url = await ensureSource();
-    if (!url) return;
+    if (!(await loadSource(audio))) return;
     audio.playbackRate = rate;
     try {
       await audio.play();
@@ -84,7 +84,8 @@ export function VoicePlayer({ assetId }: { assetId: string }) {
   function seek(fraction: number): void {
     const audio = audioRef.current;
     if (!audio || !durationMs) return;
-    audio.currentTime = fraction * (durationMs / 1000);
+    pendingSeek.current = fraction * (durationMs / 1000);
+    if (source.current) audio.currentTime = pendingSeek.current;
     setTimeMs(fraction * durationMs);
   }
 
@@ -92,7 +93,6 @@ export function VoicePlayer({ assetId }: { assetId: string }) {
     <div className={styles.player}>
       <audio
         ref={audioRef}
-        src={src ?? undefined}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
@@ -115,9 +115,15 @@ export function VoicePlayer({ assetId }: { assetId: string }) {
         onSeek={seek}
       />
       <span className={styles.time}>
-        {formatTime(timeMs)} / {formatTime(durationMs)}
+        {formatVoiceTime(timeMs / 1000)} /{" "}
+        {formatVoiceTime(Math.round(durationMs / 1000))}
       </span>
-      <button type="button" className={styles.rate} onClick={cycleRate} aria-label="Скорость">
+      <button
+        type="button"
+        className={styles.rate}
+        onClick={cycleRate}
+        aria-label="Скорость"
+      >
         {rate}×
       </button>
     </div>

@@ -70,6 +70,11 @@ export function ChatHeader() {
   const typing =
     conversationId && sync ? (sync.getTyping(conversationId)?.userIds ?? []) : [];
   const typingOthers = typing.filter((id) => id !== session?.userId);
+  const recordingOthers = (
+    conversationId && sync
+      ? (sync.getRecordingAudio(conversationId)?.userIds ?? [])
+      : []
+  ).filter((id) => id !== session?.userId);
 
   if (!conversationId) {
     return (
@@ -117,6 +122,19 @@ export function ChatHeader() {
         ? (profiles.data?.[typingOthers[0]!] ?? "Участник") + " печатает…"
         : "печатает…"
       : "Печатают несколько участников…";
+  const recorderName = recordingOthers[0]
+    ? profiles.data?.[recordingOthers[0]]
+    : undefined;
+  const activityLabel =
+    recordingOthers.length > 1
+      ? "Несколько участников записывают аудио…"
+      : recordingOthers.length === 1
+        ? (recorderName ??
+            (conversation?.kind === "direct" ? "Собеседник" : "Участник")) +
+          " записывает аудио…"
+        : typingOthers.length
+          ? typingLabel
+          : null;
 
   return (
     <header className={styles.root}>
@@ -146,8 +164,8 @@ export function ChatHeader() {
               : (conversation?.title ?? "Беседа")}
           </h1>
           <p className={styles.subtitle} aria-live="polite">
-            {typingOthers.length ? (
-              <span className={styles.typing}>{typingLabel}</span>
+            {activityLabel ? (
+              <span className={styles.typing}>{activityLabel}</span>
             ) : (
               <span className={peerOnline === true ? styles.online : undefined}>
                 {subtitle}

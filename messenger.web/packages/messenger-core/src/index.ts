@@ -33,6 +33,7 @@ export { markConversationRead } from "./commands/readCursor.js";
 export { upsertDraft, clearDraft, saveDraftUpload } from "./commands/drafts.js";
 export {
   saveVoiceRecording,
+  queueUploadedVoiceMessage,
   removeVoiceRecording,
   listPendingVoiceUploads,
   resumePendingVoiceUploads,
@@ -58,5 +59,14 @@ export type { AuthAdapter, LoginCredentials } from "./auth/types.js";
 
 export { MediaUploadManager } from "./media/MediaUploadManager.js";
 export { createAudioRecorder } from "./media/capture/audioRecorder.js";
-export type { AudioRecorder, VoiceRecordingResult } from "./media/capture/audioRecorder.js";
+export type {
+  AudioRecorder,
+  VoiceRecordingResult,
+} from "./media/capture/audioRecorder.js";
 export { resampleWaveform } from "./media/waveform.js";
+export {
+  decodeVoiceAudio,
+  getVoiceWaveform,
+  trimVoiceAudio,
+  type AudioRange,
+} from "./media/capture/trimVoiceAudio.js";

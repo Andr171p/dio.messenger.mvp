@@ -12,11 +12,14 @@ export async function wipeConversation(
 ): Promise<void> {
   await db.transaction(
     "rw",
-    db.messages,
-    db.conversations,
-    db.drafts,
-    db.outbox,
-    db.syncCursors,
+    [
+      db.messages,
+      db.conversations,
+      db.drafts,
+      db.outbox,
+      db.syncCursors,
+      db.voiceUploads,
+    ],
     async () => {
       await db.messages
         .where("[accountKey+conversationId]")
@@ -26,6 +29,12 @@ export async function wipeConversation(
       await db.drafts
         .where("[accountKey+conversationId]")
         .equals([accountKey, conversationId])
+        .delete();
+
+      await db.voiceUploads
+        .where("accountKey")
+        .equals(accountKey)
+        .and((upload) => upload.conversationId === conversationId)
         .delete();
 
       const outboxItems = await db.outbox

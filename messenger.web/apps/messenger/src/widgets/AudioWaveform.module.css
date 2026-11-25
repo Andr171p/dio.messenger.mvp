@@ -1,28 +1,39 @@
 .waveform {
   display: flex;
   align-items: center;
-  gap: 1px;
+  justify-content: space-between;
+  gap: 2px;
   height: 32px;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 }
 
-.waveform.interactive {
+.interactive {
   cursor: pointer;
 }
 
-.bar,
-.barPlayed {
-  flex: 1;
-  min-width: 1px;
-  border-radius: 1px;
-  transition: height 80ms linear;
+.interactive:focus-visible {
+  outline: 2px solid var(--dio-focus-ring);
+  border-radius: 4px;
 }
 
 .bar {
-  background: var(--dio-fill-muted, rgba(128, 128, 128, 0.35));
+  flex: 1 1 0;
+  min-width: 2px;
+  max-width: 3px;
+  border-radius: 2px;
+  background: var(--dio-waveform-neutral);
 }
 
-.barPlayed {
-  background: var(--dio-accent, #2f6fed);
+.bar[data-tone="selected"] {
+  background: color-mix(
+    in srgb,
+    var(--dio-waveform-progress) 65%,
+    var(--dio-waveform-neutral)
+  );
+}
+
+.bar[data-tone="played"] {
+  background: var(--dio-waveform-progress);
 }

@@ -37,6 +37,7 @@ _AUDIO_EXTENSION = {
     "audio/mpeg": ".mp3",
     "audio/ogg": ".ogg",
     "audio/webm": ".webm",
+    "audio/wav": ".wav",
     "audio/mp4": ".m4a",
 }
 

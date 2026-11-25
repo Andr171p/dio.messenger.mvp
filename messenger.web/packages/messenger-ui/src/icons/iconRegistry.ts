@@ -29,11 +29,13 @@ import {
   Play,
   PushPin,
   Quotes,
+  Scissors,
   SlidersHorizontal,
   SignOut,
   Smiley,
   Stop,
   Sun,
+  Trash,
   Users,
   WarningCircle,
   Waveform,
@@ -91,6 +93,8 @@ export const icons = {
   play: Play,
   pause: Pause,
   stop: Stop,
+  scissors: Scissors,
+  trash: Trash,
 
   // Message actions
   reply: ArrowBendUpLeft,
