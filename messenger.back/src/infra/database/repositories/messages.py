@@ -7,6 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.events import ConversationEvent
 from src.domain.messages import Message
 from src.infra.database.models import ConversationEventOrm, MessageOrm
+from src.infra.database.models.threads import ConversationThreadOrm
+
+
+def visible_thread_message():
+    return ~select(ConversationThreadOrm.id).where(
+        ConversationThreadOrm.id == MessageOrm.thread_id,
+        ConversationThreadOrm.deleted_at.is_not(None),
+    ).exists()
 
 
 class MessageMapper:
@@ -81,6 +89,7 @@ class SqlAlchemyMessageRepository(SqlAlchemyRepository[Message, MessageOrm]):
         stmt = select(MessageOrm).where(
             MessageOrm.conversation_id == conversation_id,
             MessageOrm.created_seq >= history_from_seq,
+            visible_thread_message(),
         )
         if thread_id is not None:
             stmt = stmt.where(MessageOrm.thread_id == thread_id)

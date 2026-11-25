@@ -26,6 +26,8 @@ interface UiState {
   selectedConversationId: string | null;
   mentionProfileId?: string;
   setMentionProfile: (id?: string) => void;
+  mutedChats: Record<string, boolean>;
+  toggleChatMute: (key: string) => void;
   topicsOpen: boolean;
   setTopicsOpen: (open: boolean) => void;
   selectedThreadId?: string;
@@ -78,6 +80,11 @@ export const useUiStore = create<UiState>()(
       messageTarget: null,
       newChatOpen: false,
       setMentionProfile: (mentionProfileId) => set({ mentionProfileId }),
+      mutedChats: {},
+      toggleChatMute: (key) =>
+        set((state) => ({
+          mutedChats: { ...state.mutedChats, [key]: !state.mutedChats[key] },
+        })),
       topicsOpen: false,
       setTopicsOpen: (topicsOpen) =>
         set({ topicsOpen, searchPanelOpen: false, mobilePane: "list" }),
@@ -138,7 +145,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "dio-messenger-ui",
-      partialize: (state) => ({ theme: state.theme }),
+      partialize: (state) => ({ mutedChats: state.mutedChats, theme: state.theme }),
     },
   ),
 );

@@ -1,6 +1,6 @@
 import type { Conversation } from "@dio/messenger-core";
-import { Avatar, Badge, IconButton } from "@dio/messenger-ui";
-import { useQuery } from "@tanstack/react-query";
+import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
@@ -14,6 +14,7 @@ import {
   userLabel,
   type Profile,
 } from "../features/conversation/profiles.js";
+import { ChatMemberPicker } from "./ChatMemberPicker.js";
 import { ChatSharedContent } from "./ChatSharedContent.js";
 import { ChatDialog } from "./ChatDialog.js";
 import { useGroupTopics } from "./GroupTopics.js";
@@ -38,9 +39,22 @@ function presenceLabel(
 }
 
 export function ChatHeader() {
-  const { db, sync, http } = useRuntime();
+  const { db, sync, http, accountKey } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
+  const queries = useQueryClient();
+  const [more, setMore] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [memberError, setMemberError] = useState("");
+  const [removing, setRemoving] = useState(false);
+  const muteKey = accountKey + ":" + conversationId;
+  const muted = useUiStore((s) => s.mutedChats[muteKey]);
+  const toggleMute = useUiStore((s) => s.toggleChatMute);
+  const refreshMembers = () => {
+    void queries.invalidateQueries({
+      queryKey: ["conversation-members", accountKey, conversationId],
+    });
+  };
   const members = useConversationMembers(conversationId);
   const [memberLimit, setMemberLimit] = useState(40);
   const [infoFor, setInfoFor] = useState<string>();
@@ -167,6 +181,9 @@ export function ChatHeader() {
     conversation?.kind === "direct" && peer ? userLabel(peer) : chatTitle(conversation);
   const photo = photoUrl(peer?.avatarUrl ?? conversation?.avatarUrl);
   function openInfo() {
+    setMemberError("");
+    setMore(false);
+    setAdding(false);
     setMemberLimit(40);
     setInfoFor(conversationId!);
     setProfile(undefined);
@@ -250,36 +267,72 @@ export function ChatHeader() {
                 : "Информация о группе"
             }
             onClose={() => setInfoFor(undefined)}
+            variant="chat"
           >
             <div className={dialog.hero}>
               <Avatar name={title} src={photo} size="lg" />
-              <h3>{title}</h3>
-              {conversation?.kind === "group" && (
-                <div className={dialog.footer}>
+              <h3>{topicTitle || title}</h3>
+              {topicTitle && <p>{title}</p>}
+              <div className={dialog.chatActions}>
+                <button
+                  type="button"
+                  aria-pressed={!!muted}
+                  onClick={() => toggleMute(muteKey)}
+                >
+                  <Icon name={muted ? "bell-slash" : "bell"} size={24} />
+                  {muted ? "Включить уведомления" : "Выключить уведомления"}
+                </button>
+                <div className={dialog.moreAnchor}>
                   <button
-                    className={dialog.textButton}
-                    onClick={() => {
-                      useUiStore.getState().setTopicsOpen(true);
-                      setInfoFor(undefined);
-                    }}
+                    type="button"
+                    aria-expanded={more}
+                    onClick={() => setMore(!more)}
                   >
-                    Темы группы
+                    <Icon name="more" size={24} />
+                    Ещё
                   </button>
-                  {canManage && (
-                    <button
-                      className={dialog.textButton}
-                      onClick={() => {
-                        setPolicyFor(conversationId);
-                        setInfoFor(undefined);
-                      }}
-                    >
-                      Настройки
-                    </button>
+                  {more && (
+                    <div className={dialog.chatMenu} aria-label="Действия чата">
+                      <button
+                        type="button"
+                        disabled={conversation?.kind !== "group" || !role}
+                        onClick={() => {
+                          setMore(false);
+                          setAdding(true);
+                        }}
+                      >
+                        <Icon name="user-plus" />
+                        Добавить участника
+                      </button>
+                      <button type="button" disabled>
+                        <Icon name="sliders" />
+                        Управление группой
+                      </button>
+                      <button type="button" disabled>
+                        <Icon name="copy" />
+                        Копировать ссылку
+                      </button>
+                      <button type="button" disabled>
+                        <Icon name="download" />
+                        Экспорт истории
+                      </button>
+                    </div>
                   )}
                 </div>
-              )}
-              {conversation?.description && <p>{conversation.description}</p>}
+              </div>
             </div>
+            {conversation?.description && <p>{conversation.description}</p>}
+            {conversation?.kind === "group" && !topics.data?.length && (
+              <button
+                className={dialog.textButton}
+                onClick={() => {
+                  useUiStore.getState().setTopicsOpen(true);
+                  setInfoFor(undefined);
+                }}
+              >
+                Темы группы
+              </button>
+            )}
             {conversation?.kind === "direct" && peerId && (
               <button
                 className={dialog.userRow}
@@ -288,20 +341,25 @@ export function ChatHeader() {
                 Открыть профиль собеседника
               </button>
             )}
-            <ChatSharedContent key={conversationId} conversationId={conversationId} />
+            <ChatSharedContent
+              key={threadId ?? conversationId}
+              conversationId={conversationId}
+              threadId={threadId}
+            />
             <section className={dialog.sharedSection}>
               <h3>Участники{members.data ? ` · ${members.data.length}` : ""}</h3>
               {members.isPending && <p role="status">Загружаем участников…</p>}
               {members.isError && (
                 <p role="status">Список участников пока недоступен.</p>
               )}
+              {memberError && <p role="alert">{memberError}</p>}
               <ul className={dialog.users}>
                 {visibleMembers.map((member) => {
                   const user = profiles.get(member.principalId) ?? {
                     id: member.principalId,
                   };
                   return (
-                    <li key={user.id}>
+                    <li key={user.id} className={dialog.memberLine}>
                       <button
                         className={dialog.userRow}
                         onClick={() => setProfile(user)}
@@ -335,6 +393,37 @@ export function ChatHeader() {
                           </span>
                         )}
                       </button>
+                      {role === "owner" && user.id !== session?.userId && (
+                        <IconButton
+                          icon="trash"
+                          size="sm"
+                          label={`Удалить участника ${userLabel(user)}`}
+                          disabled={removing}
+                          onClick={async () => {
+                            if (
+                              !http ||
+                              removing ||
+                              !window.confirm(
+                                `Удалить участника ${userLabel(user)} из группы?`,
+                              )
+                            )
+                              return;
+                            setRemoving(true);
+                            setMemberError("");
+                            try {
+                              await http.request(
+                                `/v1/conversations/${conversationId}/members/${user.id}`,
+                                { method: "DELETE" },
+                              );
+                              refreshMembers();
+                            } catch {
+                              setMemberError("Не удалось удалить участника.");
+                            } finally {
+                              setRemoving(false);
+                            }
+                          }}
+                        />
+                      )}
                     </li>
                   );
                 })}
@@ -349,6 +438,14 @@ export function ChatHeader() {
               )}
             </section>
           </ChatDialog>
+          {adding && (
+            <ChatMemberPicker
+              conversationId={conversationId}
+              members={members.data?.map((m) => m.principalId) ?? []}
+              onClose={() => setAdding(false)}
+              onAdded={refreshMembers}
+            />
+          )}
           {profile && (
             <ProfileDialog
               initial={profile}

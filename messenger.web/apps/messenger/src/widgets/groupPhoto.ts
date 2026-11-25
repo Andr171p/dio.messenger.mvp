@@ -11,6 +11,8 @@ export async function groupPhoto(file: File): Promise<string> {
     canvas.width = canvas.height = 192;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error();
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     const side = Math.min(image.width, image.height);
     ctx.drawImage(
       image,

@@ -7,7 +7,10 @@ from sqlalchemy.sql import Select
 from src.application.search.dtos import MessageSearchCriteria, SearchMessageHitDTO
 from src.infra.database.models import ConversationMemberOrm, MessageMediaOrm, MessageOrm
 
+from .messages import visible_thread_message
+
 _SNIPPET_OPTIONS = "MaxFragments=1,MaxWords=24,MinWords=8,ShortWord=3"
+
 
 
 def _message_has_resource_block(criteria: MessageSearchCriteria) -> text:
@@ -69,7 +72,7 @@ class SqlAlchemyMessageSearchRepository:
             MessageOrm.created_at,
             snippet_expr.label("snippet"),
             rank_expr.label("rank"),
-        ).select_from(MessageOrm).where(MessageOrm.deleted_at.is_(None))
+        ).select_from(MessageOrm).where(MessageOrm.deleted_at.is_(None), visible_thread_message())
 
     @staticmethod
     def _apply_acl(

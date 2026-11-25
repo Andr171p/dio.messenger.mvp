@@ -1390,7 +1390,13 @@ test("открывает профиль из упоминания и показ�
   await page.route("**/v1/conversations/" + chatId + "/messages?*", (route) =>
     route.fulfill({ json: [message] }),
   );
+  await page.route("**/api/v1/users/me", (route) =>
+    route.fulfill({ json: { id: userId, full_name: "Мой профиль теста" } }),
+  );
   await page.goto("/");
+  await page.getByRole("button", { name: "Мой профиль", exact: true }).click();
+  await expect(page.getByText("Мой профиль теста", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
   await page.getByRole("button", { name: "@anna", exact: true }).click();
   await expect(
@@ -1400,10 +1406,11 @@ test("открывает профиль из упоминания и показ�
   await page.getByRole("button", { name: /Информация о беседе/ }).click();
   const details = page.getByRole("dialog", { name: "Информация о группе" });
   await details.getByRole("button", { name: "Ссылки", exact: true }).click();
-  await expect(details.getByRole("link", { name: /Макет/ })).toHaveAttribute(
-    "href",
-    sharedUrl,
-  );
+  await expect(
+    page
+      .getByRole("dialog", { name: "Ссылки", exact: true })
+      .getByRole("link", { name: /Макет/ }),
+  ).toHaveAttribute("href", sharedUrl);
 });
 
 test("показывает контрагента в своём профиле и удаляет фото через Desk", async ({

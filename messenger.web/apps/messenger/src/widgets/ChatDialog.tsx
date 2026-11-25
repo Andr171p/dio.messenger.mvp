@@ -6,11 +6,15 @@ export function ChatDialog({
   onClose,
   children,
   busy = false,
+  onBack,
+  variant,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   busy?: boolean;
+  onBack?: () => void;
+  variant?: "chat";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -21,7 +25,7 @@ export function ChatDialog({
   return (
     <dialog
       ref={ref}
-      className={styles.modal}
+      className={[styles.modal, variant === "chat" ? styles.chatModal : ""].join(" ")}
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
@@ -42,6 +46,11 @@ export function ChatDialog({
       }}
     >
       <div className={styles.dialogHead}>
+        {onBack && (
+          <button type="button" aria-label="Назад" onClick={onBack}>
+            ←
+          </button>
+        )}
         <h2>{title}</h2>
         <button type="button" aria-label="Закрыть" disabled={busy} onClick={onClose}>
           ×

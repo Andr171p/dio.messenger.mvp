@@ -12,6 +12,12 @@ class CreateThreadDTO(BaseModel):
     title: str | None = Field(default=None, max_length=256)
 
 
+class RenameThreadDTO(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, frozen=True)
+
+    title: str = Field(min_length=1, max_length=256)
+
+
 class ThreadDTO(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 

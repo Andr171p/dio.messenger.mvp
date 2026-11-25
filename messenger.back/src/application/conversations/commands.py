@@ -201,10 +201,6 @@ async def require_active_membership(
     return conversation, membership
 
 
-def _can_manage_members(membership: ConversationMembership) -> bool:
-    return membership.role in {MemberRole.OWNER, MemberRole.ADMIN}
-
-
 async def add_member(
     dto: AddMemberDTO,
     *,
@@ -226,20 +222,19 @@ async def add_member(
     )
     if conversation.type is ConversationType.DIRECT:
         raise PermissionDeniedError("Cannot add members to a direct conversation.")
-    if not _can_manage_members(actor_membership):
-        raise PermissionDeniedError("Insufficient permissions to add members.")
-    if actor_membership.role is MemberRole.GUEST:
-        raise PermissionDeniedError("Guests cannot manage members.")
 
     role = _resolve_add_role(dto.role)
+    if role is MemberRole.ADMIN and actor_membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise PermissionDeniedError("Insufficient permissions to assign an administrator.")
     if role is MemberRole.GUEST and actor.user.is_customer:
         raise PermissionDeniedError("Customers cannot invite guests.")
 
-    existing = await membership_repository.get_active(
-        conversation_id=conversation_id,
-        principal_id=dto.principal_id,
-    )
-    if existing is not None:
+    locked = await conversation_repository.read(conversation_id, with_lock=True)
+    if locked is None:
+        raise ConversationNotFoundError("Conversation not found.")
+    conversation = locked
+    existing = await membership_repository.find_member(conversation_id, dto.principal_id)
+    if existing is not None and existing.is_active:
         return ConversationMemberDTO.model_validate(existing, from_attributes=True)
 
     if role is MemberRole.GUEST and policy_repository is not None:
@@ -264,8 +259,21 @@ async def add_member(
         history_from_seq=history_from_seq,
     )
     seq = await conversation_repository.allocate_event_seq(conversation.id)
-    membership.register_joined(event_seq=seq)
-    await membership_repository.create(membership)
+    if existing is not None:
+        membership = existing
+        membership.role = role
+        membership.joined_at = datetime.now(UTC)
+        membership.updated_at = membership.joined_at
+        membership.left_at = None
+        membership.deleted_at = None
+        membership.history_from_seq = history_from_seq
+        membership.last_read_message_seq = 0
+        membership.last_delivered_message_seq = 0
+        membership.register_joined(event_seq=seq)
+        await membership_repository.update(membership)
+    else:
+        membership.register_joined(event_seq=seq)
+        await membership_repository.create(membership)
     await event_store.append(
         ConversationEvent(
             conversation_id=conversation.id,
@@ -318,10 +326,8 @@ async def remove_member(
         raise PermissionDeniedError("Cannot remove members from a direct conversation.")
 
     self_leave = principal_id == actor.user.id
-    if not self_leave and not _can_manage_members(actor_membership):
+    if not self_leave and actor_membership.role is not MemberRole.OWNER:
         raise PermissionDeniedError("Insufficient permissions to remove members.")
-    if not self_leave and actor_membership.role is MemberRole.GUEST:
-        raise PermissionDeniedError("Guests cannot remove members.")
 
     target = await membership_repository.get_active(
         conversation_id=conversation_id,

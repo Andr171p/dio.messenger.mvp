@@ -35,7 +35,7 @@ export function ProfileDialog({
     enabled: own && !!desk,
     queryFn: async () => fromDesk(await desk!.get<DeskUser>("/api/v1/users/me")),
   });
-  const displayed = ownProfile.data ?? profile;
+  const displayed = own ? (ownProfile.data ?? profile) : profile;
   const company = useQuery({
     queryKey: ["desk-company", accountKey, displayed.counterpartyId],
     enabled: own && !!desk && !!displayed.counterpartyId,

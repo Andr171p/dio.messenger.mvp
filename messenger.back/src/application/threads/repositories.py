@@ -9,6 +9,8 @@ class ThreadRepository(Protocol):
 
     async def read(self, thread_id: UUID) -> ConversationThread | None: ...
 
+    async def update(self, entity: ConversationThread) -> bool: ...
+
     async def get_by_root(
         self,
         *,

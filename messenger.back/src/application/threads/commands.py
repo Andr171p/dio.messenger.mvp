@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from ddf.application.exceptions import UniqueConstraintViolationError
@@ -5,6 +6,8 @@ from ddf.application.outbox import OutboxStore, save_events_to_outbox
 from ddf.application.uow import UnitOfWork
 
 from src.application.auth import AuthUser
+from src.application.auth.exceptions import PermissionDeniedError
+from src.domain.memberships import MemberRole
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.messaging.exceptions import MessageNotFoundError
@@ -162,3 +165,36 @@ async def ensure_thread_sendable(
     if root is None or root.created_seq < membership_history_from_seq:
         raise ThreadInvalidError("Thread root is outside your history visibility.")
     return thread
+
+async def manage_thread(
+    conversation_id: UUID,
+    thread_id: UUID,
+    *,
+    title: str | None,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    thread_repository: ThreadRepository,
+    uow: UnitOfWork,
+) -> ThreadDTO:
+    _, membership = await require_active_membership(
+        conversation_id=conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    thread = await thread_repository.read(thread_id)
+    if thread is None or thread.conversation_id != conversation_id:
+        raise ThreadNotFoundError("Thread not found.")
+    owner = membership.role is MemberRole.OWNER
+    if not owner and (title is None or thread.created_by != actor.user.id):
+        raise PermissionDeniedError("Insufficient permissions to manage this thread.")
+    thread.updated_at = datetime.now(UTC)
+    if title is None:
+        thread.deleted_at = thread.updated_at
+    else:
+        thread.title = title
+    if not await thread_repository.update(thread):
+        raise ThreadNotFoundError("Thread not found.")
+    await uow.commit()
+    return _to_dto(thread, event_seq=thread.event_seq)

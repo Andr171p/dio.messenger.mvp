@@ -40,6 +40,7 @@ function formatTime(ts?: number): string {
 export function ConversationList({ compact = false }: { compact?: boolean }) {
   const { db, accountKey, syncStatus } = useRuntime();
   const { logout, session } = useAuth();
+  const mutedChats = useUiStore((s) => s.mutedChats);
   const [ownProfile, setOwnProfile] = useState(false);
   const category = useUiStore((s) => s.listCategory);
   const setCategory = useUiStore((s) => s.setListCategory);
@@ -103,7 +104,11 @@ export function ConversationList({ compact = false }: { compact?: boolean }) {
             onClick={() => setSelected(chat.id)}
           >
             <Avatar name={chatTitle(chat)} src={photoUrl(chat.avatarUrl)} size="md" />
-            {chat.unreadCount > 0 && <Badge tone="info">{chat.unreadCount}</Badge>}
+            {chat.unreadCount > 0 && (
+              <Badge tone={mutedChats[accountKey + ":" + chat.id] ? "neutral" : "info"}>
+                {chat.unreadCount}
+              </Badge>
+            )}
           </button>
         ))}
       </nav>
@@ -207,7 +212,11 @@ export function ConversationList({ compact = false }: { compact?: boolean }) {
                 </span>
               </div>
               {conv.unreadCount > 0 ? (
-                <Badge tone="info">{conv.unreadCount}</Badge>
+                <Badge
+                  tone={mutedChats[accountKey + ":" + conv.id] ? "neutral" : "info"}
+                >
+                  {conv.unreadCount}
+                </Badge>
               ) : null}
             </button>
           </li>

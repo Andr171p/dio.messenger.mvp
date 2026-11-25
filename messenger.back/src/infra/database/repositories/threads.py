@@ -2,7 +2,7 @@ from uuid import UUID
 
 from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.infra.database.sqlalchemy.utils import get_constraint_name, is_unique_violation
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,15 @@ class SqlAlchemyThreadRepository:
         )
         model = await self._session.scalar(stmt)
         return None if model is None else self._from_model(model)
+
+    async def update(self, entity: ConversationThread) -> bool:
+        statement = (
+            update(ConversationThreadOrm)
+            .where(ConversationThreadOrm.id == entity.id, ConversationThreadOrm.deleted_at.is_(None))
+            .values(title=entity.title, updated_at=entity.updated_at, deleted_at=entity.deleted_at)
+            .returning(ConversationThreadOrm.id)
+        )
+        return await self._session.scalar(statement) is not None
 
     async def get_by_root(
         self,

@@ -1,7 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+
+from src.application.auth.exceptions import PermissionDeniedError
+from src.application.threads.commands import manage_thread
+from src.domain.memberships import MemberRole
 
 from src.domain.polls import Poll, create_poll
 from src.domain.polls.exceptions import PollClosedError, PollInvalidError
@@ -106,3 +112,38 @@ def test_fanout_maps_poll_created() -> None:
     assert mapped is not None
     assert mapped.type == "thread.created"
     assert "threadId" in mapped.payload
+
+@pytest.mark.parametrize(("role", "author", "title", "allowed"), [
+    (MemberRole.MEMBER, True, "Renamed", True),
+    (MemberRole.MEMBER, True, None, False),
+    (MemberRole.ADMIN, False, None, False),
+    (MemberRole.OWNER, False, None, True),
+])
+async def test_manage_thread_permissions(monkeypatch, role, author, title, allowed):
+    actor = SimpleNamespace(user=SimpleNamespace(id=uuid4()))
+    thread = create_thread(
+        conversation_id=uuid4(), organization_id=uuid4(), root_message_id=None,
+        created_by=actor.user.id if author else uuid4(),
+        root_message_created_seq=1, title="Original",
+    )
+    monkeypatch.setattr(
+        "src.application.threads.commands.require_active_membership",
+        AsyncMock(return_value=(None, SimpleNamespace(role=role))),
+    )
+    repository = SimpleNamespace(read=AsyncMock(return_value=thread), update=AsyncMock(return_value=True))
+    uow = SimpleNamespace(commit=AsyncMock())
+    operation = manage_thread(
+        thread.conversation_id, thread.id, title=title, actor=actor,
+        conversation_repository=None, membership_repository=None,
+        thread_repository=repository, uow=uow,
+    )
+    if allowed:
+        await operation
+        assert (thread.deleted_at is not None) == (title is None)
+        if title is not None:
+            assert thread.title == title
+        uow.commit.assert_awaited_once()
+    else:
+        with pytest.raises(PermissionDeniedError):
+            await operation
+        repository.update.assert_not_awaited()

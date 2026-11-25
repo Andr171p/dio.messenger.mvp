@@ -189,6 +189,13 @@ class SqlAlchemyMembershipRepository(SqlAlchemyRepository[ConversationMembership
         model = await self._session.scalar(stmt)
         return None if model is None else self.data_mapper.from_model(model)
 
+    async def find_member(self, conversation_id: UUID, principal_id: UUID) -> ConversationMembership | None:
+        model = await self._session.scalar(select(ConversationMemberOrm).where(
+            ConversationMemberOrm.conversation_id == conversation_id,
+            ConversationMemberOrm.principal_id == principal_id,
+        ))
+        return None if model is None else self.data_mapper.from_model(model)
+
     async def list_active(self, conversation_id: UUID) -> list[ConversationMembership]:
         stmt = select(ConversationMemberOrm).where(
             ConversationMemberOrm.conversation_id == conversation_id,

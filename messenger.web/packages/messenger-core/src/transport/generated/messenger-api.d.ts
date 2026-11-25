@@ -504,6 +504,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Thread */
+        delete: operations["delete_thread_v1_conversations__conversation_id__threads__thread_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Thread */
+        patch: operations["rename_thread_v1_conversations__conversation_id__threads__thread_id__patch"];
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/polls": {
         parameters: {
             query?: never;
@@ -1664,6 +1682,11 @@ export interface components {
         ReadCursorDTO: {
             /** Lastreadmessageseq */
             lastReadMessageSeq: number;
+        };
+        /** RenameThreadDTO */
+        RenameThreadDTO: {
+            /** Title */
+            title: string;
         };
         /** ResourceActionRequestDTO */
         ResourceActionRequestDTO: {
@@ -3220,6 +3243,72 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_thread_v1_conversations__conversation_id__threads__thread_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_thread_v1_conversations__conversation_id__threads__thread_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameThreadDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
