@@ -18,8 +18,14 @@
   --dio-selection: #f6e8e7;
   --dio-conversation-selected: #e9ecef;
   --dio-bright: #182230;
-  --dio-bubble-incoming: #fcfdfb;
-  --dio-bubble-outgoing: #eaf4ee;
+  --dio-chat-canvas: #f5f6f4;
+  --dio-bubble-incoming: #ffffff;
+  --dio-bubble-outgoing: #e9eef0;
+  --dio-receipt-read: var(--dio-action);
+  --dio-ticket-priority-critical: #b62437;
+  --dio-ticket-priority-high: #9a4b24;
+  --dio-ticket-priority-medium: #785a1a;
+  --dio-ticket-priority-low: #4a6477;
   --dio-status-success: #366148;
   --dio-pale: #e6efe3;
   --dio-warm: #785223;
@@ -77,8 +83,14 @@
   --dio-selection: #462d31;
   --dio-conversation-selected: #363b3d;
   --dio-bright: #ffa5af;
-  --dio-bubble-incoming: #303430;
-  --dio-bubble-outgoing: #304438;
+  --dio-chat-canvas: #202322;
+  --dio-bubble-incoming: #2c302f;
+  --dio-bubble-outgoing: #303a41;
+  --dio-receipt-read: #f47785;
+  --dio-ticket-priority-critical: #ffa5af;
+  --dio-ticket-priority-high: #f4ae80;
+  --dio-ticket-priority-medium: #ebcc82;
+  --dio-ticket-priority-low: #a9c6da;
   --dio-status-success: #c1ddbb;
   --dio-pale: #334536;
   --dio-warm: #f3d7a6;
@@ -132,23 +144,7 @@ body {
 }
 
 .dio-chat-canvas {
-  background-color: var(--dio-canvas);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: cover;
-}
-
-[data-dio-theme="light"] .dio-chat-canvas {
-  background-color: #f7f7f5;
-  background-position: left top;
-  background-size: max(153%, 185dvh) auto;
-  background-image:
-    linear-gradient(rgba(247, 247, 245, 0.5), rgba(247, 247, 245, 0.65)),
-    url("/wallpapers/chat-light.jpg");
-}
-
-[data-dio-theme="dark"] .dio-chat-canvas {
-  background-color: #202320;
+  background-color: var(--dio-chat-canvas);
 }
 
 /* Quiet scrollbars — content over chrome */

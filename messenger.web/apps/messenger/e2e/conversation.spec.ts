@@ -788,6 +788,8 @@ test("открывает заявку по номеру и запрашивае�
         title: "Нет доступа к VPN",
         status: "in_progress",
         priority: "high",
+        ticketType: "Инцидент",
+        access: "full",
         assigneeDisplayName: "Анна Смирнова",
         description: "Ошибка подключения",
         attachments: [
@@ -812,14 +814,25 @@ test("открывает заявку по номеру и запрашивае�
   });
   await page.goto("/");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
-  await expect(page.getByRole("button", { name: /Подробнее/ })).toContainText(
-    "Анна Смирнова",
+  const card = page
+    .getByRole("group", { name: "Прикреплённые заявки" })
+    .getByRole("article", { name: "INC-228" });
+  await expect(card.getByRole("button", { name: /Подробнее/ })).toBeVisible();
+  await expect(card).toContainText("Анна Смирнова");
+  await expect(card).toContainText("DIO Desk · Инцидент");
+  await expect(card).toContainText("P2 · Высокий");
+  await expect(card).toContainText("Ошибка подключения");
+  await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(page.locator(".dio-chat-canvas")).toHaveCSS("background-image", "none");
+  await page.getByRole("button", { name: "Сменить тему" }).click();
+  await expect(card).toHaveCSS("background-color", "rgb(49, 50, 47)");
+  await expect(page.locator(".dio-chat-canvas")).toHaveCSS("background-image", "none");
+  await context.route("**/tickets/INC-228", (route) =>
+    route.fulfill({ body: "Заявка INC-228" }),
   );
-  await expect(
-    page
-      .getByRole("group", { name: "Прикреплённые заявки" })
-      .getByRole("button", { name: /Подробнее/ }),
-  ).toBeVisible();
+  const cardTab = page.waitForEvent("popup");
+  await card.getByRole("link", { name: "Открыть в DIO Desk" }).click();
+  await expect(await cardTab).toHaveURL(/\/tickets\/INC-228$/);
   await expect(
     page.locator(".dio-message-text").getByRole("button", { name: /Подробнее/ }),
   ).toHaveCount(0);
@@ -831,9 +844,6 @@ test("открывает заявку по номеру и запрашивае�
   const popup = page.waitForEvent("popup");
   await panel.getByRole("button", { name: /vpn.log/ }).click();
   await expect(await popup).toHaveURL(externalUrl);
-  await context.route("**/tickets/INC-228", (route) =>
-    route.fulfill({ body: "Заявка INC-228" }),
-  );
   const deskTab = page.waitForEvent("popup");
   await panel.getByRole("button", { name: /Открыть в DIO Desk/ }).click();
   await expect(await deskTab).toHaveURL(/\/tickets\/INC-228$/);

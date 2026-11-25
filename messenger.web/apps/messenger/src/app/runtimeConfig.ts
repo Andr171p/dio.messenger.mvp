@@ -73,3 +73,7 @@ export async function loadRuntimeConfig(): Promise<void> {
 export function getRuntimeConfig(): Readonly<RuntimeConfig> {
   return config;
 }
+
+export function getDeskTicketUrl(number: string): string {
+  return `${config.deskWeb.replace(/\/$/, "")}/tickets/${encodeURIComponent(number)}`;
+}

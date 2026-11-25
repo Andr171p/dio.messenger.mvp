@@ -122,36 +122,13 @@
   color: var(--dio-text);
 }
 
-.ticketCard {
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--dio-border);
-  border-radius: var(--dio-radius-md);
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-  display: grid;
-  overflow: hidden;
-}
-
-.ticketBody {
-  display: grid;
-  background: var(--dio-sidebar);
-}
-
 .ticketStack {
   display: grid;
-  gap: 3px;
+  gap: 4px;
 }
 
 .bubble + .ticketStack {
-  margin-top: 3px;
-}
-
-.messageStackWithTickets .bubble {
-  border-radius: 12px;
+  margin-top: 4px;
 }
 
 .ticketOnlyMeta {
@@ -164,58 +141,6 @@
   color: var(--dio-text-secondary);
   font-size: 12px;
   font-weight: 650;
-}
-
-.ticketAssigneeRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4px;
-  padding-inline-end: 10px;
-}
-
-.ticketTop,
-.ticketHint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 8px 10px;
-}
-
-.ticketLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--dio-text-secondary);
-}
-
-.ticketTitle {
-  padding: 0 10px 8px;
-  font-size: 15px;
-}
-
-.ticketHint {
-  position: relative;
-  justify-content: center;
-  border-top: 1px solid var(--dio-border-subtle);
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--dio-text);
-  background: color-mix(in srgb, var(--dio-glass-bg), var(--dio-status-success) 12%);
-  backdrop-filter: blur(var(--dio-glass-blur));
-}
-
-.ticketHint > span {
-  position: absolute;
-  inset-inline-end: 10px;
-  color: var(--dio-text-secondary);
-}
-
-.ticketCard:hover .ticketHint {
-  background: color-mix(in srgb, var(--dio-glass-bg), var(--dio-status-success) 21%);
 }
 
 .footer {
@@ -239,11 +164,11 @@
 }
 
 .checks {
-  color: var(--dio-status-success);
+  color: var(--dio-text-secondary);
 }
 
 .checksRead {
-  color: var(--dio-bright);
+  color: var(--dio-receipt-read);
 }
 
 .reaction {

@@ -54,22 +54,24 @@ export function MessageBubble(props: {
   };
   useEffect(() => cancelPress, []);
   const seen = props.receiptCount?.seen ?? 0;
+  const read = seen > 0 || message.deliveryStatus === "read";
   const delivered =
     props.receiptCount?.delivered ||
-    message.deliveryStatus === "delivered" ||
-    message.deliveryStatus === "read";
+    message.deliveryStatus === "delivered";
+  const receiptLabel = seen
+    ? `Прочитали ${seen} из ${props.receiptCount?.total}`
+    : read
+      ? "Прочитано"
+      : delivered
+        ? "Доставлено"
+        : "Принято сервером";
   const receipt =
     message.isOutgoing && message.sendStatus === "sent" ? (
       <button
         type="button"
         className={styles.receipt}
-        aria-label={
-          seen
-            ? `Прочитали ${seen} из ${props.receiptCount?.total}`
-            : delivered
-              ? "Доставлено"
-              : "Принято сервером"
-        }
+        aria-label={receiptLabel}
+        title={receiptLabel}
         aria-expanded={seen ? receiptOpen : undefined}
         onClick={() => {
           if (seen) setReceiptOpen((open) => !open);
@@ -77,9 +79,9 @@ export function MessageBubble(props: {
         disabled={!seen}
       >
         <Icon
-          name={seen || delivered ? "check-double" : "check"}
+          name={read || delivered ? "check-double" : "check"}
           context="status"
-          className={seen ? styles.checksRead : styles.checks}
+          className={read ? styles.checksRead : styles.checks}
         />
       </button>
     ) : null;

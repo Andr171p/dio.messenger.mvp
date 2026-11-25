@@ -3,7 +3,7 @@ import { Badge, Button, Icon, Spinner } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
-import { getRuntimeConfig } from "../app/runtimeConfig.js";
+import { getDeskTicketUrl } from "../app/runtimeConfig.js";
 import { useDirectoryProfiles } from "../features/read/useConversationMembers.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { TicketAssignee, TicketPriority, TicketStatus } from "./TicketDetails.js";
@@ -256,13 +256,8 @@ export function ContextResourcePanel() {
             variant="ghost"
             className={styles.openDesk}
             onClick={() => {
-              const desk = getRuntimeConfig().deskWeb;
               const number = data.number || resourceId;
-              window.open(
-                `${desk.replace(/\/$/, "")}/tickets/${encodeURIComponent(number)}`,
-                "_blank",
-                "noopener,noreferrer",
-              );
+              window.open(getDeskTicketUrl(number), "_blank", "noopener,noreferrer");
             }}
           >
             Открыть в DIO Desk <span aria-hidden="true">↗</span>
