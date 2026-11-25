@@ -52,6 +52,15 @@ const inlineTypes = new Set([
   "audio/webm",
   "audio/wav",
 ]);
+
+export function getInlineMediaPresentation(contentType: string): "image" | "video" | undefined {
+  const type = contentType.split(";", 1)[0] ?? "";
+  if (!inlineTypes.has(type)) return undefined;
+  if (type.startsWith("image/")) return "image";
+  if (type.startsWith("video/")) return "video";
+  return undefined;
+}
+
 const uploadTimeoutMs = 180_000;
 const readyPollIntervalMs = 200;
 const readyPollTimeoutMs = 60_000;

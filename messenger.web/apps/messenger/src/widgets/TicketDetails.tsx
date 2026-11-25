@@ -29,7 +29,9 @@ export function TicketStatus({ value }: { value: string }) {
 
 export function TicketPriority({ value }: { value: string }) {
   return value ? (
-    <span className={styles.priorityPill}>{priorities[value] ?? value}</span>
+    <span className={styles.priorityPill} data-priority={value}>
+      {priorities[value] ?? value}
+    </span>
   ) : null;
 }
 

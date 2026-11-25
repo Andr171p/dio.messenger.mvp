@@ -135,6 +135,28 @@
   cursor: pointer;
 }
 
+.savedMedia {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--dio-field);
+  color: var(--dio-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+@media (width < 480px) {
+  .savedMedia span {
+    display: none;
+  }
+}
+
 .root {
   position: relative;
 }

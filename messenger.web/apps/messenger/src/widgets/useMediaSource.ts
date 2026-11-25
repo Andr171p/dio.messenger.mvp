@@ -12,7 +12,10 @@ export function requiresMediaProxy(url: URL): boolean {
   );
 }
 
-export function useMediaSource(assetId: string, fullscreen = false) {
+export function useMediaSource(
+  assetId: string,
+  mode: "visual" | "all" | "metadata" = "metadata",
+) {
   const { http } = useRuntime();
   const metadata = useQuery({
     queryKey: ["media-metadata", assetId],
@@ -26,10 +29,14 @@ export function useMediaSource(assetId: string, fullscreen = false) {
       http!.get<components["schemas"]["MediaAssetDTO"]>("/v1/media/" + assetId),
   });
   const asset = metadata.data;
-  const image = asset?.contentType.startsWith("image/");
+  const contentType = asset?.contentType;
+  const image = contentType?.startsWith("image/");
+  const loadSource =
+    mode === "all" ||
+    (mode === "visual" && (image || contentType?.startsWith("video/")));
   const access = useQuery({
     queryKey: ["media-access", assetId],
-    enabled: !!http && (!!image || fullscreen) && asset?.status === "ready",
+    enabled: !!http && !!loadSource && asset?.status === "ready",
     staleTime: (query) => {
       const expiration = query.state.data?.expiresAt;
       return expiration
@@ -46,7 +53,7 @@ export function useMediaSource(assetId: string, fullscreen = false) {
   const url = signed && URL.canParse(signed) ? new URL(signed) : null;
   const proxy = !!url && requiresMediaProxy(url);
   const [binary, setBinary] = useState<{ assetId: string; source?: string }>();
-  const shouldRead = !!http && proxy && (!!image || fullscreen);
+  const shouldRead = !!http && proxy && (mode === "all" || (mode === "visual" && !!image));
   useEffect(() => {
     if (!http || !shouldRead) return;
     const controller = new AbortController();

@@ -5,7 +5,13 @@ import {
   type MediaPresentation,
   type components,
 } from "@dio/messenger-core";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { requiresMediaProxy, useMediaSource } from "./useMediaSource.js";
 import { VoicePlayer } from "./VoicePlayer.js";
 import styles from "./MessageTimeline.module.css";
@@ -14,6 +20,7 @@ type PreviewFile = Pick<
   components["schemas"]["MediaAssetDTO"],
   "filename" | "contentType"
 >;
+type MediaDimensions = { width: number; height: number };
 
 export function MessageMedia({
   assetId,
@@ -28,15 +35,21 @@ export function MessageMedia({
   const [opening, setOpening] = useState(false);
   const [openError, setOpenError] = useState("");
   const [failedSource, setFailedSource] = useState<string>();
+  const [naturalSize, setNaturalSize] = useState<MediaDimensions>();
   const downloadObjectUrl = useRef<string | undefined>(undefined);
   const downloadRequest = useRef<AbortController | null>(null);
   const [download, setDownload] = useState<
     components["schemas"]["MediaAccessDTO"] | null
   >(null);
-  const { metadata, source, sourceError } = useMediaSource(assetId);
+  const { metadata, source, sourceError } = useMediaSource(
+    assetId,
+    presentation === "file" || presentation === "voice" ? "metadata" : "visual",
+  );
   const asset = metadata.data;
-  const image = asset?.contentType.startsWith("image/");
-  const canPreview = !!asset && /^(image|audio|video)\//.test(asset.contentType);
+  const canPreview =
+    presentation !== "file" &&
+    !!asset &&
+    /^(image|audio|video)\//.test(asset.contentType);
 
   useEffect(
     () => () => {
@@ -117,12 +130,87 @@ export function MessageMedia({
     return <VoicePlayer assetId={assetId} />;
   }
 
-  const showImage = image && source && failedSource !== source && !sourceError;
+  const video = asset.contentType.startsWith("video/");
+  const visual =
+    canPreview &&
+    (video || asset.contentType.startsWith("image/")) &&
+    !sourceError &&
+    (!source || failedSource !== source);
+  if (visual) {
+    const meta = asset.meta;
+    // Early uploads reported 1 × 1 as a placeholder for every image.
+    const dimensions =
+      meta && "width" in meta && (meta.width > 1 || meta.height > 1)
+        ? meta
+        : naturalSize;
+    const ratio = dimensions ? dimensions.width / dimensions.height : 16 / 10;
+    const frameStyle = {
+      "--visual-width": dimensions
+        ? `clamp(120px, min(${dimensions.width}px, calc(min(480px, 55dvh) * ${ratio})), 460px)`
+        : "320px",
+      aspectRatio: ratio,
+    } as CSSProperties;
+    return (
+      <div className={styles.visualMedia} style={frameStyle}>
+        <button
+          type="button"
+          className={styles.visualLink}
+          data-png={asset.contentType === "image/png" || undefined}
+          aria-label={asset.filename}
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            event.currentTarget.focus({ preventScroll: true });
+            onPreview(asset);
+          }}
+        >
+          {source ? (
+            video ? (
+              <video
+                src={source}
+                preload="metadata"
+                muted
+                playsInline
+                aria-hidden="true"
+                onLoadedMetadata={(event) => {
+                  const { videoWidth, videoHeight } = event.currentTarget;
+                  if (!dimensions && videoWidth && videoHeight)
+                    setNaturalSize({ width: videoWidth, height: videoHeight });
+                }}
+                onError={() => setFailedSource(source)}
+              />
+            ) : (
+              <img
+                src={source}
+                alt={asset.filename}
+                loading="lazy"
+                width={dimensions?.width}
+                height={dimensions?.height}
+                onLoad={(event) => {
+                  const { naturalWidth, naturalHeight } = event.currentTarget;
+                  if (!dimensions && naturalWidth && naturalHeight)
+                    setNaturalSize({ width: naturalWidth, height: naturalHeight });
+                }}
+                onError={() => setFailedSource(source)}
+              />
+            )
+          ) : (
+            <span className={styles.visualPlaceholder}>{asset.filename}</span>
+          )}
+          {video ? (
+            <span className={styles.videoPlay}>
+              <Icon name="play" size={24} filled />
+            </span>
+          ) : null}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <button
         type="button"
-        className={[styles.mediaLink, showImage ? styles.imageLink : ""].join(" ")}
+        className={styles.mediaLink}
         disabled={opening}
         aria-haspopup={canPreview ? "dialog" : undefined}
         onClick={(event) => {
@@ -132,31 +220,19 @@ export function MessageMedia({
           } else void openFile(event);
         }}
       >
-        {showImage ? (
-          <img
-            className={styles.mediaImg}
-            src={source}
-            alt={asset.filename}
-            loading="lazy"
-            onError={() => setFailedSource(source)}
-          />
-        ) : (
-          <>
-            <span className={styles.fileBadge}>
-              <Icon name="file" size={22} />
-            </span>
-            <span className={styles.fileDetails}>
-              <strong>{asset.filename}</strong>
-              <small>
-                {asset.size < 1024
-                  ? asset.size + " Б"
-                  : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(
-                      asset.size / 1024,
-                    ) + " КБ"}
-              </small>
-            </span>
-          </>
-        )}
+        <span className={styles.fileBadge}>
+          <Icon name="file" size={22} />
+        </span>
+        <span className={styles.fileDetails}>
+          <strong>{asset.filename}</strong>
+          <small>
+            {asset.size < 1024
+              ? asset.size + " Б"
+              : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(
+                  asset.size / 1024,
+                ) + " КБ"}
+          </small>
+        </span>
       </button>
       {openError ? <p role="alert">{openError}</p> : null}
       {download && Date.parse(download.expiresAt) > Date.now() ? (

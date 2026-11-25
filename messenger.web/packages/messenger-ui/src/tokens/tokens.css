@@ -12,16 +12,22 @@
   --dio-on-action: #ffffff;
   --dio-text: #182230;
   --dio-text-secondary: #626c7b;
-  --dio-border: #e4e8e3;
-  --dio-border-subtle: #e4e8e3;
-  --dio-field: #f2f3ef;
+  --dio-border: #e0e5e9;
+  --dio-border-subtle: #e0e5e9;
+  --dio-field: #eff2f4;
   --dio-selection: #f6e8e7;
   --dio-conversation-selected: #e9ecef;
   --dio-bright: #182230;
-  --dio-bubble-incoming: #fcfdfb;
-  --dio-bubble-outgoing: #eaf4ee;
-  --dio-status-success: #366148;
-  --dio-pale: #e6efe3;
+  --dio-chat-canvas: #f5f6f4;
+  --dio-bubble-incoming: #ffffff;
+  --dio-bubble-outgoing: #e9eef0;
+  --dio-receipt-read: var(--dio-action);
+  --dio-ticket-priority-critical: #b62437;
+  --dio-ticket-priority-high: #9a4b24;
+  --dio-ticket-priority-medium: #785a1a;
+  --dio-ticket-priority-low: #4a6477;
+  --dio-status-success: #436477;
+  --dio-pale: #e6eef3;
   --dio-warm: #785223;
   --dio-status-warning: #faedd5;
   --dio-warm-text: #785223;
@@ -58,44 +64,50 @@
   --dio-conversation-item-height: 70px;
   --dio-message-max-width: 600px;
   --dio-scrollbar-thumb: rgba(24, 34, 48, 0.28);
-  --dio-presence-online: #3d9a5f;
+  --dio-presence-online: #4c7188;
   color-scheme: light;
 }
 
 [data-dio-theme="dark"] {
-  --dio-canvas: #202320;
-  --dio-sidebar: #242624;
-  --dio-rail: #1c1c1c;
-  --dio-surface: #31322f;
+  --dio-canvas: #202329;
+  --dio-sidebar: #252830;
+  --dio-rail: #1d2025;
+  --dio-surface: #30343b;
   --dio-action: #bb252d;
   --dio-on-action: #ffffff;
-  --dio-text: #f2f3f0;
-  --dio-text-secondary: #c1cbc3;
-  --dio-border: #454c45;
-  --dio-border-subtle: #454c45;
-  --dio-field: #31322f;
+  --dio-text: #f1f3f6;
+  --dio-text-secondary: #bfc9d3;
+  --dio-border: #414952;
+  --dio-border-subtle: #414952;
+  --dio-field: #323943;
   --dio-selection: #462d31;
   --dio-conversation-selected: #363b3d;
   --dio-bright: #ffa5af;
-  --dio-bubble-incoming: #303430;
-  --dio-bubble-outgoing: #304438;
-  --dio-status-success: #c1ddbb;
-  --dio-pale: #334536;
+  --dio-chat-canvas: #20242a;
+  --dio-bubble-incoming: #2c3139;
+  --dio-bubble-outgoing: #303a41;
+  --dio-receipt-read: #f47785;
+  --dio-ticket-priority-critical: #ffa5af;
+  --dio-ticket-priority-high: #f4ae80;
+  --dio-ticket-priority-medium: #ebcc82;
+  --dio-ticket-priority-low: #a9c6da;
+  --dio-status-success: #b7d1e2;
+  --dio-pale: #303f4d;
   --dio-warm: #f3d7a6;
   --dio-status-warning: #493d2b;
   --dio-warm-text: #f3d7a6;
   --dio-status-error: #ffa5af;
-  --dio-status-info: #c1cbc3;
+  --dio-status-info: #bfc9d3;
   --dio-pattern: #2b2c28;
-  --dio-details: #252925;
+  --dio-details: #282d34;
   --dio-accent-muted: rgba(187, 37, 45, 0.16);
-  --dio-waveform-neutral: #89928b;
+  --dio-waveform-neutral: #8793a0;
   --dio-waveform-progress: #ec8792;
   --dio-focus-ring: #ffa5af;
   --dio-overlay: rgba(0, 0, 0, 0.55);
-  --dio-glass-bg: rgba(36, 38, 36, 0.82);
+  --dio-glass-bg: rgba(37, 40, 48, 0.82);
   --dio-scrollbar-thumb: rgba(242, 243, 240, 0.28);
-  --dio-presence-online: #6ecf8e;
+  --dio-presence-online: #9bc0d7;
   color-scheme: dark;
 }
 
@@ -132,23 +144,7 @@ body {
 }
 
 .dio-chat-canvas {
-  background-color: var(--dio-canvas);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: cover;
-}
-
-[data-dio-theme="light"] .dio-chat-canvas {
-  background-color: #f7f7f5;
-  background-position: left top;
-  background-size: max(153%, 185dvh) auto;
-  background-image:
-    linear-gradient(rgba(247, 247, 245, 0.5), rgba(247, 247, 245, 0.65)),
-    url("/wallpapers/chat-light.jpg");
-}
-
-[data-dio-theme="dark"] .dio-chat-canvas {
-  background-color: #202320;
+  background-color: var(--dio-chat-canvas);
 }
 
 /* Quiet scrollbars — content over chrome */

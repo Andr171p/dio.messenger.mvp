@@ -67,13 +67,36 @@
 
 .statusPill,
 .count {
-  background: var(--dio-field);
   color: var(--dio-text-secondary);
 }
 
+.statusPill {
+  background: color-mix(in srgb, var(--dio-text-secondary) 10%, transparent);
+}
+
+.count {
+  background: var(--dio-field);
+}
+
 .priorityPill {
-  background: var(--dio-status-warning);
-  color: var(--dio-text);
+  background: color-mix(in srgb, var(--priority-color, var(--dio-text-secondary)) 10%, transparent);
+  color: var(--priority-color, var(--dio-text-secondary));
+}
+
+.priorityPill[data-priority="critical"] {
+  --priority-color: var(--dio-ticket-priority-critical);
+}
+
+.priorityPill[data-priority="high"] {
+  --priority-color: var(--dio-ticket-priority-high);
+}
+
+.priorityPill[data-priority="medium"] {
+  --priority-color: var(--dio-ticket-priority-medium);
+}
+
+.priorityPill[data-priority="low"] {
+  --priority-color: var(--dio-ticket-priority-low);
 }
 
 .tile {

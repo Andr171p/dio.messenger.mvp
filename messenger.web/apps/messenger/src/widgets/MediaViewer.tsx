@@ -38,7 +38,7 @@ export function MediaViewer({
   const profiles = useDirectoryProfiles(true);
   const [selected, setSelected] =
     useState<Pick<MediaSelection, "assetId" | "messageId">>(initial);
-  const { metadata, source, sourceError } = useMediaSource(selected.assetId, true);
+  const { metadata, source, sourceError } = useMediaSource(selected.assetId, "all");
   const [failedSource, setFailedSource] = useState<string>();
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(false);
@@ -170,7 +170,12 @@ export function MediaViewer({
         ) : !source ? (
           <p role="status">Загрузка…</p>
         ) : kind === "Фото" ? (
-          <img src={source} alt={filename} onError={() => setFailedSource(source)} />
+          <img
+            src={source}
+            alt={filename}
+            data-png={contentType === "image/png" || undefined}
+            onError={() => setFailedSource(source)}
+          />
         ) : kind === "Видео" ? (
           <video
             src={source}

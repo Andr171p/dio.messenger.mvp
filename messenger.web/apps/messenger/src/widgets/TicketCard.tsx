@@ -2,10 +2,11 @@ import { DIODESK_PROVIDER, type components } from "@dio/messenger-core";
 import { Icon } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
+import { getDeskTicketUrl } from "../app/runtimeConfig.js";
 import { useDirectoryProfiles } from "../features/read/useConversationMembers.js";
 import { useUiStore } from "../stores/uiStore.js";
-import { TicketAssignee, TicketStatus } from "./TicketDetails.js";
-import styles from "./MessageTimeline.module.css";
+import { TicketPriority, TicketStatus } from "./TicketDetails.js";
+import styles from "./TicketCard.module.css";
 
 export function TicketCard({
   uuid,
@@ -36,45 +37,72 @@ export function TicketCard({
 
   const data =
     preview.isError || preview.data?.access === "denied" ? undefined : preview.data;
-  const name = data?.number || number || "Заявка";
+  const ticketNumber = data?.number || number;
+  const name = ticketNumber || "Заявка";
   const profile = useDirectoryProfiles(!!data?.assigneeId && !data.assigneeDisplayName);
   const assignee =
     data?.assigneeDisplayName || (data?.assigneeId && profile.data?.[data.assigneeId]);
+  const deskUrl =
+    data?.access === "full" && ticketNumber ? getDeskTicketUrl(ticketNumber) : undefined;
+  const unavailable = preview.isError || preview.data?.access === "denied";
+
   return (
-    <button
-      type="button"
-      className={styles.ticketCard}
-      onClick={(event) => {
-        event.currentTarget.focus({ preventScroll: true });
-        useUiStore.getState().setContextResource(name, uuid);
-      }}
-    >
-      <span className={styles.ticketBody}>
-        <span className={styles.ticketTop}>
-          <span className={styles.ticketLabel}>
-            <Icon name="itsm-link" size={15} /> {name}
+    <article className={styles.card} aria-label={name}>
+      <button
+        type="button"
+        className={styles.summary}
+        aria-label={["Подробнее о заявке", ticketNumber, data?.title]
+          .filter(Boolean)
+          .join(" · ")}
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          useUiStore.getState().setContextResource(name, uuid);
+        }}
+      >
+        <span className={styles.top}>
+          <span className={styles.number}>
+            <Icon name="itsm-link" size={15} />
+            {name}
           </span>
-          {data?.status ? <TicketStatus value={data.status} /> : null}
+          <span className={styles.status}>
+            {data?.status ? <TicketStatus value={data.status} /> : null}
+            <Icon name="next" size={13} />
+          </span>
         </span>
-        {data?.title ? (
-          <strong className={styles.ticketTitle}>{data.title}</strong>
+        {data?.title ? <strong className={styles.title}>{data.title}</strong> : null}
+        {data?.description ? (
+          <span className={styles.description}>{data.description}</span>
         ) : null}
-        {!data && preview.isFetching ? (
-          <span className={styles.ticketTitle}>Загрузка заявки…</span>
-        ) : null}
-        {!data && (preview.isError || preview.data?.access === "denied") ? (
-          <span className={styles.ticketTitle}>Заявка недоступна</span>
-        ) : null}
+        <span className={styles.details}>
+          <span className={styles.source}>
+            DIO Desk{data?.ticketType ? ` · ${data.ticketType}` : ""}
+          </span>
+          {data?.priority ? <TicketPriority value={data.priority} /> : null}
+        </span>
         {assignee ? (
-          <span className={styles.ticketAssigneeRow}>
-            <TicketAssignee name={assignee} />
-            <Icon name="next" size={14} />
+          <span className={styles.assignee}>
+            Исполнитель <strong>{assignee}</strong>
           </span>
         ) : null}
-      </span>
-      <span className={styles.ticketHint}>
-        Подробнее <span aria-hidden="true">→</span>
-      </span>
-    </button>
+        {!data && (unavailable || preview.isFetching) ? (
+          <span className={styles.note} role="status">
+            {unavailable ? "Заявка недоступна" : "Загрузка заявки…"}
+          </span>
+        ) : null}
+        {data?.access === "limited" ? (
+          <span className={styles.note}>Ограниченный доступ</span>
+        ) : null}
+      </button>
+      {deskUrl ? (
+        <a
+          className={styles.openDesk}
+          href={deskUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Открыть в DIO Desk <span aria-hidden="true">↗</span>
+        </a>
+      ) : null}
+    </article>
   );
 }

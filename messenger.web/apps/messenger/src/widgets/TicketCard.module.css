@@ -1,0 +1,116 @@
+.card {
+  min-width: 0;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-lg);
+  overflow: hidden;
+  background: var(--dio-surface);
+  color: var(--dio-text);
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.top,
+.details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px 8px;
+}
+
+.number {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--dio-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.number > :first-child {
+  flex-shrink: 0;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+  color: var(--dio-text-secondary);
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.description,
+.source,
+.assignee,
+.note {
+  color: var(--dio-text-secondary);
+  font-size: 12px;
+}
+
+.description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.assignee strong {
+  margin-inline-start: 4px;
+  color: var(--dio-text);
+  font-weight: 550;
+}
+
+.openDesk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--dio-border-subtle);
+  color: var(--dio-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.openDesk span {
+  color: var(--dio-text-secondary);
+  transition: transform 160ms ease;
+}
+
+.summary:hover,
+.openDesk:hover {
+  background: var(--dio-details);
+}
+
+.openDesk:hover span {
+  transform: translate(2px, -2px);
+}
+
+.summary:focus-visible,
+.openDesk:focus-visible {
+  outline: 2px solid var(--dio-focus-ring);
+  outline-offset: -2px;
+}

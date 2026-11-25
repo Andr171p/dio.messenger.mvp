@@ -116,3 +116,6 @@
 .next {
   right: max(12px, env(safe-area-inset-right));
 }
+.media img[data-png] {
+  background: #fff;
+}

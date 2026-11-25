@@ -60,7 +60,7 @@ export async function saveDraftUpload(
     )
       return;
     const block =
-      presentation && presentation !== "file"
+      presentation
         ? { type: "media" as const, assetId, presentation }
         : { type: "media" as const, assetId };
     await db.drafts.put({

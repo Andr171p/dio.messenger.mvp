@@ -27,7 +27,7 @@ def normalize_text_block(text: str, *, max_length: int) -> str:
 
 def _media_wire(block: MediaBlock) -> dict[str, Any]:
     wire: dict[str, Any] = {"type": "media", "assetId": str(block.asset_id)}
-    if block.presentation is not MediaPresentation.FILE:
+    if "presentation" in block.model_fields_set:
         wire["presentation"] = block.presentation.value
     return wire
 
