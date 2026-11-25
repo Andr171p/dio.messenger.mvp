@@ -2,7 +2,7 @@ from uuid import UUID
 
 from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.infra.database.sqlalchemy.utils import get_constraint_name, is_unique_violation
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ class SqlAlchemyThreadRepository:
                     organization_id=entity.organization_id,
                     root_message_id=entity.root_message_id,
                     title=entity.title,
+                    event_seq=entity.event_seq,
                     created_by=entity.created_by,
                 )
             )
@@ -70,11 +71,11 @@ class SqlAlchemyThreadRepository:
 
         stmt = (
             select(ConversationThreadOrm)
-            .join(MessageOrm, MessageOrm.id == ConversationThreadOrm.root_message_id)
+            .outerjoin(MessageOrm, MessageOrm.id == ConversationThreadOrm.root_message_id)
             .where(
                 ConversationThreadOrm.conversation_id == conversation_id,
                 ConversationThreadOrm.deleted_at.is_(None),
-                MessageOrm.created_seq >= history_from_seq,
+                or_(ConversationThreadOrm.root_message_id.is_(None), MessageOrm.created_seq >= history_from_seq),
             )
             .order_by(ConversationThreadOrm.created_at.desc())
         )
@@ -92,5 +93,6 @@ class SqlAlchemyThreadRepository:
             organization_id=model.organization_id,
             root_message_id=model.root_message_id,
             title=model.title,
+            event_seq=model.event_seq,
             created_by=model.created_by,
         )

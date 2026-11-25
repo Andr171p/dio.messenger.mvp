@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from ddf.infra.database.sqlalchemy import Base, EntityMixin
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import BigInteger, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -10,6 +10,7 @@ class ConversationThreadOrm(EntityMixin, Base):
 
     conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id"))
     organization_id: Mapped[UUID]
-    root_message_id: Mapped[UUID] = mapped_column(ForeignKey("messages.id"))
+    root_message_id: Mapped[UUID | None] = mapped_column(ForeignKey("messages.id"))
     title: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_by: Mapped[UUID]
+    event_seq: Mapped[int] = mapped_column(BigInteger, default=0)

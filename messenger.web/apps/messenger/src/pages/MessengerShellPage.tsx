@@ -3,6 +3,7 @@ import { MessengerLayout } from "../app/layouts/MessengerLayout.js";
 import { MessageComposer } from "../features/composer/MessageComposer.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { AppRail } from "../widgets/AppRail.js";
+import { TopicList } from "../widgets/GroupTopics.js";
 import { ChatHeader } from "../widgets/ChatHeader.js";
 import { ContextResourcePanel } from "../widgets/ContextResourcePanel.js";
 import { ConversationList } from "../widgets/ConversationList.js";
@@ -22,6 +23,8 @@ function closeContext() {
 }
 
 export function MessengerShellPage() {
+  const groupId = useUiStore((s) => s.topicsOpen && s.selectedConversationId);
+  const thread = useUiStore((s) => s.selectedThreadId);
   const theme = useUiStore((s) => s.theme);
   const contextOpen = useUiStore((s) => s.contextDrawerOpen);
   const mobilePane = useUiStore((s) => s.mobilePane);
@@ -51,14 +54,22 @@ export function MessengerShellPage() {
         contextOpen={contextOpen}
         onCloseContext={closeContext}
         rail={<AppRail />}
-        list={searchOpen ? <GlobalSearchPanel /> : <ConversationList />}
+        list={
+          searchOpen ? (
+            <GlobalSearchPanel />
+          ) : groupId ? (
+            <TopicList key={groupId} conversationId={groupId} />
+          ) : (
+            <ConversationList />
+          )
+        }
         chat={
           <div className={[styles.chatColumn, "dio-chat-canvas"].join(" ")}>
             <ChatHeader />
             <OfflineIndicator />
             <GuestConversationNotice />
             <PinBar />
-            <MessageTimeline />
+            <MessageTimeline key={thread ?? "main"} />
             <MessageComposer />
           </div>
         }

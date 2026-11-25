@@ -1,3 +1,4 @@
+import { chatTitle } from "../features/conversation/profiles.js";
 import { sendMessage, type Conversation } from "@dio/messenger-core";
 import { Button, Input, Spinner } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -44,7 +45,7 @@ function ForwardDialog() {
     const q = filter.trim().toLowerCase();
     if (!q) return list.filter((c) => c.id !== forward?.conversationId);
     return list.filter(
-      (c) => c.id !== forward?.conversationId && c.title.toLowerCase().includes(q),
+      (c) => c.id !== forward?.conversationId && chatTitle(c).toLowerCase().includes(q),
     );
   }, [conversations, filter, forward?.conversationId]);
 
@@ -145,7 +146,7 @@ function ForwardDialog() {
                     disabled={pending}
                     onClick={() => setRecipient(conv)}
                   >
-                    <strong>{conv.title}</strong>
+                    <strong>{chatTitle(conv)}</strong>
                     {conv.lastMessagePreview ? (
                       <span className={styles.sub}>
                         {maskSpoilers(conv.lastMessagePreview)}

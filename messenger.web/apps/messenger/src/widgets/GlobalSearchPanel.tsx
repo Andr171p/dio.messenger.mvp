@@ -1,3 +1,4 @@
+import { chatTitle } from "../features/conversation/profiles.js";
 import { Button, Icon, Spinner } from "@dio/messenger-ui";
 import type { Conversation } from "@dio/messenger-core";
 import { useEffect, useState } from "react";
@@ -82,7 +83,7 @@ export function GlobalSearchPanel() {
               className={styles.hit}
               onClick={() => openChat(chat.id)}
             >
-              {chat.title}
+              {chatTitle(chat)}
             </button>
           </li>
         ))}
@@ -113,8 +114,9 @@ export function GlobalSearchPanel() {
             >
               <span className={styles.snippet}>{hit.snippet}</span>
               <span className={styles.meta}>
-                {conversations.find((chat) => chat.id === hit.conversationId)?.title ??
-                  "Беседа"}
+                {chatTitle(
+                  conversations.find((chat) => chat.id === hit.conversationId),
+                )}
                 {" · "}
                 {new Date(hit.createdAt).toLocaleDateString("ru-RU")}
               </span>

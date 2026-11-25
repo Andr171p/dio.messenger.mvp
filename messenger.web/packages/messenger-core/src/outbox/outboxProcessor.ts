@@ -178,6 +178,8 @@ export class OutboxProcessor {
           clientMessageId,
           blocks,
         };
+        if (item.command.payload.threadId)
+          body.threadId = item.command.payload.threadId;
         if (resolvedReply) body.replyToId = resolvedReply;
         if (mentions?.length) body.mentions = mentions;
         if (mentionAll) body.mentionAll = true;

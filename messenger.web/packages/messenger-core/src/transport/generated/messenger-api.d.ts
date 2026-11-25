@@ -906,7 +906,7 @@ export interface components {
             /** Durationms */
             durationMs: number;
             /** Waveform */
-            waveform?: number[];
+            waveform?: number[] | null;
         };
         /** AuditEventDTO */
         AuditEventDTO: {
@@ -1018,6 +1018,12 @@ export interface components {
             type: components["schemas"]["ConversationType"];
             /** Title */
             title: string | null;
+            /** Description */
+            description?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
+            /** Peerid */
+            peerId?: string | null;
             /** Lasteventseq */
             lastEventSeq: number;
             /**
@@ -1144,6 +1150,10 @@ export interface components {
         };
         /** CreateGroupConversationDTO */
         CreateGroupConversationDTO: {
+            /** Description */
+            description?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
             /** Title */
             title: string;
             /** Memberids */
@@ -1181,11 +1191,8 @@ export interface components {
         };
         /** CreateThreadDTO */
         CreateThreadDTO: {
-            /**
-             * Rootmessageid
-             * Format: uuid
-             */
-            rootMessageId: string;
+            /** Rootmessageid */
+            rootMessageId?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -1297,6 +1304,8 @@ export interface components {
             fullName?: string | null;
             /** Username */
             username?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
             /** Roles */
             roles?: string[];
             /** Counterpartyid */
@@ -1381,11 +1390,8 @@ export interface components {
              * Format: uuid
              */
             assetId: string;
-            /**
-             * Presentation
-             * @enum {string}
-             */
-            presentation?: "file" | "image" | "video" | "voice" | "video_note";
+            /** @default file */
+            presentation: components["schemas"]["MediaPresentation"];
         };
         /** MediaGalleryKeyDTO */
         MediaGalleryKeyDTO: {
@@ -1419,6 +1425,12 @@ export interface components {
             previous?: components["schemas"]["MediaGalleryKeyDTO"] | null;
             next?: components["schemas"]["MediaGalleryKeyDTO"] | null;
         };
+        /**
+         * MediaPresentation
+         * @description Желаемое представление media block в сообщении (UX, не тип файла).
+         * @enum {string}
+         */
+        MediaPresentation: "file" | "image" | "video" | "voice" | "video_note";
         /**
          * MediaStatus
          * @enum {string}
@@ -1937,11 +1949,8 @@ export interface components {
              * Format: uuid
              */
             conversationId: string;
-            /**
-             * Rootmessageid
-             * Format: uuid
-             */
-            rootMessageId: string;
+            /** Rootmessageid */
+            rootMessageId: string | null;
             /** Title */
             title: string | null;
             /**
@@ -2478,6 +2487,8 @@ export interface operations {
     get_messages_v1_conversations__conversation_id__messages_get: {
         parameters: {
             query?: {
+                threadId?: string | null;
+                mainOnly?: boolean;
                 beforeSeq?: number | null;
                 aroundMessageId?: string | null;
                 limit?: number;

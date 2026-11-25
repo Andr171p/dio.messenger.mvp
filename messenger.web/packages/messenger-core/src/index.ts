@@ -30,6 +30,7 @@ export { deleteMessage, type DeleteMessageInput } from "./commands/deleteMessage
 export { toggleReaction, type ToggleReactionInput } from "./commands/toggleReaction.js";
 export { pinMessage, type PinMessageInput } from "./commands/pinMessage.js";
 export { markConversationRead } from "./commands/readCursor.js";
+export { conversationKey } from "./storage/keys.js";
 export { upsertDraft, clearDraft, saveDraftUpload } from "./commands/drafts.js";
 export {
   saveVoiceRecording,

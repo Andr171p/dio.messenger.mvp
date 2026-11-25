@@ -6,15 +6,13 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useReadCursor } from "../features/read/useReadCursor.js";
-import {
-  useConversationMembers,
-  useDirectoryProfiles,
-} from "../features/read/useConversationMembers.js";
+import { useConversationMembers } from "../features/read/useConversationMembers.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageBubble } from "./MessageBubble.js";
 import { MessageContextMenu } from "./MessageContextMenu.js";
 import { MediaViewer, type MediaSelection } from "./MediaViewer.js";
 import { TicketFromMessageDialog } from "./TicketFromMessageDialog.js";
+import { useProfiles, photoUrl, userLabel } from "../features/conversation/profiles.js";
 import styles from "./MessageTimeline.module.css";
 
 const RECENT_MESSAGES = 150;
@@ -51,16 +49,42 @@ export function MessageTimeline() {
   const { db, accountKey, sync } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
+  const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">(
+    "loading",
+  );
+  const kind = useLiveQuery(
+    async () =>
+      db && conversationId
+        ? (await db.conversations.get(conversationId))?.kind
+        : undefined,
+    [db, conversationId],
+  );
+  const isGroup = kind === "group";
+  const threadId = useUiStore((s) => s.selectedThreadId);
   useEffect(() => {
     if (!conversationId || !sync) return;
+    let active = true;
+    setHistoryState("loading");
     const unwatch = sync.watchConversation(conversationId);
     void sync
-      .loadHistory(conversationId, { refreshReactions: true })
-      .catch(() => undefined);
-    return unwatch;
-  }, [conversationId, sync]);
+      .loadHistory(conversationId, {
+        refreshReactions: true,
+        threadId,
+        mainOnly: isGroup && !threadId,
+      })
+      .then(() => {
+        if (active) setHistoryState("ready");
+      })
+      .catch(() => {
+        if (active) setHistoryState("error");
+      });
+    return () => {
+      active = false;
+      unwatch();
+    };
+  }, [conversationId, sync, threadId, isGroup]);
   const members = useConversationMembers(conversationId);
-  const profiles = useDirectoryProfiles(!!conversationId);
+
   const parentRef = useRef<HTMLDivElement | null>(null);
   const menuTrigger = useRef<HTMLElement | null>(null);
   const [viewingMedia, setViewingMedia] = useState<MediaSelection | null>(null);
@@ -87,6 +111,7 @@ export function MessageTimeline() {
         true,
       )
       .reverse()
+      .filter((row) => !isGroup || row.threadId === threadId)
       .limit(limit)
       .toArray();
     rows.reverse();
@@ -97,7 +122,8 @@ export function MessageTimeline() {
         .filter(
           (item) =>
             item.command.type === "message.send" &&
-            item.command.payload.conversationId === conversationId,
+            item.command.payload.conversationId === conversationId &&
+            (!isGroup || item.command.payload.threadId === threadId),
         )
         .toArray();
       const pending = await db.messages.bulkGet(
@@ -114,7 +140,7 @@ export function MessageTimeline() {
       );
     }
     return { conversationId, rows };
-  }, [db, accountKey, conversationId, through, limit]);
+  }, [db, accountKey, conversationId, through, limit, threadId, isGroup]);
 
   const items = useMemo(
     () => (messages?.conversationId === conversationId ? (messages?.rows ?? []) : []),
@@ -222,6 +248,12 @@ export function MessageTimeline() {
         if (cancelled) return;
         const original = rows.find((row) => row.id === target.id);
         if (original) {
+          if (isGroup && (original.threadId ?? undefined) !== threadId) {
+            const ui = useUiStore.getState();
+            ui.setThread(original.threadId ?? undefined);
+            ui.setMessageTarget(target);
+            return;
+          }
           setHistoryWindows((current) => ({
             ...current,
             [conversationId]: { through: original.createdSeq, limit: RECENT_MESSAGES },
@@ -240,7 +272,7 @@ export function MessageTimeline() {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, target, targetIndex, sync, setTarget]);
+  }, [conversationId, target, targetIndex, sync, setTarget, threadId, isGroup]);
 
   useLayoutEffect(() => {
     if (!target || targetIndex < 0) return;
@@ -268,6 +300,7 @@ export function MessageTimeline() {
   }, [menu]);
 
   const virtualItems = virtualizer.getVirtualItems();
+  const profiles = useProfiles(virtualItems.map((row) => items[row.index]?.authorId));
 
   useEffect(() => {
     setMenu(null);
@@ -284,6 +317,17 @@ export function MessageTimeline() {
 
   return (
     <>
+      {!items.length && (
+        <p className={styles.jumpNotice} role="status">
+          {historyState === "loading"
+            ? "Загружаем сообщения…"
+            : historyState === "error"
+              ? "История пока недоступна. Проверьте подключение."
+              : threadId
+                ? "В этой теме пока нет сообщений."
+                : "Здесь пока нет сообщений."}
+        </p>
+      )}
       {navigationError ? (
         <p role="status" className={styles.jumpNotice}>
           {navigationError}
@@ -295,7 +339,11 @@ export function MessageTimeline() {
           type="button"
           onClick={() => {
             void sync
-              .loadHistory(conversationId, { beforeSeq: items[0]!.createdSeq })
+              .loadHistory(conversationId, {
+                beforeSeq: items[0]!.createdSeq,
+                threadId,
+                mainOnly: isGroup && !threadId,
+              })
               .then((rows) => {
                 if (rows.length) {
                   setHistoryWindows((current) => ({
@@ -348,7 +396,10 @@ export function MessageTimeline() {
             const message = {
               ...entry,
               authorDisplayName:
-                entry.authorDisplayName ?? profiles.data?.[entry.authorId],
+                entry.authorDisplayName ??
+                (profiles.has(entry.authorId)
+                  ? userLabel(profiles.get(entry.authorId))
+                  : undefined),
             };
             const prev = items[row.index - 1];
             const showDate = !prev || !sameDay(prev.createdAt, message.createdAt);
@@ -401,6 +452,7 @@ export function MessageTimeline() {
                   <div className={styles.avatarSlot} aria-hidden="true">
                     {authorBreak && !message.deletedAt ? (
                       <Avatar
+                        src={photoUrl(profiles.get(entry.authorId)?.avatarUrl)}
                         size="sm"
                         name={
                           message.authorDisplayName ??

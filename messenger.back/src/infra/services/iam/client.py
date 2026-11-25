@@ -24,6 +24,7 @@ class _DeskUserPageItem(BaseModel):
     email: EmailStr
     full_name: str | None = None
     username: str | None = None
+    avatar_url: str | None = None
     roles: set[str] = Field(default_factory=set)
     counterparty_id: UUID | None = None
     is_active: bool = True
@@ -41,6 +42,7 @@ class InviteCatalogUser(BaseModel):
     email: EmailStr
     full_name: str | None = None
     username: str | None = None
+    avatar_url: str | None = None
     roles: frozenset[str] = Field(default_factory=frozenset)
     counterparty_id: UUID | None = None
     principal_kind: PrincipalKind
@@ -134,6 +136,7 @@ class SrvIamClient:
                     email=item.email,
                     full_name=item.full_name,
                     username=item.username,
+                    avatar_url=item.avatar_url,
                     roles=roles,
                     counterparty_id=item.counterparty_id,
                     principal_kind=principal_kind_from_roles(roles),

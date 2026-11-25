@@ -37,6 +37,8 @@ export interface SyncEngine {
   loadHistory(
     conversationId: string,
     options?: {
+      threadId?: string;
+      mainOnly?: boolean;
       beforeSeq?: number;
       aroundMessageId?: string;
       refreshReactions?: boolean;
@@ -56,6 +58,9 @@ export interface SyncEngine {
 }
 
 interface ApiConversation {
+  peerId?: string;
+  description?: string;
+  avatarUrl?: string;
   id: string;
   title?: string | null;
   type?: string;
@@ -362,7 +367,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
         await options.db.conversations.put({
           accountKey: options.accountKey,
           id: conversationId,
-          title: snap.conversation.title?.trim() || existing?.title || conversationId,
+          ...existing,
+          title: snap.conversation.title?.trim() || existing?.title || "Беседа",
           lastMessagePreview: latest?.content.slice(0, 120),
           lastMessageAt: latest?.createdAt,
           unreadCount: messages.filter(
@@ -447,7 +453,16 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       await options.db.conversations.put({
         accountKey: options.accountKey,
         id: conversationId,
-        title: meta?.title?.trim() || existing?.title || entry.title || conversationId,
+        title:
+          meta?.title?.trim() ||
+          (existing?.title !== conversationId &&
+            existing?.title !== meta?.peerId &&
+            existing?.title) ||
+          entry.title ||
+          (meta?.type === "direct" ? "Личный чат" : "Беседа"),
+        peerId: meta?.peerId ?? existing?.peerId,
+        avatarUrl: meta?.avatarUrl ?? existing?.avatarUrl,
+        description: meta?.description ?? existing?.description,
         lastMessagePreview: existing?.lastMessagePreview,
         lastMessageAt: existing?.lastMessageAt,
         unreadCount: existing?.unreadCount ?? 0,
@@ -716,11 +731,13 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
     },
     async loadHistory(
       conversationId,
-      { beforeSeq, aroundMessageId, refreshReactions } = {},
+      { beforeSeq, aroundMessageId, refreshReactions, threadId, mainOnly } = {},
     ) {
       const cursorKey = [options.accountKey, conversationId] as [AccountKey, string];
       const startCursor = (await options.db.syncCursors.get(cursorKey))?.eventSeq;
       const params = new URLSearchParams({ limit: "50" });
+      if (threadId) params.set("threadId", threadId);
+      if (mainOnly) params.set("mainOnly", "true");
       if (beforeSeq !== undefined) params.set("beforeSeq", String(beforeSeq));
       if (aroundMessageId) params.set("aroundMessageId", aroundMessageId);
       const messages = await options.http.get<ServerMessage[]>(
@@ -756,8 +773,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             );
             const existing = await options.db.messages.get(message.localId);
             if (
-              !refreshReactions &&
-              (!existing || existing.revision < message.revision)
+              (!existing && (!refreshReactions || startCursor === currentCursor)) ||
+              (existing && !refreshReactions && existing.revision < message.revision)
             ) {
               const reactions =
                 existing &&
@@ -768,12 +785,18 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             } else if (
               existing &&
               startCursor === currentCursor &&
-              !pendingReactions.has(entry.id ?? "") &&
-              message.reactions !== undefined &&
-              JSON.stringify(existing.reactions) !== JSON.stringify(message.reactions)
+              (existing.threadId !== message.threadId ||
+                (!pendingReactions.has(entry.id ?? "") &&
+                  message.reactions !== undefined &&
+                  JSON.stringify(existing.reactions) !==
+                    JSON.stringify(message.reactions)))
             ) {
               await options.db.messages.update(existing.localId, {
-                reactions: message.reactions,
+                threadId: message.threadId,
+                ...(message.reactions !== undefined &&
+                !pendingReactions.has(entry.id ?? "")
+                  ? { reactions: message.reactions }
+                  : {}),
               });
             }
           }

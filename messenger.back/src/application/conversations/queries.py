@@ -1,32 +1,14 @@
 from uuid import UUID
 
 from src.application.auth import AuthUser
-from src.application.conversations.commands import require_active_membership
+from src.application.conversations.commands import conversation_dto, require_active_membership
 from src.application.conversations.dtos import (
     ConversationDTO,
     ConversationMemberDTO,
     InviteCatalogUserDTO,
 )
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.domain.memberships import MemberRole
 from src.infra.services.iam.client import SrvIamClient
-
-
-async def _to_conversation_dto(
-    conversation,
-    *,
-    membership_repository: MembershipRepository,
-) -> ConversationDTO:
-    has_external = await membership_repository.has_role(conversation.id, role=MemberRole.GUEST)
-    return ConversationDTO(
-        id=conversation.id,
-        organization_id=conversation.organization_id,
-        type=conversation.type,
-        title=conversation.title,
-        last_event_seq=conversation.last_event_seq,
-        created_by=conversation.created_by,
-        has_external_members=has_external,
-    )
 
 
 async def list_conversations(
@@ -40,7 +22,7 @@ async def list_conversations(
         principal_id=actor.user.id,
     )
     return [
-        await _to_conversation_dto(item, membership_repository=membership_repository)
+        await conversation_dto(item, principal_id=actor.user.id, membership_repository=membership_repository)
         for item in items
     ]
 
@@ -58,7 +40,7 @@ async def get_conversation(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
-    return await _to_conversation_dto(conversation, membership_repository=membership_repository)
+    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
 
 
 async def list_members(
@@ -99,6 +81,7 @@ async def search_invite_catalog(
             email=str(user.email),
             full_name=user.full_name,
             username=user.username,
+            avatar_url=user.avatar_url,
             roles=sorted(user.roles),
             counterparty_id=user.counterparty_id,
             principal_kind=user.principal_kind.value,

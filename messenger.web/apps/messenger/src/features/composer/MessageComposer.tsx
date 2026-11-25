@@ -1,4 +1,5 @@
 import {
+  conversationKey,
   editMessage,
   readMessageBlocks,
   saveVoiceRecording,
@@ -34,17 +35,25 @@ const maxFiles = 10;
 
 export function MessageComposer() {
   const conversationId = useUiStore((state) => state.selectedConversationId);
+  const threadId = useUiStore((s) => s.selectedThreadId);
   const { accountKey } = useRuntime();
   if (!conversationId || !accountKey) return null;
   return (
     <ConversationComposer
-      key={JSON.stringify([accountKey, conversationId])}
+      key={JSON.stringify([accountKey, conversationId, threadId])}
       conversationId={conversationId}
+      threadId={threadId}
     />
   );
 }
 
-function ConversationComposer({ conversationId }: { conversationId: string }) {
+function ConversationComposer({
+  conversationId,
+  threadId,
+}: {
+  conversationId: string;
+  threadId?: string;
+}) {
   const { db, sync, accountKey, media, http } = useRuntime();
   const { data: policy } = useConversationPolicy(conversationId);
   const { session } = useAuth();
@@ -97,7 +106,9 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
 
   const draft = useLiveQuery(async () => {
     if (!db || !accountKey || !conversationId) return null;
-    const stored = await db.drafts.get(`${accountKey}::${conversationId}`);
+    const stored = await db.drafts.get(
+      conversationKey(accountKey, conversationId, threadId),
+    );
     if (!stored) return null;
     if (stored.draftReply || !stored.replyToId) return stored;
     const source = await db.messages.get(stored.replyToId);
@@ -110,7 +121,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         preview: source.content,
       },
     };
-  }, [db, accountKey, conversationId]);
+  }, [db, accountKey, conversationId, threadId]);
 
   useEffect(() => {
     if (hydrated || draft === undefined || !db) return;
@@ -134,12 +145,14 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       reply ?? undefined,
       [...attachments, ...stagedUploads],
       mentions,
+      threadId,
     ).catch(() => setSendError("Не удалось сохранить черновик"));
   }, [
     db,
     accountKey,
     conversationId,
     draftText,
+    threadId,
     reply,
     editingId,
     hydrated,
@@ -213,6 +226,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       );
       await sendMessage(db, accountKey, {
         conversationId,
+        threadId,
         clearConversationDraft: true,
         content: text.trim(),
         authorId: session.userId,
@@ -235,7 +249,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       });
       setAttachments([]);
       setMentions({});
-      if (useUiStore.getState().selectedConversationId === conversationId) {
+      if (
+        useUiStore.getState().selectedConversationId === conversationId &&
+        useUiStore.getState().selectedThreadId === threadId
+      ) {
         clearReply(null);
       }
       sync?.requestFlush();
@@ -298,7 +315,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         blob: file,
         contentType: file.type || "audio/webm",
         filename: file.name,
-        send: reply ? { draftReply: reply } : {},
+        send: { threadId, draftReply: reply ?? undefined },
       });
     } catch {
       throw new Error("Не удалось сохранить голосовое для отправки.");
@@ -307,6 +324,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     await media.enqueue(file, conversationId, {
       presentation: "voice",
       voiceUploadId,
+      threadId,
       sendAsMessage: true,
     });
   };
@@ -315,7 +333,8 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     if (!media || !hydrated || editingId || sending || attachmentDialogOpen) return;
     const updateJobs = () => {
       for (const job of media.getJobs()) {
-        if (job.conversationId !== conversationId) continue;
+        if (job.conversationId !== conversationId || job.threadId !== threadId)
+          continue;
         if (job.status === "ready" && job.assetId) {
           const assetId = job.assetId;
           media.dismiss(job.id);
@@ -324,10 +343,9 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             setFailedUpload((current) => (current === job.id ? null : current));
             continue;
           }
-          const block =
-            job.presentation
-              ? { type: "media" as const, assetId, presentation: job.presentation }
-              : { type: "media" as const, assetId };
+          const block = job.presentation
+            ? { type: "media" as const, assetId, presentation: job.presentation }
+            : { type: "media" as const, assetId };
           setAttachments((items) =>
             items.some(
               ({ block }) => block.type === "media" && block.assetId === assetId,
@@ -349,7 +367,15 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     };
     updateJobs();
     return media.subscribe(updateJobs);
-  }, [media, conversationId, hydrated, editingId, sending, attachmentDialogOpen]);
+  }, [
+    media,
+    conversationId,
+    threadId,
+    hydrated,
+    editingId,
+    sending,
+    attachmentDialogOpen,
+  ]);
 
   function updateText(value: string) {
     setText(value);
@@ -459,7 +485,12 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   }
 
   function sendFromComposer() {
-    if (savedMedia.length && !editingId && media && policy?.allowAttachments !== false) {
+    if (
+      savedMedia.length &&
+      !editingId &&
+      media &&
+      policy?.allowAttachments !== false
+    ) {
       closeTools();
       setAttachmentDialogOpen(true);
     } else {
@@ -834,6 +865,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       ) : null}
       {attachmentDialogOpen && media ? (
         <AttachmentDialog
+          threadId={threadId}
           conversationId={conversationId}
           media={media}
           files={selectedFiles}
@@ -855,7 +887,8 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
               if (
                 block.type !== "media" ||
                 items.some(
-                  (item) => item.block.type === "media" && item.block.assetId === block.assetId,
+                  (item) =>
+                    item.block.type === "media" && item.block.assetId === block.assetId,
                 )
               ) {
                 return items;
@@ -865,7 +898,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
           }
           onDiscardUploads={(assetIds) =>
             setStagedUploads((items) =>
-              items.filter(({ block }) => block.type !== "media" || !assetIds.includes(block.assetId)),
+              items.filter(
+                ({ block }) =>
+                  block.type !== "media" || !assetIds.includes(block.assetId),
+              ),
             )
           }
           onClose={closeAttachmentDialog}

@@ -3,7 +3,7 @@ from typing import override
 from uuid import UUID
 
 from ddf.infra.database.sqlalchemy import SqlAlchemyRepository
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, func, select, update
 
 from src.domain.conversations import Conversation, ConversationType
 from src.domain.memberships import ConversationMembership, MemberRole
@@ -21,6 +21,8 @@ class ConversationMapper:
             organization_id=entity.organization_id,
             type=entity.type.value,
             title=entity.title,
+            description=entity.description,
+            avatar_url=entity.avatar_url,
             created_by=entity.created_by,
             last_event_seq=entity.last_event_seq,
         )
@@ -35,6 +37,8 @@ class ConversationMapper:
             organization_id=model.organization_id,
             type=ConversationType(model.type),
             title=model.title,
+            description=model.description,
+            avatar_url=model.avatar_url,
             created_by=model.created_by,
             last_event_seq=model.last_event_seq,
         )
@@ -125,6 +129,10 @@ class SqlAlchemyConversationRepository(SqlAlchemyRepository[Conversation, Conver
         principal_a: UUID,
         principal_b: UUID,
     ) -> Conversation | None:
+        # A pair can open its first chat from both accounts simultaneously.
+        first, second = sorted((principal_a, principal_b))
+        pair_key = f"direct:{organization_id}:{first}:{second}"
+        await self._session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(pair_key, 0))))
         member_a = ConversationMemberOrm.__table__.alias("member_a")
         member_b = ConversationMemberOrm.__table__.alias("member_b")
 

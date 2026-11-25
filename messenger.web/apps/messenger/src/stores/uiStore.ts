@@ -24,6 +24,10 @@ interface UiState {
   theme: DioTheme;
   navActive: NavItem;
   selectedConversationId: string | null;
+  topicsOpen: boolean;
+  setTopicsOpen: (open: boolean) => void;
+  selectedThreadId?: string;
+  setThread: (id?: string) => void;
   mobilePane: MobilePane;
   contextDrawerOpen: boolean;
   contextResourceId: string | null;
@@ -71,12 +75,25 @@ export const useUiStore = create<UiState>()(
       searchConversationId: null,
       messageTarget: null,
       newChatOpen: false,
+      topicsOpen: false,
+      setTopicsOpen: (topicsOpen) =>
+        set({ topicsOpen, searchPanelOpen: false, mobilePane: "list" }),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set({ theme: get().theme === "light" ? "dark" : "light" }),
       setNavActive: (nav) => set({ navActive: nav }),
+      setThread: (selectedThreadId) =>
+        set({
+          selectedThreadId,
+          mobilePane: "chat",
+          editingMessageId: null,
+          replyTarget: null,
+          messageTarget: null,
+        }),
       setSelectedConversation: (id) =>
         set({
           selectedConversationId: id,
+          topicsOpen: false,
+          selectedThreadId: undefined,
           replyTarget: null,
           editingMessageId: null,
           forwardTarget: null,

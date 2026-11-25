@@ -48,42 +48,49 @@ async def create_conversation_thread(
         membership_repository=membership_repository,
     )
 
-    root = await message_repository.read(command.root_message_id)
-    if root is None or root.conversation_id != conversation_id or root.is_tombstone:
-        raise MessageNotFoundError("Root message not found.")
-    if root.created_seq < membership.history_from_seq:
-        raise ThreadInvalidError("Root message is outside your history visibility.")
+    root = None
+    if command.root_message_id is None:
+        if conversation.type != "group" or not (command.title or "").strip():
+            raise ThreadInvalidError("A group topic requires a title.")
+    else:
+        root = await message_repository.read(command.root_message_id)
+        if root is None or root.conversation_id != conversation_id or root.is_tombstone:
+            raise MessageNotFoundError("Root message not found.")
+        if root.created_seq < membership.history_from_seq:
+            raise ThreadInvalidError("Root message is outside your history visibility.")
 
-    existing = await thread_repository.get_by_root(
-        conversation_id=conversation_id,
-        root_message_id=root.id,
-    )
-    if existing is not None:
-        return _to_dto(existing, event_seq=root.created_seq)
+        existing = await thread_repository.get_by_root(
+            conversation_id=conversation_id,
+            root_message_id=root.id,
+        )
+        if existing is not None:
+            return _to_dto(existing, event_seq=existing.event_seq or root.created_seq)
 
     thread = create_thread(
         conversation_id=conversation.id,
         organization_id=conversation.organization_id,
-        root_message_id=root.id,
+        root_message_id=command.root_message_id,
         created_by=actor.user.id,
-        root_message_created_seq=root.created_seq,
+        root_message_created_seq=root.created_seq if root else 0,
         title=command.title,
     )
     seq = await conversation_repository.allocate_event_seq(conversation.id)
-    thread.root_message_created_seq = root.created_seq
+    thread.root_message_created_seq = root.created_seq if root else seq
     thread.mark_created(event_seq=seq)
 
     try:
         await thread_repository.create(thread)
     except UniqueConstraintViolationError:
         await uow.rollback()
+        if root is None:
+            raise
         existing = await thread_repository.get_by_root(
             conversation_id=conversation_id,
             root_message_id=root.id,
         )
         if existing is None:
             raise
-        return _to_dto(existing, event_seq=root.created_seq)
+        return _to_dto(existing, event_seq=existing.event_seq or root.created_seq)
 
     await event_store.append(
         ConversationEvent(
@@ -93,8 +100,8 @@ async def create_conversation_thread(
             type="thread.created",
             payload={
                 "threadId": str(thread.id),
-                "rootMessageId": str(root.id),
-                "createdSeq": root.created_seq,
+                "rootMessageId": str(root.id) if root else None,
+                "createdSeq": thread.root_message_created_seq,
                 "eventSeq": seq,
                 "createdBy": str(actor.user.id),
                 "title": thread.title,
@@ -132,7 +139,7 @@ async def list_conversation_threads(
             title=item.title,
             created_by=item.created_by,
             created_at=item.created_at,
-            event_seq=item.root_message_created_seq,
+            event_seq=item.event_seq,
         )
         for item in items
     ]
@@ -149,6 +156,8 @@ async def ensure_thread_sendable(
     thread = await thread_repository.read(thread_id)
     if thread is None or thread.conversation_id != conversation_id:
         raise ThreadNotFoundError("Thread not found.")
+    if thread.root_message_id is None:
+        return thread
     root = await message_repository.read(thread.root_message_id)
     if root is None or root.created_seq < membership_history_from_seq:
         raise ThreadInvalidError("Thread root is outside your history visibility.")

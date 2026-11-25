@@ -39,7 +39,7 @@ function inline(
 ): ReactNode[] {
   if (depth >= 6) return [text];
   const result: ReactNode[] = [];
-  const specials = /\\[\\#*_~|()[\]\x60]|[#\[*_~|\x60]/g;
+  const specials = /\\[\\#*_~|()[\]\x60]|[#[*_~|\x60]/g;
   let cursor = 0;
   for (let match = specials.exec(text); match; match = specials.exec(text)) {
     const start = match.index;

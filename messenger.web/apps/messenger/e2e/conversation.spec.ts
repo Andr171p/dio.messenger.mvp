@@ -9,7 +9,9 @@ const sourceId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const replyId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const resourceId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const otherChatId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
-const transparentPng = fileURLToPath(new URL("../public/brand/dios-mark.png", import.meta.url));
+const transparentPng = fileURLToPath(
+  new URL("../public/brand/dios-mark.png", import.meta.url),
+);
 const chat = { id: chatId, type: "GROUP", title: "Дежурная смена", lastEventSeq: 81 };
 const source = {
   id: sourceId,
@@ -98,7 +100,9 @@ test.beforeEach(async ({ context }) => {
         },
       });
     if (url.pathname.endsWith("/messages") && route.request().method() === "GET") {
-      return route.fulfill({ json: [source] });
+      const older =
+        url.searchParams.has("aroundMessageId") || url.searchParams.has("beforeSeq");
+      return route.fulfill({ json: older ? [source] : [reply] });
     }
     if (url.pathname.endsWith("/preview"))
       return route.fulfill({
@@ -294,7 +298,8 @@ test("завершает загрузку в черновик исходной �
     .click();
   await complete;
   // Simulate navigation outside the modal while the server checks the upload.
-  await page.getByRole("button", { name: /Вторая группа/, includeHidden: true })
+  await page
+    .getByRole("button", { name: /Вторая группа/, includeHidden: true })
     .evaluate((button: HTMLButtonElement) => button.click());
   finishUpload();
   await expect
@@ -330,7 +335,9 @@ test("завершает загрузку в черновик исходной �
   await page.reload();
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
   await page.getByRole("button", { name: "Вложения · 1" }).click();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Убрать vpn.txt" })).toBeVisible();
+  await expect(
+    page.getByRole("dialog").getByRole("button", { name: "Убрать vpn.txt" }),
+  ).toBeVisible();
 });
 
 test("просматривает фото и переносит черновик в подпись к файлу", async ({ page }) => {
@@ -352,7 +359,15 @@ test("просматривает фото и переносит черновик
     route.fulfill({ json: { id: assetId, status: "ready" } }),
   );
   await page.route(`**/v1/media/${assetId}`, (route) =>
-    route.fulfill({ json: { id: assetId, filename, contentType: "image/png", size: 201914, status: "ready" } }),
+    route.fulfill({
+      json: {
+        id: assetId,
+        filename,
+        contentType: "image/png",
+        size: 201914,
+        status: "ready",
+      },
+    }),
   );
   await page.route(`**/v1/conversations/${chatId}/messages`, (route) =>
     route.request().method() === "POST"
@@ -389,8 +404,9 @@ test("просматривает фото и переносит черновик
   await expect(caption).toHaveValue("Логотип для документации");
   await dialog.getByRole("checkbox", { name: "Отправить как файл" }).check();
   await expect(dialog.getByText(filename, { exact: true })).toBeVisible();
-  const sent = page.waitForRequest((request) =>
-    request.method() === "POST" && request.url().endsWith(`/${chatId}/messages`),
+  const sent = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().endsWith(`/${chatId}/messages`),
   );
   await dialog.getByRole("button", { name: "Отправить" }).click();
   expect((await sent).postDataJSON().blocks).toEqual([
@@ -789,8 +805,11 @@ test("рисует Markdown и отображает активность уча�
   await page.route("**/v1/conversations/" + chatId + "/presence", (route) =>
     route.fulfill({ json: [{ userId, status: "online" }] }),
   );
-  await page.route("**/v1/directory/users?*", (route) =>
-    route.fulfill({ json: [{ id: source.senderId, fullName: "Анна Смирнова" }] }),
+  await page.route("**/v1/conversations/" + chatId + "/members", (route) =>
+    route.fulfill({ json: [{ principalId: source.senderId, role: "member" }] }),
+  );
+  await page.route("**/api/v1/users/" + source.senderId, (route) =>
+    route.fulfill({ json: { id: source.senderId, full_name: "Анна Смирнова" } }),
   );
   await page.goto("/");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
@@ -1199,4 +1218,138 @@ test("сохраняет размеры и положение ленты при 
   }
   await page.waitForLoadState("networkidle");
   expect(await readPosition()).toEqual(before);
+});
+
+test("создание группы сохраняет фото, описание и выбор участников между шагами", async ({
+  page,
+}) => {
+  const member = {
+    id: sourceId,
+    fullName: "Анна Смирнова",
+    email: "anna@example.test",
+  };
+  let body: Record<string, unknown> = {};
+  await page.route("**/v1/directory/users?*", (route) =>
+    route.fulfill({ json: [member] }),
+  );
+  await page.route("**/v1/conversations", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    body = route.request().postDataJSON();
+    return route.fulfill({ json: { id: resourceId, type: "group", ...body } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Новый чат" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Группа", exact: true }).click();
+  await dialog.getByRole("button", { name: "Далее" }).click();
+  const name = dialog.getByLabel("Название группы");
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await name.fill("Проект");
+  await dialog.getByLabel("Описание (по желанию)").fill("Рабочая группа");
+  await dialog.locator("input[type=file]").setInputFiles(transparentPng);
+  await dialog.getByRole("button", { name: "Далее" }).click();
+  await dialog.getByRole("button", { name: /Анна Смирнова/ }).click();
+  await dialog.getByRole("button", { name: "Назад" }).click();
+  await expect(name).toHaveValue("Проект");
+  await dialog.getByRole("button", { name: "Далее" }).click();
+  await dialog.getByRole("button", { name: "Создать группу" }).click();
+  await expect(page.getByRole("heading", { name: "Проект" })).toBeVisible();
+  expect(body).toMatchObject({
+    title: "Проект",
+    description: "Рабочая группа",
+    memberIds: [sourceId],
+    avatarUrl: expect.stringMatching(/^data:image\/jpeg;base64,/),
+  });
+});
+
+test("из участника группы открывается профиль и личная переписка с именем", async ({
+  page,
+}) => {
+  await page.route("**/members", (route) =>
+    route.fulfill({ json: [{ principalId: sourceId, role: "member" }] }),
+  );
+  await page.route("**/api/v1/users/" + sourceId, (route) =>
+    route.fulfill({
+      json: { id: sourceId, username: "anna", full_name: "Анна Смирнова" },
+    }),
+  );
+  await page.route("**/conversations/direct", (route) =>
+    route.fulfill({ json: { id: resourceId, type: "direct", peerId: sourceId } }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await page.getByRole("button", { name: /Информация о беседе/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /Анна Смирнова/ })
+    .click();
+  const profile = page.getByRole("dialog", { name: "Профиль", exact: true });
+  await expect(profile.getByText("@anna")).toBeVisible();
+  await profile.getByRole("button", { name: "Написать сообщение" }).click();
+  await expect(page.getByRole("heading", { name: "Анна Смирнова" })).toBeVisible();
+  await expect(
+    page.locator("li button").filter({ hasText: "Анна Смирнова" }),
+  ).toBeVisible();
+});
+
+test("тема сохраняет собственную историю и черновик, отправка передаёт threadId", async ({
+  page,
+}) => {
+  const topics: { id: string; title: string }[] = [];
+  const sent: string[] = [];
+  await page.route("**/threads", async (route) => {
+    if (route.request().method() === "POST") {
+      const t = { id: resourceId, title: route.request().postDataJSON().title };
+      topics.push(t);
+      return route.fulfill({ json: t });
+    }
+    return route.fulfill({ json: topics });
+  });
+  await page.route("**/messages?*threadId=*", (route) =>
+    route.fulfill({
+      json: [
+        {
+          ...source,
+          id: otherChatId,
+          threadId: resourceId,
+          createdSeq: 20,
+          content: { blocks: [{ type: "text", text: "История темы" }] },
+        },
+      ],
+    }),
+  );
+  await page.route("**/messages", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const data = route.request().postDataJSON();
+    sent.push(data.threadId);
+    return route.fulfill({
+      json: {
+        id: crypto.randomUUID(),
+        clientMessageId: data.clientMessageId,
+        eventSeq: 82,
+        createdSeq: 82,
+        revision: 1,
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const editor = page.getByRole("textbox", { name: "Текст сообщения" });
+  await editor.fill("Черновик общего чата");
+  await page.getByRole("button", { name: /Темы.*Общий чат/ }).click();
+  await page.getByRole("button", { name: "Создать тему" }).click();
+  await page.getByLabel("Название темы").fill("Поставка");
+  await page.getByRole("button", { name: "Создать", exact: true }).click();
+  await expect(page.getByText("История темы", { exact: true })).toBeVisible();
+  await expect(editor).toHaveValue("");
+  await editor.fill("Первое сообщение темы");
+  await editor.press("Enter");
+  await expect.poll(() => sent).toEqual([resourceId]);
+  await editor.fill("Черновик темы");
+  const list = page.getByRole("navigation", { name: "Темы группы" });
+  await list.getByRole("button", { name: /Общий чат/ }).click();
+  await expect(editor).toHaveValue("Черновик общего чата");
+  await expect(page.getByText("История темы", { exact: true })).toBeHidden();
+  await list.getByRole("button", { name: /Поставка/ }).click();
+  await expect(editor).toHaveValue("Черновик темы");
 });

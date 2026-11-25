@@ -1,28 +1,3 @@
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--dio-overlay);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 80;
-  padding: var(--dio-space-4);
-}
-
-.dialog {
-  width: min(420px, 100%);
-  max-height: min(80vh, 640px);
-  overflow: auto;
-  background: var(--dio-sidebar);
-  border: 1px solid var(--dio-border);
-  border-radius: var(--dio-radius-lg);
-  padding: var(--dio-space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--dio-space-3);
-  box-shadow: var(--dio-shadow-sm);
-}
-
 .tabs {
   display: flex;
   gap: var(--dio-space-2);
@@ -82,4 +57,154 @@
   color: var(--dio-action);
   font-size: 13px;
   margin: 0;
+}
+
+.modal {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(84dvh, 700px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 1px solid var(--dio-border);
+  border-radius: 18px;
+  background: var(--dio-sidebar);
+  color: var(--dio-text);
+  padding: 20px;
+  box-shadow: var(--dio-shadow-sm);
+}
+.modal[open],
+.form,
+.userCopy,
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal::backdrop {
+  background: var(--dio-overlay);
+}
+.dialogHead,
+.footer,
+.photoRow,
+.chips,
+.topicBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dialogHead,
+.footer {
+  justify-content: space-between;
+}
+.modal h2,
+.modal h3,
+.modal p {
+  margin: 0;
+}
+.modal h2 {
+  font-size: 1.15rem;
+}
+.modal h3 {
+  font-size: 1rem;
+}
+.dialogHead button,
+.photoButton,
+.textButton {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+.dialogHead button {
+  font-size: 1.5rem;
+  width: 36px;
+  height: 36px;
+}
+.photoButton {
+  padding: 0;
+  border-radius: 50%;
+}
+.hero {
+  align-items: center;
+  text-align: center;
+  padding: 12px;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+.hero p {
+  white-space: pre-wrap;
+}
+.userCopy {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  gap: 3px;
+}
+.userCopy small,
+.hero span,
+.modal p {
+  color: var(--dio-text-secondary);
+}
+.chips {
+  flex-wrap: wrap;
+}
+.chips button,
+.topicBar {
+  border: 1px solid var(--dio-border);
+  background: var(--dio-field);
+  border-radius: 12px;
+  color: var(--dio-text);
+  cursor: pointer;
+  padding: 5px 9px;
+  font: inherit;
+}
+.topicBar {
+  align-self: flex-start;
+  margin: 5px 12px;
+  font-size: 12px;
+}
+.topicBar span {
+  color: var(--dio-text-secondary);
+}
+.userRow[aria-pressed="true"],
+.userRow[aria-current="true"] {
+  background: var(--dio-accent-muted);
+}
+.modal input[aria-invalid="true"] {
+  border-color: var(--dio-status-error);
+  box-shadow: 0 0 0 1px var(--dio-status-error);
+}
+.modal .error {
+  color: var(--dio-status-error);
+}
+
+.topicList {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  height: 100%;
+  padding: 16px 12px;
+  box-sizing: border-box;
+}
+.topicList > .textButton {
+  align-self: flex-start;
+  color: var(--dio-action);
+}
+.topicList h2 {
+  margin: 5px 0;
+  font-size: 18px;
+}
+.topicItems {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow: auto;
+}
+.topicItems button {
+  padding: 12px 10px;
+  overflow-wrap: anywhere;
+}
+.topicItems button span {
+  color: var(--dio-text-secondary);
 }

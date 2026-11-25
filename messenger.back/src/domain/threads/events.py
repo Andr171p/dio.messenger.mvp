@@ -13,7 +13,7 @@ class ThreadCreated(Event):
     organization_id: UUID
     conversation_id: UUID
     thread_id: UUID
-    root_message_id: UUID
+    root_message_id: UUID | None
     event_seq: int
     created_by: UUID
     title: str | None = None

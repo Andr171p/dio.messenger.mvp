@@ -54,6 +54,7 @@ export async function queueUploadedVoiceMessage(
       await sendMessage(db, accountKey, {
         conversationId: row.conversationId,
         clientMessageId: id,
+        threadId: row.send.threadId,
         authorId,
         content: "",
         extraBlocks: [{ type: "media", assetId, presentation: "voice" }],

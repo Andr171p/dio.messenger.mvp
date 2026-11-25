@@ -25,6 +25,7 @@ export interface LocalMessage {
   localId: string;
   clientMessageId: string;
   conversationId: string;
+  threadId?: string;
   serverId?: string;
   content: string;
   /** Serialized content blocks JSON when richer than plain text */
@@ -55,6 +56,9 @@ export interface Conversation {
   accountKey: AccountKey;
   id: string;
   title: string;
+  peerId?: string;
+  description?: string;
+  avatarUrl?: string;
   lastMessagePreview?: string;
   lastMessageAt?: number;
   unreadCount: number;
@@ -93,7 +97,7 @@ export interface VoiceUpload {
   blob: Blob;
   contentType: string;
   filename: string;
-  send?: Pick<Draft, "draftReply">;
+  send?: Pick<Draft, "draftReply"> & { threadId?: string };
   createdAt: number;
 }
 
@@ -111,6 +115,7 @@ export interface OutboxItem {
 }
 
 export interface SendMessageOutboxCommand {
+  threadId?: string;
   conversationId: string;
   clientMessageId: string;
   content: string;

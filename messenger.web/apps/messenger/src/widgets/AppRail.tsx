@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { photoUrl, useProfiles, userLabel } from "../features/conversation/profiles.js";
+import { ProfileDialog } from "./ProfileDialog.js";
 import { Avatar, Button, Icon, type IconName } from "@dio/messenger-ui";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useUiStore, type NavItem } from "../stores/uiStore.js";
@@ -9,6 +12,8 @@ const NAV: { id: NavItem; icon: IconName; label: string }[] = [
 
 export function AppRail() {
   const { session, logout } = useAuth();
+  const [own, setOwn] = useState(false);
+  const me = useProfiles([session?.userId]).get(session?.userId ?? "");
   const active = useUiStore((s) => s.navActive);
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
@@ -37,6 +42,7 @@ export function AppRail() {
               aria-current={active === item.id ? "page" : undefined}
               onClick={() => {
                 const ui = useUiStore.getState();
+                ui.setTopicsOpen(false);
                 ui.setSearchPanelOpen(false);
                 ui.setMobilePane("list");
               }}
@@ -56,7 +62,23 @@ export function AppRail() {
         >
           <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
         </Button>
-        <Avatar name={session?.displayName ?? "User"} size="sm" />
+        <button
+          className={styles.navBtn}
+          aria-label="Мой профиль"
+          onClick={() => setOwn(true)}
+        >
+          <Avatar
+            name={me ? userLabel(me) : (session?.displayName ?? "Вы")}
+            src={photoUrl(me?.avatarUrl)}
+            size="sm"
+          />
+        </button>
+        {own && session && (
+          <ProfileDialog
+            initial={me ?? { id: session.userId, fullName: session.displayName }}
+            onClose={() => setOwn(false)}
+          />
+        )}
         <Button
           variant="ghost"
           size="sm"

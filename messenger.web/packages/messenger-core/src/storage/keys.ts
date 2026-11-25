@@ -1,7 +1,11 @@
 import type { AccountKey } from "../models/types.js";
 
-export function conversationKey(accountKey: AccountKey, conversationId: string): string {
-  return `${accountKey}::${conversationId}`;
+export function conversationKey(
+  accountKey: AccountKey,
+  conversationId: string,
+  threadId?: string,
+): string {
+  return [accountKey, conversationId, ...(threadId ? [threadId] : [])].join("::");
 }
 
 export function messageCompound(

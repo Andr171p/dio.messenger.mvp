@@ -12,6 +12,8 @@ class ConversationOrm(EntityMixin, Base):
     organization_id: Mapped[UUID]
     type: Mapped[str] = mapped_column(String(32))
     title: Mapped[str | None] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(String(1024))
+    avatar_url: Mapped[str | None]
     created_by: Mapped[UUID]
     last_event_seq: Mapped[int] = mapped_column(BigInteger, default=0)
 

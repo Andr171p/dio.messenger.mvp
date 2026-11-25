@@ -73,6 +73,8 @@ class SqlAlchemyMessageRepository(SqlAlchemyRepository[Message, MessageOrm]):
         *,
         conversation_id: UUID,
         before_seq: int | None,
+        thread_id: UUID | None = None,
+        main_only: bool = False,
         history_from_seq: int,
         limit: int,
     ) -> list[Message]:
@@ -80,6 +82,10 @@ class SqlAlchemyMessageRepository(SqlAlchemyRepository[Message, MessageOrm]):
             MessageOrm.conversation_id == conversation_id,
             MessageOrm.created_seq >= history_from_seq,
         )
+        if thread_id is not None:
+            stmt = stmt.where(MessageOrm.thread_id == thread_id)
+        elif main_only:
+            stmt = stmt.where(MessageOrm.thread_id.is_(None))
         if before_seq is not None:
             stmt = stmt.where(MessageOrm.created_seq < before_seq)
 

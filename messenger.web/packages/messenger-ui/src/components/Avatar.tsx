@@ -1,3 +1,4 @@
+import { useState } from "react";
 import styles from "./Avatar.module.css";
 
 export interface AvatarProps {
@@ -13,6 +14,7 @@ function initials(name: string): string {
 }
 
 export function Avatar({ name, src, size = "md", online }: AvatarProps) {
+  const [failed, setFailed] = useState<string>();
   return (
     <span
       className={[styles.root, styles[size], online ? styles.online : ""]
@@ -21,7 +23,11 @@ export function Avatar({ name, src, size = "md", online }: AvatarProps) {
       title={name}
       aria-label={name}
     >
-      {src ? <img className={styles.img} src={src} alt="" /> : initials(name)}
+      {src && src !== failed ? (
+        <img className={styles.img} src={src} onError={() => setFailed(src)} alt="" />
+      ) : (
+        initials(name)
+      )}
       {online ? <span className={styles.dot} aria-hidden /> : null}
     </span>
   );

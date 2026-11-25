@@ -32,6 +32,7 @@ export async function applyEventProjection(
           createdAt: asNumber(payload.createdAt) ?? asString(payload.createdAt),
           revision: asNumber(payload.revision),
           content: payload.content ?? payload,
+          threadId: asString(payload.threadId),
           replyToId: asString(payload.replyToId),
         },
         accountKey,
@@ -49,9 +50,10 @@ export async function applyEventProjection(
 
       const conv = await db.conversations.get(event.conversationId);
       await db.conversations.put({
+        ...conv,
         accountKey,
         id: event.conversationId,
-        title: conv?.title ?? event.conversationId,
+        title: conv?.title ?? "Беседа",
         lastMessagePreview: content.slice(0, 120),
         lastMessageAt: createdAt,
         unreadCount:
@@ -135,9 +137,10 @@ export async function applyEventProjection(
     case "conversation.updated": {
       const conv = await db.conversations.get(event.conversationId);
       await db.conversations.put({
+        ...conv,
         accountKey,
         id: event.conversationId,
-        title: asString(payload.title) ?? conv?.title ?? event.conversationId,
+        title: asString(payload.title) ?? conv?.title ?? "Беседа",
         lastMessagePreview: conv?.lastMessagePreview,
         lastMessageAt: conv?.lastMessageAt,
         unreadCount: conv?.unreadCount ?? 0,

@@ -3,9 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 
 export function useConversationMembers(conversationId: string | null) {
-  const { http } = useRuntime();
+  const { http, accountKey } = useRuntime();
   return useQuery({
-    queryKey: ["conversation-members", conversationId],
+    queryKey: ["conversation-members", accountKey, conversationId],
     enabled: !!http && !!conversationId,
     refetchInterval: 15_000,
     queryFn: () =>
@@ -16,9 +16,9 @@ export function useConversationMembers(conversationId: string | null) {
 }
 
 export function useDirectoryProfiles(enabled: boolean) {
-  const { http } = useRuntime();
+  const { http, accountKey } = useRuntime();
   return useQuery({
-    queryKey: ["directory-profiles"],
+    queryKey: ["directory-profiles", accountKey],
     enabled: !!http && enabled,
     staleTime: 120_000,
     queryFn: async () => {

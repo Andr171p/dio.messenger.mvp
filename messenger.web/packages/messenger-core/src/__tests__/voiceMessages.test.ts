@@ -164,6 +164,9 @@ describe("voiceUploads persistence", () => {
 
 it("encodes only the selected PCM frames without including neighbouring audio", async () => {
   const audio = {
+    duration: 1,
+    copyFromChannel: vi.fn(),
+    copyToChannel: vi.fn(),
     sampleRate: 4,
     length: 4,
     numberOfChannels: 1,

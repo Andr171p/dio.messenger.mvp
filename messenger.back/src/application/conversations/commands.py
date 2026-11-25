@@ -33,17 +33,25 @@ if TYPE_CHECKING:
     from src.application.messaging.repositories import ConversationEventStore
 
 
-async def _conversation_dto(
+async def conversation_dto(
     conversation: Conversation,
     *,
+    principal_id: UUID,
     membership_repository: MembershipRepository,
 ) -> ConversationDTO:
+    peer_id = None
+    if conversation.type is ConversationType.DIRECT:
+        members = await membership_repository.list_active(conversation.id)
+        peer_id = next((m.principal_id for m in members if m.principal_id != principal_id), None)
     has_external = await membership_repository.has_role(conversation.id, role=MemberRole.GUEST)
     return ConversationDTO(
         id=conversation.id,
         organization_id=conversation.organization_id,
         type=conversation.type,
         title=conversation.title,
+        description=conversation.description,
+        avatar_url=conversation.avatar_url,
+        peer_id=peer_id,
         last_event_seq=conversation.last_event_seq,
         created_by=conversation.created_by,
         has_external_members=has_external,
@@ -77,6 +85,8 @@ async def create_group_conversation(
         organization_id=organization_id,
         type=ConversationType.GROUP,
         title=dto.title.strip(),
+        description=dto.description or None,
+        avatar_url=dto.avatar_url,
         created_by=actor.user.id,
     )
     await conversation_repository.create(conversation)
@@ -119,7 +129,7 @@ async def create_group_conversation(
         await policy_repository.upsert(policy)
 
     await uow.commit()
-    return await _conversation_dto(conversation, membership_repository=membership_repository)
+    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
 
 
 async def create_direct_conversation(
@@ -140,7 +150,7 @@ async def create_direct_conversation(
         principal_b=dto.peer_id,
     )
     if existing is not None:
-        return await _conversation_dto(existing, membership_repository=membership_repository)
+        return await conversation_dto(existing, principal_id=actor.user.id, membership_repository=membership_repository)
 
     conversation = Conversation(
         organization_id=organization_id,
@@ -167,7 +177,7 @@ async def create_direct_conversation(
         )
 
     await uow.commit()
-    return await _conversation_dto(conversation, membership_repository=membership_repository)
+    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
 
 
 async def require_active_membership(

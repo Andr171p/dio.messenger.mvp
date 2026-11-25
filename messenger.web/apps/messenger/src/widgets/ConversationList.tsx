@@ -1,3 +1,11 @@
+import { useEffect, useState } from "react";
+import {
+  chatTitle,
+  photoUrl,
+  useProfiles,
+  userLabel,
+} from "../features/conversation/profiles.js";
+import { ProfileDialog } from "./ProfileDialog.js";
 import { Avatar, Badge, Button, Icon } from "@dio/messenger-ui";
 import type { Conversation } from "@dio/messenger-core";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -31,7 +39,8 @@ function formatTime(ts?: number): string {
 
 export function ConversationList() {
   const { db, accountKey, syncStatus } = useRuntime();
-  const { logout } = useAuth();
+  const { logout, session } = useAuth();
+  const [ownProfile, setOwnProfile] = useState(false);
   const category = useUiStore((s) => s.listCategory);
   const setCategory = useUiStore((s) => s.setListCategory);
   const selectedId = useUiStore((s) => s.selectedConversationId);
@@ -54,6 +63,21 @@ export function ConversationList() {
     }
   }, [db, accountKey, syncStatus.lastSyncAt, syncStatus.runtime]);
 
+  const profiles = useProfiles((conversations ?? []).map((chat) => chat.peerId));
+  useEffect(() => {
+    if (!db) return;
+    const updates = (conversations ?? []).flatMap((chat) => {
+      const user = chat.peerId && profiles.get(chat.peerId);
+      if (!user) return [];
+      const title = userLabel(user);
+      const avatarUrl = user.avatarUrl ?? undefined;
+      return chat.title === title && chat.avatarUrl === avatarUrl
+        ? []
+        : [{ key: chat.id, changes: { title, avatarUrl } }];
+    });
+    if (updates.length)
+      void db.conversations.bulkUpdate(updates).catch(() => undefined);
+  }, [db, conversations, profiles]);
   const visible =
     conversations?.filter((c) => {
       if (category === "direct" && c.kind !== "direct") return false;
@@ -72,6 +96,17 @@ export function ConversationList() {
         <div className={styles.titleRow}>
           <h2 className={styles.title}>DIO Chat</h2>
           <div className={styles.actions}>
+            {session && (
+              <Button
+                className={styles.mobileTheme}
+                variant="ghost"
+                size="sm"
+                aria-label="Мой профиль"
+                onClick={() => setOwnProfile(true)}
+              >
+                <Icon name="people" size={18} />
+              </Button>
+            )}
             <Button
               className={styles.mobileTheme}
               variant="ghost"
@@ -143,10 +178,10 @@ export function ConversationList() {
                 setSelected(conv.id);
               }}
             >
-              <Avatar name={conv.title} size="md" />
+              <Avatar name={chatTitle(conv)} src={photoUrl(conv.avatarUrl)} size="md" />
               <div className={styles.meta}>
                 <div className={styles.row}>
-                  <span className={styles.name}>{conv.title}</span>
+                  <span className={styles.name}>{chatTitle(conv)}</span>
                   <span className={styles.time}>{formatTime(conv.lastMessageAt)}</span>
                 </div>
                 <span className={styles.preview}>
@@ -160,13 +195,21 @@ export function ConversationList() {
           </li>
         ))}
       </ul>
+      {ownProfile && session && (
+        <ProfileDialog
+          initial={{ id: session.userId, fullName: session.displayName }}
+          onClose={() => setOwnProfile(false)}
+        />
+      )}
       {visible.length === 0 ? (
         <p className={styles.empty}>
           {loading
             ? "Загрузка бесед…"
             : syncStatus.runtime === "error"
-              ? "Не удалось загрузить беседы. Проверьте соединение и обновите страницу."
-              : "Пока нет бесед — создайте новый чат."}
+              ? "Ожидаем подключения, чтобы загрузить ваши чаты."
+              : category === "all"
+                ? "Пока нет бесед. Начните с нового чата."
+                : "В этой категории пока нет чатов."}
         </p>
       ) : null}
     </div>

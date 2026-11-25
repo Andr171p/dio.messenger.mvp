@@ -1,15 +1,23 @@
 import type { Conversation } from "@dio/messenger-core";
-import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
+import { Avatar, Badge, IconButton } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
+import { useConversationMembers } from "../features/read/useConversationMembers.js";
 import {
-  useConversationMembers,
-  useDirectoryProfiles,
-} from "../features/read/useConversationMembers.js";
+  chatTitle,
+  photoUrl,
+  useProfiles,
+  userLabel,
+  type Profile,
+} from "../features/conversation/profiles.js";
+import { ChatDialog } from "./ChatDialog.js";
+import { GroupTopics } from "./GroupTopics.js";
+import { ProfileDialog } from "./ProfileDialog.js";
+import dialog from "./NewChatModal.module.css";
 import styles from "./ChatHeader.module.css";
 import { ConversationPolicyDialog } from "./ConversationPolicyDialog.js";
 
@@ -19,8 +27,9 @@ function presenceLabel(
   peerOnline: boolean | null,
 ): string {
   if (kind === "group") {
-    const count = memberCount !== undefined ? `${memberCount} участников` : "Группа";
-    return count;
+    if (memberCount === undefined) return "Группа";
+    const form = new Intl.PluralRules("ru").select(memberCount);
+    return `${memberCount} ${form === "one" ? "участник" : form === "few" ? "участника" : "участников"}`;
   }
   if (peerOnline === true) return "В сети";
   if (peerOnline === false) return "не в сети";
@@ -32,7 +41,9 @@ export function ChatHeader() {
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const members = useConversationMembers(conversationId);
-  const profiles = useDirectoryProfiles(!!conversationId);
+  const [memberLimit, setMemberLimit] = useState(40);
+  const [infoFor, setInfoFor] = useState<string>();
+  const [profile, setProfile] = useState<Profile>();
   const presence = useQuery({
     queryKey: ["conversation-presence", conversationId],
     enabled: !!conversationId && !!http,
@@ -63,9 +74,11 @@ export function ChatHeader() {
     return db.conversations.get(conversationId);
   }, [db, conversationId]);
 
-  const peerId = members.data?.find(
-    (member) => member.principalId !== session?.userId,
-  )?.principalId;
+  const peerId =
+    conversation?.kind === "direct"
+      ? (conversation.peerId ??
+        members.data?.find((m) => m.principalId !== session?.userId)?.principalId)
+      : undefined;
 
   const typing =
     conversationId && sync ? (sync.getTyping(conversationId)?.userIds ?? []) : [];
@@ -75,6 +88,15 @@ export function ChatHeader() {
       ? (sync.getRecordingAudio(conversationId)?.userIds ?? [])
       : []
   ).filter((id) => id !== session?.userId);
+
+  const visibleMembers =
+    infoFor === conversationId ? (members.data?.slice(0, memberLimit) ?? []) : [];
+  const profiles = useProfiles([
+    peerId,
+    ...typingOthers,
+    ...recordingOthers,
+    ...visibleMembers.map((m) => m.principalId),
+  ]);
 
   if (!conversationId) {
     return (
@@ -119,11 +141,11 @@ export function ChatHeader() {
   const typingLabel =
     typingOthers.length === 1
       ? conversation?.kind === "group"
-        ? (profiles.data?.[typingOthers[0]!] ?? "Участник") + " печатает…"
+        ? userLabel(profiles.get(typingOthers[0]!)) + " печатает…"
         : "печатает…"
       : "Печатают несколько участников…";
   const recorderName = recordingOthers[0]
-    ? profiles.data?.[recordingOthers[0]]
+    ? profiles.get(recordingOthers[0])?.fullName
     : undefined;
   const activityLabel =
     recordingOthers.length > 1
@@ -136,98 +158,172 @@ export function ChatHeader() {
           ? typingLabel
           : null;
 
+  const peer = peerId ? profiles.get(peerId) : undefined;
+  const title =
+    conversation?.kind === "direct" && peer ? userLabel(peer) : chatTitle(conversation);
+  const photo = photoUrl(peer?.avatarUrl ?? conversation?.avatarUrl);
+  function openInfo() {
+    setMemberLimit(40);
+    setInfoFor(conversationId!);
+    setProfile(undefined);
+  }
   return (
-    <header className={styles.root}>
-      <div className={styles.identity}>
-        {mobilePane === "chat" ? (
-          <IconButton
-            className={styles.backBtn}
-            label="Назад к списку"
-            icon="back"
-            size="sm"
-            onClick={() => setMobilePane("list")}
-          />
-        ) : null}
-        <Avatar
-          name={
-            (conversation?.kind === "direct" && peerId && profiles.data?.[peerId]) ||
-            conversation?.title ||
-            "Беседа"
-          }
-          size="md"
-          online={peerOnline === true}
-        />
-        <div className={styles.copy}>
-          <h1 className={styles.title}>
-            {conversation?.kind === "direct" && peerId
-              ? (profiles.data?.[peerId] ?? "Личный чат")
-              : (conversation?.title ?? "Беседа")}
-          </h1>
-          <p className={styles.subtitle} aria-live="polite">
-            {activityLabel ? (
-              <span className={styles.typing}>{activityLabel}</span>
-            ) : (
-              <span className={peerOnline === true ? styles.online : undefined}>
-                {subtitle}
-              </span>
-            )}
-          </p>
-          {guest ? (
-            <div className={styles.guest}>
-              <Badge tone="warning">Гостевой доступ — внешние участники</Badge>
-            </div>
+    <>
+      <header className={styles.root}>
+        <div className={styles.identity}>
+          {mobilePane === "chat" ? (
+            <IconButton
+              className={styles.backBtn}
+              label="Назад к списку"
+              icon="back"
+              size="sm"
+              onClick={() => setMobilePane("list")}
+            />
           ) : null}
+          <button
+            className={styles.infoButton}
+            aria-haspopup="dialog"
+            aria-label={`Информация о беседе ${title}`}
+            onClick={openInfo}
+          >
+            <Avatar name={title} src={photo} size="md" online={peerOnline === true} />
+            <div className={styles.copy}>
+              <h1 className={styles.title}>{title}</h1>
+              <p className={styles.subtitle} aria-live="polite">
+                {activityLabel ? (
+                  <span className={styles.typing}>{activityLabel}</span>
+                ) : (
+                  <span className={peerOnline === true ? styles.online : undefined}>
+                    {subtitle}
+                  </span>
+                )}
+              </p>
+              {guest ? (
+                <div className={styles.guest}>
+                  <Badge tone="warning">Гостевой доступ — внешние участники</Badge>
+                </div>
+              ) : null}
+            </div>
+          </button>
         </div>
-      </div>
-      <div className={styles.actions}>
-        {canManage ? (
+        <div className={styles.actions}>
+          {canManage ? (
+            <IconButton
+              label="Настройки беседы"
+              icon="settings"
+              size="sm"
+              onClick={() => setPolicyFor(conversationId)}
+            />
+          ) : null}
           <IconButton
-            label="Настройки беседы"
-            icon="settings"
+            label="Участники беседы"
+            icon="people"
             size="sm"
-            onClick={() => setPolicyFor(conversationId)}
+            onClick={openInfo}
+          />
+          <IconButton
+            label="Поиск в беседе"
+            icon="search"
+            size="sm"
+            iconSize={20}
+            onClick={() => setSearchOpen(true, conversationId)}
+          />
+        </div>
+        {canManage && policyFor === conversationId ? (
+          <ConversationPolicyDialog
+            key={conversationId}
+            conversationId={conversationId}
+            onClose={() => setPolicyFor(null)}
           />
         ) : null}
-        <details className={styles.members}>
-          <summary aria-label="Участники беседы">
-            <Icon name="people" size={20} />
-          </summary>
-          <div className={styles.membersPanel}>
-            <strong>Участники</strong>
-            {members.isError ? (
-              <p>Список участников недоступен</p>
-            ) : (
-              <ul>
-                {members.data?.map((member) => (
-                  <li key={member.principalId}>
-                    {member.principalId === session?.userId
-                      ? "Вы"
-                      : (profiles.data?.[member.principalId] ?? "Участник")}
-                    {member.role === "guest" ? " · внешний участник" : ""}
-                    {onlineStates.get(member.principalId) === "online" ? (
-                      <span className={styles.online}> · в сети</span>
-                    ) : null}
-                  </li>
-                ))}
+      </header>
+      {conversation?.kind === "group" && (
+        <GroupTopics key={conversationId} conversationId={conversationId} />
+      )}
+      {infoFor === conversationId && (
+        <>
+          {conversation?.kind === "direct" && peerId ? (
+            <ProfileDialog
+              initial={peer ?? { id: peerId, fullName: title }}
+              onClose={() => setInfoFor(undefined)}
+            />
+          ) : (
+            <ChatDialog
+              title={
+                conversation?.kind === "direct"
+                  ? "Личная переписка"
+                  : "Информация о группе"
+              }
+              onClose={() => setInfoFor(undefined)}
+            >
+              <div className={dialog.hero}>
+                <Avatar name={title} src={photo} size="lg" />
+                <h3>{title}</h3>
+                {conversation?.description && <p>{conversation.description}</p>}
+              </div>
+              <h3>Участники{members.data ? ` · ${members.data.length}` : ""}</h3>
+              {members.isPending && <p role="status">Загружаем участников…</p>}
+              {members.isError && (
+                <p role="status">Список участников пока недоступен.</p>
+              )}
+              <ul className={dialog.users}>
+                {visibleMembers.map((member) => {
+                  const user = profiles.get(member.principalId) ?? {
+                    id: member.principalId,
+                  };
+                  return (
+                    <li key={user.id}>
+                      <button
+                        className={dialog.userRow}
+                        onClick={() => setProfile(user)}
+                      >
+                        <Avatar
+                          name={userLabel(user)}
+                          src={photoUrl(user.avatarUrl)}
+                          size="sm"
+                          online={onlineStates.get(user.id) === "online"}
+                        />
+                        <span className={dialog.userCopy}>
+                          <strong>
+                            {userLabel(user)}
+                            {user.id === session?.userId ? " (вы)" : ""}
+                          </strong>
+                          <small>
+                            {
+                              {
+                                owner: "Владелец",
+                                admin: "Администратор",
+                                member: "Участник",
+                                guest: "Гость",
+                              }[member.role]
+                            }
+                          </small>
+                        </span>
+                        ›
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
-            )}
-          </div>
-        </details>
-        <IconButton
-          label="Поиск в беседе"
-          icon="search"
-          size="sm"
-          iconSize={20}
-          onClick={() => setSearchOpen(true, conversationId)}
-        />
-      </div>
-      {canManage && policyFor === conversationId ? (
-        <ConversationPolicyDialog
-          key={conversationId}
-          conversationId={conversationId}
-          onClose={() => setPolicyFor(null)}
-        />
-      ) : null}
-    </header>
+              {(members.data?.length ?? 0) > memberLimit && (
+                <button
+                  className={dialog.textButton}
+                  onClick={() => setMemberLimit((n) => n + 40)}
+                >
+                  Ещё участники
+                </button>
+              )}
+            </ChatDialog>
+          )}
+          {profile && (
+            <ProfileDialog
+              initial={profile}
+              onClose={() => setProfile(undefined)}
+              onOpenChat={() => setInfoFor(undefined)}
+            />
+          )}
+        </>
+      )}
+    </>
   );
 }

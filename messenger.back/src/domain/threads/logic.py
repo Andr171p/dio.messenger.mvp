@@ -7,7 +7,7 @@ def create_thread(
     *,
     conversation_id: UUID,
     organization_id: UUID,
-    root_message_id: UUID,
+    root_message_id: UUID | None,
     created_by: UUID,
     root_message_created_seq: int,
     title: str | None = None,
