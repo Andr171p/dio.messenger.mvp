@@ -56,6 +56,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Group */
+        put: operations["update_group_v1_conversations__conversation_id__settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Transfer Group Owner */
+        put: operations["transfer_group_owner_v1_conversations__conversation_id__owner_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/avatar": {
         parameters: {
             query?: never;
@@ -814,6 +848,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/link-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Превью внешней ссылки (OpenGraph) */
+        get: operations["get_link_preview_v1_link_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/service/context-conversations": {
         parameters: {
             query?: never;
@@ -1347,6 +1398,28 @@ export interface components {
             counterpartyId?: string | null;
             /** Principalkind */
             principalKind: string;
+        };
+        /**
+         * LinkPreviewDTO
+         * @description Метаданные страницы (OpenGraph / HTML). Пустые поля — страница недоступна или без разметки.
+         */
+        LinkPreviewDTO: {
+            /**
+             * Url
+             * Format: uri
+             * @description Итоговый адрес страницы после редиректов
+             */
+            url: string;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Imageurl */
+            imageUrl?: string | null;
+            /** Sitename */
+            siteName?: string | null;
+            /** Faviconurl */
+            faviconUrl?: string | null;
         };
         /** MediaAccessDTO */
         MediaAccessDTO: {
@@ -2035,6 +2108,14 @@ export interface components {
              */
             priority: string;
         };
+        /** TransferOwnershipDTO */
+        TransferOwnershipDTO: {
+            /**
+             * Principalid
+             * Format: uuid
+             */
+            principalId: string;
+        };
         /** UpdateConversationPolicyDTO */
         UpdateConversationPolicyDTO: {
             /** Allowexternalmembers */
@@ -2054,6 +2135,15 @@ export interface components {
         UpdateGroupAvatarDTO: {
             /** Avatarurl */
             avatarUrl: string | null;
+        };
+        /** UpdateGroupDTO */
+        UpdateGroupDTO: {
+            /** Avatarurl */
+            avatarUrl: string | null;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
         };
         /** UploadResponseDTO */
         UploadResponseDTO: {
@@ -2227,6 +2317,72 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_v1_conversations__conversation_id__settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transfer_group_owner_v1_conversations__conversation_id__owner_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferOwnershipDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -3983,6 +4139,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateTicketFromChatResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_preview_v1_link_preview_get: {
+        parameters: {
+            query: {
+                /** @description Адрес публичной страницы */
+                url: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkPreviewDTO"];
                 };
             };
             /** @description Validation Error */

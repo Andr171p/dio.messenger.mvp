@@ -4,6 +4,7 @@ from . import (
     audit,
     conversations,
     itsm,
+    links,
     media,
     messages,
     pins,
@@ -31,5 +32,6 @@ router.include_router(search.router)
 router.include_router(sync.router)
 router.include_router(ws_tickets.router)
 router.include_router(itsm.router)
+router.include_router(links.router)
 
 __all__ = ["router"]

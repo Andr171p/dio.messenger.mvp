@@ -16,6 +16,15 @@ export function maskSpoilers(text: string): string {
   return text.replace(/(?<!\\)\|\|[^\r\n]*?(?:\|\||(?=\r?$))/gm, "▰▰▰");
 }
 
+export function firstLink(text: string): string | null {
+  const withoutFences = text.replace(
+    /(?:^|\n)```[\w+-]*[ \t]*\r?\n[\s\S]*?\r?\n```(?=\r?\n|$)/g,
+    "\n",
+  );
+  const match = /https?:\/\/[^\s<>"']+/i.exec(withoutFences);
+  return match ? match[0].replace(/[.,;!?)}\]]+$/, "") : null;
+}
+
 function Spoiler({ children }: { children: ReactNode }) {
   const [revealed, reveal] = useState(false);
   return (

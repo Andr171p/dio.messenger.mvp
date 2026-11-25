@@ -59,7 +59,7 @@ export interface SyncEngine {
 
 interface ApiConversation {
   peerId?: string;
-  description?: string;
+  description?: string | null;
   avatarUrl?: string | null;
   id: string;
   title?: string | null;
@@ -465,7 +465,10 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           meta?.avatarUrl === null && meta.type?.toLowerCase() === "group"
             ? undefined
             : (meta?.avatarUrl ?? existing?.avatarUrl),
-        description: meta?.description ?? existing?.description,
+        description:
+          meta?.description === null
+            ? undefined
+            : (meta?.description ?? existing?.description),
         lastMessagePreview: existing?.lastMessagePreview,
         lastMessageAt: existing?.lastMessageAt,
         unreadCount: existing?.unreadCount ?? 0,

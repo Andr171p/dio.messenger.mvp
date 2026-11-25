@@ -316,6 +316,7 @@ async def remove_member(
     uow: UnitOfWork,
     audit_repository: AuditRepository | None = None,
 ) -> None:
+    await conversation_repository.read(conversation_id, with_lock=True)
     conversation, actor_membership = await require_active_membership(
         conversation_id=conversation_id,
         actor=actor,
@@ -328,6 +329,11 @@ async def remove_member(
     self_leave = principal_id == actor.user.id
     if not self_leave and actor_membership.role is not MemberRole.OWNER:
         raise PermissionDeniedError("Insufficient permissions to remove members.")
+
+    if self_leave and actor_membership.role is MemberRole.OWNER:
+        active = await membership_repository.list_active(conversation_id)
+        if any(member.principal_id != actor.user.id for member in active):
+            raise PermissionDeniedError("Transfer ownership before leaving the group.")
 
     target = await membership_repository.get_active(
         conversation_id=conversation_id,
@@ -375,6 +381,8 @@ async def update_group_avatar(
     conversation_id: UUID,
     avatar_url: str | None,
     *,
+    title: str | None = None,
+    description: str | None = None,
     actor: AuthUser,
     conversation_repository: ConversationRepository,
     membership_repository: MembershipRepository,
@@ -392,8 +400,18 @@ async def update_group_avatar(
     )
     if conversation.type is not ConversationType.GROUP or membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
         raise PermissionDeniedError("Insufficient permissions to change group avatar.")
+    changes = {}
     if conversation.avatar_url != avatar_url:
         conversation.avatar_url = avatar_url
+        changes["avatarUrl"] = avatar_url
+    if title is not None:
+        title = title.strip()
+        description = (description or "").strip() or None
+        if conversation.title != title or conversation.description != description:
+            conversation.title = title
+            conversation.description = description
+            changes.update(title=title, description=description)
+    if changes:
         conversation.updated_at = datetime.now(UTC)
         await conversation_repository.update(conversation)
         seq = await conversation_repository.allocate_event_seq(conversation.id)
@@ -402,6 +420,34 @@ async def update_group_avatar(
             organization_id=conversation.organization_id,
             seq=seq,
             type="conversation.updated",
-            payload={"avatarUrl": avatar_url},
+            payload=changes,
         ))
+    await uow.commit()
+
+
+async def transfer_group_ownership(
+    conversation_id: UUID,
+    principal_id: UUID,
+    *,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    uow: UnitOfWork,
+) -> None:
+    await conversation_repository.read(conversation_id, with_lock=True)
+    conversation, owner = await require_active_membership(
+        conversation_id=conversation_id, actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if conversation.type is not ConversationType.GROUP or owner.role is not MemberRole.OWNER:
+        raise PermissionDeniedError("Only the group owner can transfer ownership.")
+    target = await membership_repository.get_active(conversation_id=conversation_id, principal_id=principal_id)
+    if target is None or target.role not in {MemberRole.MEMBER, MemberRole.ADMIN} or target.principal_id == owner.principal_id:
+        raise PermissionDeniedError("Select an active member or administrator.")
+    owner.role = MemberRole.ADMIN
+    target.role = MemberRole.OWNER
+    owner.updated_at = target.updated_at = datetime.now(UTC)
+    await membership_repository.update(owner)
+    await membership_repository.update(target)
     await uow.commit()

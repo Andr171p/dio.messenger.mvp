@@ -17,6 +17,17 @@ class UpdateGroupAvatarDTO(BaseModel):
     avatar_url: GroupAvatar
 
 
+class UpdateGroupDTO(UpdateGroupAvatarDTO):
+    title: str = Field(min_length=1, max_length=255, pattern=r"\S")
+    description: str | None = Field(default=None, max_length=1024)
+
+
+class TransferOwnershipDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
+
+    principal_id: UUID
+
+
 class CreateGroupConversationDTO(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True, str_strip_whitespace=True)
 

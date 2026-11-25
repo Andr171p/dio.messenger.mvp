@@ -141,6 +141,10 @@ export async function applyEventProjection(
         accountKey,
         id: event.conversationId,
         title: asString(payload.title) ?? conv?.title ?? "Беседа",
+        description:
+          payload.description === null
+            ? undefined
+            : (asString(payload.description) ?? conv?.description),
         avatarUrl:
           payload.avatarUrl === null
             ? undefined

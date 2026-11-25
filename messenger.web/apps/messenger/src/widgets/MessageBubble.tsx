@@ -9,8 +9,9 @@ import { useEffect, useRef, useState } from "react";
 import type { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageMedia } from "./MessageMedia.js";
-import { maskSpoilers, MessageFormatting } from "./MessageFormatting.js";
+import { firstLink, maskSpoilers, MessageFormatting } from "./MessageFormatting.js";
 import type { MediaSelection } from "./MediaViewer.js";
+import { LinkPreviewCard } from "./LinkPreviewCard.js";
 import { TicketCard } from "./TicketCard.js";
 import styles from "./MessageTimeline.module.css";
 
@@ -279,6 +280,11 @@ function MessageBody({
 }) {
   const mediaBlocks = blocks.filter((block) => block.type === "media");
   const ordered = [...mediaBlocks, ...blocks.filter((block) => block.type !== "media")];
+  const previewUrl = mediaBlocks.length
+    ? null
+    : firstLink(
+        blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n"),
+      );
   return (
     <div className={styles.blockStack}>
       {ordered.map((block, index) => {
@@ -324,6 +330,7 @@ function MessageBody({
         }
         return null;
       })}
+      {previewUrl ? <LinkPreviewCard url={previewUrl} /> : null}
     </div>
   );
 }

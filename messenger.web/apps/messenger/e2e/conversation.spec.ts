@@ -1442,7 +1442,7 @@ test("показывает контрагента в своём профиле �
   expect(removed).toBe(true);
 });
 
-test("меняет и удаляет аватар группы из меню", async ({ page }) => {
+test("сохраняет настройки группы и удаляет её аватар", async ({ page }) => {
   let avatarUrl: string | null = null;
   await page.route(`**/v1/conversations/${chatId}/members`, (route) =>
     route.fulfill({
@@ -1457,7 +1457,7 @@ test("меняет и удаляет аватар группы из меню", a
       ],
     }),
   );
-  await page.route(`**/v1/conversations/${chatId}/avatar`, (route) => {
+  await page.route(`**/v1/conversations/${chatId}/settings`, (route) => {
     avatarUrl = route.request().postDataJSON().avatarUrl;
     return route.fulfill({ status: 204 });
   });
@@ -1471,14 +1471,22 @@ test("меняет и удаляет аватар группы из меню", a
     .click();
   await page.getByRole("button", { name: /Информация о беседе/ }).click();
   const group = page.getByRole("dialog", { name: "Информация о группе" });
-  await group.getByRole("button", { name: "Ещё", exact: true }).click();
+  await group.getByRole("button", { name: "Управление", exact: true }).click();
+  const manage = page.getByRole("dialog", { name: "Управление группой" });
   const chooser = page.waitForEvent("filechooser");
-  await group.getByRole("button", { name: "Добавить аватар" }).click();
+  await manage.getByRole("button", { name: "Сменить аватар" }).click();
   await (await chooser).setFiles(transparentPng);
+  await expect(manage.locator("img")).toHaveCount(1);
+  await manage.getByLabel("Название группы").fill("Новая смена");
+  await manage.getByLabel("Описание группы").fill("График дежурств");
+  await manage.getByRole("button", { name: "Сохранить" }).click();
   await expect(group.locator("img")).toHaveCount(1);
+  await expect(group.getByText("Новая смена", { exact: true })).toBeVisible();
+  await expect(group.getByText("График дежурств", { exact: true })).toBeVisible();
   expect(avatarUrl).toMatch(/^data:image\/jpeg;base64,/);
-  await group.getByRole("button", { name: "Ещё", exact: true }).click();
-  await group.getByRole("button", { name: "Удалить аватар" }).click();
+  await group.getByRole("button", { name: "Управление", exact: true }).click();
+  await manage.getByRole("button", { name: "Удалить аватар" }).click();
+  await manage.getByRole("button", { name: "Сохранить" }).click();
   await expect(group.locator("img")).toHaveCount(0);
   expect(avatarUrl).toBeNull();
 });

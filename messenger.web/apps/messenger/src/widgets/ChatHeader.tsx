@@ -2,7 +2,7 @@ import type { Conversation } from "@dio/messenger-core";
 import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
@@ -14,7 +14,8 @@ import {
   userLabel,
   type Profile,
 } from "../features/conversation/profiles.js";
-import { groupPhoto } from "./groupPhoto.js";
+import { wipeConversation } from "@dio/messenger-core";
+import { ManageGroupDialog } from "./ManageGroupDialog.js";
 import { ChatMemberPicker } from "./ChatMemberPicker.js";
 import { ChatSharedContent } from "./ChatSharedContent.js";
 import { ChatDialog } from "./ChatDialog.js";
@@ -44,9 +45,8 @@ export function ChatHeader() {
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const queries = useQueryClient();
-  const avatarInput = useRef<HTMLInputElement>(null);
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const [avatarError, setAvatarError] = useState("");
+  const [manage, setManage] = useState(false);
+  const [memberMenu, setMemberMenu] = useState<string>();
   const [more, setMore] = useState(false);
   const [adding, setAdding] = useState(false);
   const [memberError, setMemberError] = useState("");
@@ -117,7 +117,9 @@ export function ChatHeader() {
     peerId,
     ...typingOthers,
     ...recordingOthers,
-    ...visibleMembers.map((m) => m.principalId),
+    ...(manage && role === "owner" ? (members.data ?? []) : visibleMembers).map(
+      (m) => m.principalId,
+    ),
   ]);
 
   if (!conversationId) {
@@ -184,27 +186,35 @@ export function ChatHeader() {
   const title =
     conversation?.kind === "direct" && peer ? userLabel(peer) : chatTitle(conversation);
   const photo = photoUrl(peer?.avatarUrl ?? conversation?.avatarUrl);
-  async function saveAvatar(file: File | null) {
-    if (!http || !db || !conversationId || avatarBusy) return;
-    setAvatarBusy(true);
-    setAvatarError("");
+  async function leaveGroup() {
+    if (!http || !conversationId || !session || removing) return;
+    if (role === "owner" && (members.data?.length ?? 0) > 1) {
+      setMemberError("Перед выходом передайте владение группой.");
+      return;
+    }
+    if (!window.confirm(`Выйти из группы «${title}»?`)) return;
+    setRemoving(true);
+    setMemberError("");
     try {
-      const avatarUrl = file ? await groupPhoto(file) : null;
-      await http.put(`/v1/conversations/${conversationId}/avatar`, { avatarUrl });
-      await db.conversations.update(conversationId, {
-        avatarUrl: avatarUrl ?? undefined,
-      });
-    } catch {
-      setAvatarError(
-        "Не удалось обновить фото. Выберите JPEG, PNG или WebP до 5 МБ или проверьте подключение.",
+      await http.request(
+        `/v1/conversations/${conversationId}/members/${session.userId}`,
+        { method: "DELETE" },
       );
+      setInfoFor(undefined);
+      if (useUiStore.getState().selectedConversationId === conversationId)
+        useUiStore.getState().setSelectedConversation(null);
+      if (accountKey && db) await wipeConversation(db, accountKey, conversationId);
+      void sync?.synchronize().catch(() => undefined);
+    } catch {
+      setMemberError("Не удалось выйти из группы.");
     } finally {
-      setAvatarBusy(false);
+      setRemoving(false);
     }
   }
 
   function openInfo() {
-    setAvatarError("");
+    setManage(false);
+    setMemberMenu(undefined);
     setMemberError("");
     setMore(false);
     setAdding(false);
@@ -292,19 +302,8 @@ export function ChatHeader() {
             }
             onClose={() => setInfoFor(undefined)}
             variant="chat"
-            busy={avatarBusy}
+            busy={removing}
           >
-            <input
-              ref={avatarInput}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file) void saveAvatar(file);
-              }}
-            />
             <div className={dialog.hero}>
               <Avatar name={title} src={photo} size="lg" />
               <h3>{topicTitle || title}</h3>
@@ -316,8 +315,30 @@ export function ChatHeader() {
                   onClick={() => toggleMute(muteKey)}
                 >
                   <Icon name={muted ? "bell-slash" : "bell"} size={24} />
-                  {muted ? "Включить уведомления" : "Выключить уведомления"}
+                  Звук
                 </button>
+                {canManage && conversation?.kind === "group" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMore(false);
+                      setManage(true);
+                    }}
+                  >
+                    <Icon name="sliders" size={24} />
+                    Управление
+                  </button>
+                )}
+                {role && conversation?.kind === "group" && (
+                  <button
+                    type="button"
+                    disabled={removing}
+                    onClick={() => void leaveGroup()}
+                  >
+                    <Icon name="logout" size={24} />
+                    Выйти
+                  </button>
+                )}
                 <div className={dialog.moreAnchor}>
                   <button
                     type="button"
@@ -340,38 +361,6 @@ export function ChatHeader() {
                         <Icon name="user-plus" />
                         Добавить участника
                       </button>
-                      {canManage && conversation?.kind === "group" && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={avatarBusy}
-                            onClick={() => {
-                              setMore(false);
-                              avatarInput.current?.click();
-                            }}
-                          >
-                            <Icon name="image" />
-                            {photo ? "Сменить аватар" : "Добавить аватар"}
-                          </button>
-                          {photo && (
-                            <button
-                              type="button"
-                              disabled={avatarBusy}
-                              onClick={() => {
-                                setMore(false);
-                                void saveAvatar(null);
-                              }}
-                            >
-                              <Icon name="trash" />
-                              Удалить аватар
-                            </button>
-                          )}
-                        </>
-                      )}
-                      <button type="button" disabled>
-                        <Icon name="sliders" />
-                        Управление группой
-                      </button>
                       <button type="button" disabled>
                         <Icon name="copy" />
                         Копировать ссылку
@@ -385,8 +374,7 @@ export function ChatHeader() {
                 </div>
               </div>
             </div>
-            {avatarBusy && <p role="status">Сохраняем аватар…</p>}
-            {avatarError && <p role="alert">{avatarError}</p>}
+
             {conversation?.description && <p>{conversation.description}</p>}
             {conversation?.kind === "group" && !topics.data?.length && (
               <button
@@ -425,10 +413,32 @@ export function ChatHeader() {
                     id: member.principalId,
                   };
                   return (
-                    <li key={user.id} className={dialog.memberLine}>
+                    <li
+                      key={user.id}
+                      className={dialog.memberLine}
+                      onContextMenu={(event) => {
+                        if (role !== "owner" || user.id === session?.userId) return;
+                        event.preventDefault();
+                        setMemberMenu(user.id);
+                      }}
+                    >
                       <button
                         className={dialog.userRow}
-                        onClick={() => setProfile(user)}
+                        onClick={() => {
+                          setMemberMenu(undefined);
+                          setProfile(user);
+                        }}
+                        onKeyDown={(event) => {
+                          if (
+                            role === "owner" &&
+                            user.id !== session?.userId &&
+                            (event.key === "ContextMenu" ||
+                              (event.shiftKey && event.key === "F10"))
+                          ) {
+                            event.preventDefault();
+                            setMemberMenu(user.id);
+                          }
+                        }}
                       >
                         <Avatar
                           name={userLabel(user)}
@@ -459,37 +469,57 @@ export function ChatHeader() {
                           </span>
                         )}
                       </button>
-                      {role === "owner" && user.id !== session?.userId && (
-                        <IconButton
-                          icon="trash"
-                          size="sm"
-                          label={`Удалить участника ${userLabel(user)}`}
-                          disabled={removing}
-                          onClick={async () => {
-                            if (
-                              !http ||
-                              removing ||
-                              !window.confirm(
-                                `Удалить участника ${userLabel(user)} из группы?`,
-                              )
-                            )
-                              return;
-                            setRemoving(true);
-                            setMemberError("");
-                            try {
-                              await http.request(
-                                `/v1/conversations/${conversationId}/members/${user.id}`,
-                                { method: "DELETE" },
-                              );
-                              refreshMembers();
-                            } catch {
-                              setMemberError("Не удалось удалить участника.");
-                            } finally {
-                              setRemoving(false);
-                            }
-                          }}
-                        />
-                      )}
+                      {role === "owner" &&
+                        user.id !== session?.userId &&
+                        memberMenu === user.id && (
+                          <div
+                            className={dialog.memberMenu}
+                            onBlur={(e) => {
+                              if (!e.currentTarget.contains(e.relatedTarget))
+                                setMemberMenu(undefined);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                e.stopPropagation();
+                                setMemberMenu(undefined);
+                              }
+                            }}
+                          >
+                            <button
+                              type="button"
+                              aria-label={`Удалить участника ${userLabel(user)}`}
+                              autoFocus
+                              disabled={removing}
+                              onClick={async () => {
+                                if (
+                                  !http ||
+                                  removing ||
+                                  !window.confirm(
+                                    `Удалить участника ${userLabel(user)} из группы?`,
+                                  )
+                                )
+                                  return;
+                                setMemberMenu(undefined);
+                                setRemoving(true);
+                                setMemberError("");
+                                try {
+                                  await http.request(
+                                    `/v1/conversations/${conversationId}/members/${user.id}`,
+                                    { method: "DELETE" },
+                                  );
+                                  refreshMembers();
+                                } catch {
+                                  setMemberError("Не удалось удалить участника.");
+                                } finally {
+                                  setRemoving(false);
+                                }
+                              }}
+                            >
+                              <Icon name="trash" />
+                              Удалить участника
+                            </button>
+                          </div>
+                        )}
                     </li>
                   );
                 })}
@@ -504,6 +534,28 @@ export function ChatHeader() {
               )}
             </section>
           </ChatDialog>
+          {manage && canManage && conversation?.kind === "group" && (
+            <ManageGroupDialog
+              id={conversationId}
+              title={title}
+              description={conversation.description}
+              avatarUrl={conversation.avatarUrl}
+              eligible={
+                role === "owner"
+                  ? members.data
+                      ?.filter(
+                        (member) => member.role === "member" || member.role === "admin",
+                      )
+                      .map((member) => ({
+                        id: member.principalId,
+                        label: userLabel(profiles.get(member.principalId)),
+                      }))
+                  : undefined
+              }
+              onClose={() => setManage(false)}
+              onTransfer={refreshMembers}
+            />
+          )}
           {adding && (
             <ChatMemberPicker
               conversationId={conversationId}
