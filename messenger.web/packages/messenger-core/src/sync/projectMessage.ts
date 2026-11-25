@@ -10,6 +10,7 @@ export interface ServerMessage {
   deletedAt?: string | number | null;
   revision?: number;
   content?: unknown;
+  threadId?: string | null;
   replyToId?: string | null;
   senderDisplayName?: string;
   reactions?: Record<string, string[]> | null;
@@ -26,6 +27,13 @@ export function projectContent(content: unknown): Partial<LocalMessage> {
   const forward = metadata.forwardedFrom as Record<string, unknown> | undefined;
   return {
     content: extractPlainText(content),
+    mentions: Array.isArray(
+      (metadata.mentions as { principalIds?: unknown } | undefined)?.principalIds,
+    )
+      ? (metadata.mentions as { principalIds: unknown[] }).principalIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : undefined,
     contentBlocks: blocks.length ? JSON.stringify(blocks) : undefined,
     quoteText: typeof metadata.quoteText === "string" ? metadata.quoteText : undefined,
     forwardedFrom:
@@ -59,6 +67,7 @@ export function projectMessage(
     deletedAt: timestamp(message.deletedAt),
     createdSeq: message.createdSeq,
     revision: message.revision ?? 1,
+    threadId: message.threadId ?? undefined,
     replyToId: message.replyToId ?? undefined,
     sendStatus: "sent",
     isOutgoing: message.senderId === userId,

@@ -15,13 +15,3 @@
 .info {
   color: var(--dio-text-secondary);
 }
-
-.warning {
-  background: var(--dio-status-warning);
-  color: var(--dio-warm-text);
-}
-
-.error {
-  background: var(--dio-accent-muted);
-  color: var(--dio-status-error);
-}

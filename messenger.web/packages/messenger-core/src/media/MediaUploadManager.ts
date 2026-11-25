@@ -20,12 +20,14 @@ export interface MediaUploadJob {
   /** Ссылка на запись в IndexedDB для offline-возобновления голосовой записи. */
   voiceUploadId?: string;
   sendAsMessage?: boolean;
+  threadId?: string;
 }
 
 export interface MediaUploadEnqueueOptions {
   presentation?: MediaPresentation;
   voiceUploadId?: string;
   sendAsMessage?: boolean;
+  threadId?: string;
 }
 
 interface CreateUploadSessionResponse {
@@ -53,7 +55,9 @@ const inlineTypes = new Set([
   "audio/wav",
 ]);
 
-export function getInlineMediaPresentation(contentType: string): "image" | "video" | undefined {
+export function getInlineMediaPresentation(
+  contentType: string,
+): "image" | "video" | undefined {
   const type = contentType.split(";", 1)[0] ?? "";
   if (!inlineTypes.has(type)) return undefined;
   if (type.startsWith("image/")) return "image";
@@ -116,6 +120,7 @@ export class MediaUploadManager {
       conversationId,
       status: "pending",
       progress: 0,
+      threadId: options.threadId,
       ...(options.presentation ? { presentation: options.presentation } : {}),
       ...(options.voiceUploadId ? { voiceUploadId: options.voiceUploadId } : {}),
       ...(options.sendAsMessage ? { sendAsMessage: true } : {}),

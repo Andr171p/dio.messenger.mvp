@@ -8,16 +8,18 @@ from .events import ThreadCreated
 
 @dataclass(kw_only=True)
 class ConversationThread(AggregateRoot):
-    """Тред (тема) внутри беседы с корневым сообщением."""
+    """Тред (тема) внутри беседы с необязательным корневым сообщением."""
 
     conversation_id: UUID
     organization_id: UUID
-    root_message_id: UUID
+    root_message_id: UUID | None
     created_by: UUID
     title: str | None = None
     root_message_created_seq: int = 0
+    event_seq: int = 0
 
     def mark_created(self, *, event_seq: int) -> None:
+        self.event_seq = event_seq
         self.register_event(
             ThreadCreated(
                 organization_id=self.organization_id,

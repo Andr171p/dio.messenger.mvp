@@ -57,3 +57,32 @@
 .ticketReference:hover {
   text-decoration: underline;
 }
+
+.body blockquote {
+  background: var(--dio-accent-muted);
+  border-inline-start-color: var(--dio-action);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.body pre {
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.body pre code {
+  padding: 0;
+}
+.body a,
+.mention {
+  color: var(--dio-action);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+.mention {
+  padding: 0;
+  display: inline;
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}

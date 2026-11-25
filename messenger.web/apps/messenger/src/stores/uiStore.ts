@@ -24,6 +24,14 @@ interface UiState {
   theme: DioTheme;
   navActive: NavItem;
   selectedConversationId: string | null;
+  mentionProfileId?: string;
+  setMentionProfile: (id?: string) => void;
+  mutedChats: Record<string, boolean>;
+  toggleChatMute: (key: string) => void;
+  topicsOpen: boolean;
+  setTopicsOpen: (open: boolean) => void;
+  selectedThreadId?: string;
+  setThread: (id?: string) => void;
   mobilePane: MobilePane;
   contextDrawerOpen: boolean;
   contextResourceId: string | null;
@@ -71,12 +79,32 @@ export const useUiStore = create<UiState>()(
       searchConversationId: null,
       messageTarget: null,
       newChatOpen: false,
+      setMentionProfile: (mentionProfileId) => set({ mentionProfileId }),
+      mutedChats: {},
+      toggleChatMute: (key) =>
+        set((state) => ({
+          mutedChats: { ...state.mutedChats, [key]: !state.mutedChats[key] },
+        })),
+      topicsOpen: false,
+      setTopicsOpen: (topicsOpen) =>
+        set({ topicsOpen, searchPanelOpen: false, mobilePane: "list" }),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set({ theme: get().theme === "light" ? "dark" : "light" }),
       setNavActive: (nav) => set({ navActive: nav }),
+      setThread: (selectedThreadId) =>
+        set({
+          selectedThreadId,
+          mobilePane: "chat",
+          editingMessageId: null,
+          replyTarget: null,
+          messageTarget: null,
+        }),
       setSelectedConversation: (id) =>
         set({
           selectedConversationId: id,
+          mentionProfileId: undefined,
+          topicsOpen: false,
+          selectedThreadId: undefined,
           replyTarget: null,
           editingMessageId: null,
           forwardTarget: null,
@@ -117,7 +145,7 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "dio-messenger-ui",
-      partialize: (state) => ({ theme: state.theme }),
+      partialize: (state) => ({ mutedChats: state.mutedChats, theme: state.theme }),
     },
   ),
 );

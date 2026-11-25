@@ -34,6 +34,7 @@ interface RuntimeContextValue {
   sync: SyncEngine | null;
   syncStatus: SyncStatus;
   http: HttpClient | null;
+  desk: HttpClient | null;
   media: MediaUploadManager | null;
   accountKey: string | null;
 }
@@ -50,12 +51,14 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     db: MessengerDatabase | null;
     sync: SyncEngine | null;
     http: HttpClient | null;
+    desk: HttpClient | null;
     media: MediaUploadManager | null;
     accountKey: string | null;
   }>({
     db: null,
     sync: null,
     http: null,
+    desk: null,
     media: null,
     accountKey: null,
   });
@@ -88,6 +91,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         db: null,
         sync: null,
         http: null,
+        desk: null,
         media: null,
         accountKey: null,
       });
@@ -115,25 +119,28 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       return adapter.getAccessToken();
     };
     const db = openMessengerDatabase(accountKey);
-    const http = new HttpClient({
-      baseUrl: messengerApi,
-      signal: lifetime.signal,
-      timeoutMs: 12_000,
-      getAccessToken: sessionToken,
-      refreshAccessToken: async (rejectedToken) => {
-        const active = sessionToken();
-        if (adapter.getSession() !== session) return null;
-        if (active && active !== rejectedToken) return active;
-        try {
-          await adapter.refresh(rejectedToken);
-          return sessionToken();
-        } catch {
-          if (!lifetime.signal.aborted && navigator.onLine)
-            reportFailure("session_refresh_failed");
-          return null;
-        }
-      },
-    });
+    const client = (baseUrl: string) =>
+      new HttpClient({
+        baseUrl,
+        signal: lifetime.signal,
+        timeoutMs: 12_000,
+        getAccessToken: sessionToken,
+        refreshAccessToken: async (rejectedToken) => {
+          const active = sessionToken();
+          if (adapter.getSession() !== session) return null;
+          if (active && active !== rejectedToken) return active;
+          try {
+            await adapter.refresh(rejectedToken);
+            return sessionToken();
+          } catch {
+            if (!lifetime.signal.aborted && navigator.onLine)
+              reportFailure("session_refresh_failed");
+            return null;
+          }
+        },
+      });
+    const http = client(messengerApi);
+    const desk = client(getRuntimeConfig().deskApi);
     const wsBase = new URL(`${messengerApi}/v1/ws`, window.location.origin);
     wsBase.protocol = wsBase.protocol === "https:" ? "wss:" : "ws:";
     const sync = createSyncEngine({
@@ -174,6 +181,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
           job.assetId,
           job.file.name,
           job.presentation,
+          job.threadId,
         );
         if (job.voiceUploadId) {
           await removeVoiceRecording(db, accountKey, job.voiceUploadId);
@@ -182,7 +190,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
       lifetime.signal,
     );
 
-    setRuntime({ db, sync, http, media, accountKey });
+    setRuntime({ db, sync, http, desk, media, accountKey });
 
     const resumeVoice = () => {
       void resumePendingVoiceUploads(db, accountKey, media).catch(() => undefined);
@@ -197,6 +205,9 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
         .then(() => sync.requestFlush())
         .catch(() => undefined);
     };
+    const recovery = window.setInterval(() => {
+      if (sync.getStatus().runtime === "error") reconcile();
+    }, 15000);
     window.addEventListener("online", reconcile);
     window.addEventListener("online", resumeVoice);
     window.addEventListener("offline", sync.pauseSending);
@@ -212,6 +223,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
+      window.clearInterval(recovery);
       unsub();
       lifetime.abort();
       window.removeEventListener("online", reconcile);
@@ -231,6 +243,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     sync: runtime.sync,
     syncStatus,
     http: runtime.http,
+    desk: runtime.desk,
     media: runtime.media,
     accountKey: runtime.accountKey,
   };

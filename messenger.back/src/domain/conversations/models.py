@@ -13,5 +13,7 @@ class Conversation(AggregateRoot):
     organization_id: UUID
     type: ConversationType
     title: str | None = None
+    description: str | None = None
+    avatar_url: str | None = None
     created_by: UUID
     last_event_seq: int = 0

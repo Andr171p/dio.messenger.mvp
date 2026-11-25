@@ -26,6 +26,8 @@ class MessageRepository(Protocol):
         *,
         conversation_id: UUID,
         before_seq: int | None,
+        thread_id: UUID | None = None,
+        main_only: bool = False,
         history_from_seq: int,
         limit: int,
     ) -> list[Message]: ...

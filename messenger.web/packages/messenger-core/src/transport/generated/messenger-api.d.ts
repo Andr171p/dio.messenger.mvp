@@ -56,6 +56,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Group */
+        put: operations["update_group_v1_conversations__conversation_id__settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/owner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Transfer Group Owner */
+        put: operations["transfer_group_owner_v1_conversations__conversation_id__owner_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Group Avatar */
+        put: operations["update_group_avatar_v1_conversations__conversation_id__avatar_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -504,6 +555,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Thread */
+        delete: operations["delete_thread_v1_conversations__conversation_id__threads__thread_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Thread */
+        patch: operations["rename_thread_v1_conversations__conversation_id__threads__thread_id__patch"];
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}/polls": {
         parameters: {
             query?: never;
@@ -779,6 +848,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/link-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Превью внешней ссылки (OpenGraph) */
+        get: operations["get_link_preview_v1_link_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/service/context-conversations": {
         parameters: {
             query?: never;
@@ -906,7 +992,7 @@ export interface components {
             /** Durationms */
             durationMs: number;
             /** Waveform */
-            waveform?: number[];
+            waveform?: number[] | null;
         };
         /** AuditEventDTO */
         AuditEventDTO: {
@@ -1018,6 +1104,12 @@ export interface components {
             type: components["schemas"]["ConversationType"];
             /** Title */
             title: string | null;
+            /** Description */
+            description?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
+            /** Peerid */
+            peerId?: string | null;
             /** Lasteventseq */
             lastEventSeq: number;
             /**
@@ -1144,6 +1236,10 @@ export interface components {
         };
         /** CreateGroupConversationDTO */
         CreateGroupConversationDTO: {
+            /** Description */
+            description?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
             /** Title */
             title: string;
             /** Memberids */
@@ -1181,11 +1277,8 @@ export interface components {
         };
         /** CreateThreadDTO */
         CreateThreadDTO: {
-            /**
-             * Rootmessageid
-             * Format: uuid
-             */
-            rootMessageId: string;
+            /** Rootmessageid */
+            rootMessageId?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -1297,12 +1390,36 @@ export interface components {
             fullName?: string | null;
             /** Username */
             username?: string | null;
+            /** Avatarurl */
+            avatarUrl?: string | null;
             /** Roles */
             roles?: string[];
             /** Counterpartyid */
             counterpartyId?: string | null;
             /** Principalkind */
             principalKind: string;
+        };
+        /**
+         * LinkPreviewDTO
+         * @description Метаданные страницы (OpenGraph / HTML). Пустые поля — страница недоступна или без разметки.
+         */
+        LinkPreviewDTO: {
+            /**
+             * Url
+             * Format: uri
+             * @description Итоговый адрес страницы после редиректов
+             */
+            url: string;
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Imageurl */
+            imageUrl?: string | null;
+            /** Sitename */
+            siteName?: string | null;
+            /** Faviconurl */
+            faviconUrl?: string | null;
         };
         /** MediaAccessDTO */
         MediaAccessDTO: {
@@ -1381,11 +1498,8 @@ export interface components {
              * Format: uuid
              */
             assetId: string;
-            /**
-             * Presentation
-             * @enum {string}
-             */
-            presentation?: "file" | "image" | "video" | "voice" | "video_note";
+            /** @default file */
+            presentation: components["schemas"]["MediaPresentation"];
         };
         /** MediaGalleryKeyDTO */
         MediaGalleryKeyDTO: {
@@ -1419,6 +1533,12 @@ export interface components {
             previous?: components["schemas"]["MediaGalleryKeyDTO"] | null;
             next?: components["schemas"]["MediaGalleryKeyDTO"] | null;
         };
+        /**
+         * MediaPresentation
+         * @description Желаемое представление media block в сообщении (UX, не тип файла).
+         * @enum {string}
+         */
+        MediaPresentation: "file" | "image" | "video" | "voice" | "video_note";
         /**
          * MediaStatus
          * @enum {string}
@@ -1652,6 +1772,11 @@ export interface components {
         ReadCursorDTO: {
             /** Lastreadmessageseq */
             lastReadMessageSeq: number;
+        };
+        /** RenameThreadDTO */
+        RenameThreadDTO: {
+            /** Title */
+            title: string;
         };
         /** ResourceActionRequestDTO */
         ResourceActionRequestDTO: {
@@ -1937,11 +2062,8 @@ export interface components {
              * Format: uuid
              */
             conversationId: string;
-            /**
-             * Rootmessageid
-             * Format: uuid
-             */
-            rootMessageId: string;
+            /** Rootmessageid */
+            rootMessageId: string | null;
             /** Title */
             title: string | null;
             /**
@@ -1986,6 +2108,14 @@ export interface components {
              */
             priority: string;
         };
+        /** TransferOwnershipDTO */
+        TransferOwnershipDTO: {
+            /**
+             * Principalid
+             * Format: uuid
+             */
+            principalId: string;
+        };
         /** UpdateConversationPolicyDTO */
         UpdateConversationPolicyDTO: {
             /** Allowexternalmembers */
@@ -2000,6 +2130,20 @@ export interface components {
             maxAttachmentBytes?: number | null;
             /** Messageeditwindowseconds */
             messageEditWindowSeconds?: number | null;
+        };
+        /** UpdateGroupAvatarDTO */
+        UpdateGroupAvatarDTO: {
+            /** Avatarurl */
+            avatarUrl: string | null;
+        };
+        /** UpdateGroupDTO */
+        UpdateGroupDTO: {
+            /** Avatarurl */
+            avatarUrl: string | null;
+            /** Title */
+            title: string;
+            /** Description */
+            description?: string | null;
         };
         /** UploadResponseDTO */
         UploadResponseDTO: {
@@ -2173,6 +2317,105 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_v1_conversations__conversation_id__settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transfer_group_owner_v1_conversations__conversation_id__owner_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferOwnershipDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_avatar_v1_conversations__conversation_id__avatar_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupAvatarDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2478,6 +2721,8 @@ export interface operations {
     get_messages_v1_conversations__conversation_id__messages_get: {
         parameters: {
             query?: {
+                threadId?: string | null;
+                mainOnly?: boolean;
                 beforeSeq?: number | null;
                 aroundMessageId?: string | null;
                 limit?: number;
@@ -3227,6 +3472,72 @@ export interface operations {
             };
         };
     };
+    delete_thread_v1_conversations__conversation_id__threads__thread_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_thread_v1_conversations__conversation_id__threads__thread_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameThreadDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThreadDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_poll_v1_conversations__conversation_id__polls_post: {
         parameters: {
             query?: never;
@@ -3828,6 +4139,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CreateTicketFromChatResultDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_link_preview_v1_link_preview_get: {
+        parameters: {
+            query: {
+                /** @description Адрес публичной страницы */
+                url: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkPreviewDTO"];
                 };
             };
             /** @description Validation Error */

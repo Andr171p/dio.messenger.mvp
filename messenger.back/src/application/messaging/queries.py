@@ -19,6 +19,8 @@ async def get_history(
     *,
     actor: AuthUser,
     before_seq: int | None = None,
+    thread_id: UUID | None = None,
+    main_only: bool = False,
     around_message_id: UUID | None = None,
     limit: int = DEFAULT_PAGE_LIMIT,
     conversation_repository: ConversationRepository,
@@ -47,6 +49,8 @@ async def get_history(
     items = await message_repository.get_history(
         conversation_id=conversation_id,
         before_seq=before_seq,
+        thread_id=thread_id,
+        main_only=main_only,
         history_from_seq=membership.history_from_seq,
         limit=page_limit,
     )

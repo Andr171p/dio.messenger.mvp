@@ -11,6 +11,7 @@ import styles from "./AttachmentDialog.module.css";
 type Attachment = NonNullable<Draft["attachments"]>[number];
 
 export function AttachmentDialog({
+  threadId,
   conversationId,
   media,
   files,
@@ -27,6 +28,7 @@ export function AttachmentDialog({
   onSend,
 }: {
   conversationId: string;
+  threadId?: string;
   media: MediaUploadManager;
   files: File[];
   saved: Attachment[];
@@ -136,6 +138,7 @@ export function AttachmentDialog({
             media.retry(id);
           } else {
             id = await media.enqueue(file, conversationId, {
+              threadId,
               presentation: asDocument ? "file" : getInlineMediaPresentation(file.type),
             });
             uploads.current.set(file, id);

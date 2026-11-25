@@ -128,7 +128,7 @@ def to_realtime_event(domain_event: DomainEvent) -> Event[dict[str, Any]] | None
             "conversationId": str(domain_event.conversation_id),
             "eventSeq": domain_event.event_seq,
             "threadId": str(domain_event.thread_id),
-            "rootMessageId": str(domain_event.root_message_id),
+            "rootMessageId": str(domain_event.root_message_id) if domain_event.root_message_id else None,
             "createdBy": str(domain_event.created_by),
         }
         if domain_event.title:

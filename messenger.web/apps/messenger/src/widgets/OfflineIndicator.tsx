@@ -22,13 +22,13 @@ function getOnlineSnapshot() {
  */
 export function OfflineIndicator() {
   const online = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, () => true);
-  const { syncStatus, sync } = useRuntime();
+  const { syncStatus } = useRuntime();
 
   if (!online) {
     return (
-      <div className={[styles.banner, styles.error].join(" ")} role="status">
+      <div className={[styles.banner, styles.info].join(" ")} role="status">
         <Icon name="offline" size={16} />
-        <span>Нет подключения. Сообщения будут отправлены позже.</span>
+        <span>Вы офлайн. Отправим сообщения, когда появится связь.</span>
       </div>
     );
   }
@@ -47,17 +47,9 @@ export function OfflineIndicator() {
 
   if (syncStatus.runtime === "error") {
     return (
-      <div className={[styles.banner, styles.warning].join(" ")} role="status">
+      <div className={[styles.banner, styles.info].join(" ")} role="status">
         <Icon name="offline" size={16} />
-        <span>Не удалось обновить данные — показан локальный кэш</span>
-        <button
-          type="button"
-          onClick={() => {
-            void sync?.synchronize().catch(() => undefined);
-          }}
-        >
-          Повторить
-        </button>
+        <span>Связь с сервером прервалась. Пробуем подключиться снова.</span>
       </div>
     );
   }

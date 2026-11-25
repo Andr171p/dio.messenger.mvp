@@ -14,6 +14,7 @@
 5b. [**status/STATUS-frontend-mvp.md**](status/STATUS-frontend-mvp.md) — статус frontend MVP.
 5c. [**development/FRONTEND_PRODUCTION_ITERATIONS.md**](development/FRONTEND_PRODUCTION_ITERATIONS.md) — итерации production frontend (I0–I14).
 5d. [**development/FRONTEND_DESIGN_REVIEW_PLAN.md**](development/FRONTEND_DESIGN_REVIEW_PLAN.md) — сверка с Penpot, воспроизведённые дефекты и порядок исправлений на фронте и API.
+5e. [**development/CHAT_MANAGEMENT_PLAN.md**](development/CHAT_MANAGEMENT_PLAN.md) — проектирование чатов, профилей и тем, интеграция с IAM и критерии приёмки ветки.
 6. [**adr/**](adr/) — Architecture Decision Records (устойчивые решения с trade-offs).
 7. [**decisions/**](decisions/) — рабочие решения итераций (не ADR).
 8. [**status/**](status/) — отчёты о реализации и проверках по итерациям.

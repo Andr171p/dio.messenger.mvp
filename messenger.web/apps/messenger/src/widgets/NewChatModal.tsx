@@ -1,234 +1,302 @@
-import { Button, Input, Spinner } from "@dio/messenger-ui";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { HttpError } from "@dio/messenger-core";
+import { Avatar, Button, Input } from "@dio/messenger-ui";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
+import {
+  openChat,
+  photoUrl,
+  userLabel,
+  type Profile,
+  type ChatDto,
+} from "../features/conversation/profiles.js";
 import { useUiStore } from "../stores/uiStore.js";
+import { ChatDialog } from "./ChatDialog.js";
+import { ProfileDialog } from "./ProfileDialog.js";
+import { groupPhoto } from "./groupPhoto.js";
 import styles from "./NewChatModal.module.css";
 
-interface DirectoryUser {
-  id: string;
-  fullName?: string | null;
-  email: string;
-  username?: string | null;
-}
-
-function userLabel(user: DirectoryUser): string {
-  return user.fullName?.trim() || user.username?.trim() || user.email;
-}
-
-interface ConversationDto {
-  id: string;
-  title?: string | null;
-  type?: string;
-  hasExternalMembers?: boolean;
-}
-
 export function NewChatModal() {
-  const open = useUiStore((s) => s.newChatOpen);
-  const setOpen = useUiStore((s) => s.setNewChatOpen);
-  const setSelected = useUiStore((s) => s.setSelectedConversation);
-  const { http, db, accountKey } = useRuntime();
-  const [mode, setMode] = useState<"direct" | "group">("direct");
+  return useUiStore((s) => s.newChatOpen) ? <NewChatForm /> : null;
+}
+
+function NewChatForm() {
+  const close = () => useUiStore.getState().setNewChatOpen(false);
+  const { session } = useAuth();
+  const { db, accountKey, http } = useRuntime();
+  const [step, setStep] = useState<"direct" | "details" | "members">("direct");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [avatar, setAvatar] = useState<string>();
+  const [invalid, setInvalid] = useState(false);
   const [query, setQuery] = useState("");
-  const [groupTitle, setGroupTitle] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const root = dialogRef.current;
-    if (!root) return;
-    const selector =
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-    const focusable = root.querySelectorAll<HTMLElement>(selector);
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    first?.focus();
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setOpen(false);
-        return;
-      }
-      if (e.key !== "Tab" || !first || !last) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, setOpen]);
-
-  const directory = useQuery({
-    queryKey: ["directory", query],
-    enabled: !!http && open && query.trim().length >= 1,
-    queryFn: async () => {
-      const q = encodeURIComponent(query.trim());
-      return http!.get<DirectoryUser[]>(`/v1/directory/users?q=${q}`);
-    },
+  const [selected, setSelected] = useState<Profile[]>([]);
+  const [profile, setProfile] = useState<Profile>();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const directory = useInfiniteQuery({
+    queryKey: ["directory", accountKey, query.trim()],
+    enabled: !!http && step !== "details",
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      http!.get<Profile[]>(
+        `/v1/directory/users?size=30&page=${pageParam}&q=${encodeURIComponent(query.trim())}`,
+      ),
+    getNextPageParam: (last, pages) =>
+      last.length === 30 ? pages.length + 1 : undefined,
   });
-
-  if (!open) return null;
-
-  const upsertConversation = async (dto: ConversationDto) => {
-    if (!db || !accountKey) return;
-    await db.conversations.put({
-      accountKey,
-      id: dto.id,
-      title: dto.title?.trim() || dto.id,
-      unreadCount: 0,
-      isGuest: dto.hasExternalMembers ?? false,
-      hasExternalMembers: dto.hasExternalMembers,
-      kind: dto.type?.toUpperCase() === "GROUP" ? "group" : "direct",
-      isPinned: false,
-      updatedAt: Date.now(),
-    });
-    setSelected(dto.id);
-    setOpen(false);
-  };
-
-  const createDirect = async (peerId: string) => {
-    if (!http) return;
-    setPending(true);
-    setError(null);
-    try {
-      const dto = await http.post<ConversationDto>("/v1/conversations/direct", {
-        peerId,
-      });
-      await upsertConversation(dto);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось создать чат");
-    } finally {
-      setPending(false);
+  const users =
+    directory.data?.pages.flat().filter((user) => user.id !== session?.userId) ?? [];
+  function next() {
+    if (!title.trim()) {
+      setInvalid(true);
+      document.getElementById("group-name")?.focus();
+      return;
     }
-  };
-
-  const createGroup = async () => {
-    if (!http || !groupTitle.trim()) return;
-    setPending(true);
-    setError(null);
+    setStep("members");
+    setQuery("");
+    setError("");
+  }
+  async function create() {
+    if (!http || !db || !accountKey || busy) return;
+    setBusy(true);
+    setError("");
     try {
-      const dto = await http.post<ConversationDto>("/v1/conversations", {
-        title: groupTitle.trim(),
-        memberIds: selectedIds,
+      const dto = await http.post<ChatDto>("/v1/conversations", {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        avatarUrl: avatar,
+        memberIds: selected
+          .filter((u) => u.principalKind !== "customer")
+          .map((u) => u.id),
+        guestIds: selected
+          .filter((u) => u.principalKind === "customer")
+          .map((u) => u.id),
       });
-      await upsertConversation(dto);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось создать группу");
+      await openChat(db, accountKey, dto);
+      close();
+    } catch (error) {
+      setError(
+        error instanceof HttpError && error.status === 403
+          ? "У вашей учётной записи нет прав на создание групп."
+          : "Не удалось создать группу. Проверьте подключение. Введённые данные сохранены в форме.",
+      );
     } finally {
-      setPending(false);
+      setBusy(false);
     }
-  };
-
+  }
   return (
-    <div className={styles.overlay} role="presentation" onClick={() => setOpen(false)}>
-      <div
-        ref={dialogRef}
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="new-chat-title"
-        onClick={(e) => e.stopPropagation()}
+    <>
+      <ChatDialog
+        title={step === "members" ? "Добавить участников" : "Новый чат"}
+        onClose={close}
+        busy={busy}
       >
-        <h2 id="new-chat-title">Новый чат</h2>
-        <div className={styles.tabs}>
-          <button
-            type="button"
-            className={mode === "direct" ? styles.tabActive : styles.tab}
-            onClick={() => setMode("direct")}
+        {step !== "members" && (
+          <div className={styles.tabs}>
+            {(["direct", "details"] as const).map((mode) => (
+              <button
+                key={mode}
+                disabled={busy}
+                aria-pressed={step === mode}
+                className={step === mode ? styles.tabActive : styles.tab}
+                onClick={() => {
+                  setStep(mode);
+                  setError("");
+                  setQuery("");
+                }}
+              >
+                {mode === "direct" ? "Личный" : "Группа"}
+              </button>
+            ))}
+          </div>
+        )}
+        {step === "details" ? (
+          <form
+            noValidate
+            className={styles.form}
+            onSubmit={(e) => {
+              e.preventDefault();
+              next();
+            }}
           >
-            Личный
-          </button>
-          <button
-            type="button"
-            className={mode === "group" ? styles.tabActive : styles.tab}
-            onClick={() => setMode("group")}
-          >
-            Группа
-          </button>
-        </div>
-        {mode === "direct" ? (
-          <>
-            <Input
-              placeholder="Найти пользователя"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Поиск пользователя"
+            <div className={styles.photoRow}>
+              <button
+                type="button"
+                disabled={busy}
+                className={styles.photoButton}
+                aria-label="Выбрать фото группы"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Avatar name={title || "+"} src={avatar} size="lg" />
+              </button>
+              <button
+                className={styles.textButton}
+                type="button"
+                disabled={busy}
+                onClick={() => fileInput.current?.click()}
+              >
+                Фото группы
+              </button>
+            </div>
+            <input
+              ref={fileInput}
+              hidden
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                setBusy(true);
+                setError("");
+                try {
+                  setAvatar(await groupPhoto(file));
+                } catch {
+                  setError("Выберите фото JPEG, PNG или WebP размером до 5 МБ.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
             />
-            {directory.isFetching ? <Spinner size="sm" /> : null}
-            <ul className={styles.users}>
-              {(directory.data ?? []).map((user) => (
-                <li key={user.id}>
-                  <button
-                    type="button"
-                    className={styles.userRow}
-                    disabled={pending}
-                    onClick={() => void createDirect(user.id)}
-                  >
-                    <span>{userLabel(user)}</span>
-                    <span className={styles.email}>{user.email}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
+            <Input
+              id="group-name"
+              label="Название группы"
+              maxLength={255}
+              required
+              value={title}
+              aria-invalid={invalid}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setInvalid(false);
+              }}
+            />
+            <Input
+              label="Описание (по желанию)"
+              maxLength={1024}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <Button type="submit" disabled={busy}>
+              Далее
+            </Button>
+          </form>
         ) : (
           <>
             <Input
-              label="Название группы"
-              value={groupTitle}
-              onChange={(e) => setGroupTitle(e.target.value)}
-            />
-            <Input
-              placeholder="Добавить участников"
+              aria-label="Поиск пользователя"
+              placeholder="Имя, логин или почта"
               value={query}
+              maxLength={255}
               onChange={(e) => setQuery(e.target.value)}
             />
+            {step === "members" && selected.length > 0 && (
+              <div className={styles.chips}>
+                {selected.map((user) => (
+                  <button
+                    key={user.id}
+                    aria-label={`Убрать ${userLabel(user)}`}
+                    onClick={() =>
+                      setSelected((prev) => prev.filter((u) => u.id !== user.id))
+                    }
+                  >
+                    {userLabel(user)} ×
+                  </button>
+                ))}
+              </div>
+            )}
+            {directory.isPending ? (
+              <p role="status">Загружаем контакты…</p>
+            ) : directory.isError ? (
+              <p role="status">Не удалось загрузить контакты. Проверьте подключение.</p>
+            ) : (
+              !users.length && (
+                <p role="status">
+                  {query
+                    ? "По этому запросу никого не нашли."
+                    : "Доступных контактов пока нет."}
+                </p>
+              )
+            )}
             <ul className={styles.users}>
-              {(directory.data ?? []).map((user) => {
-                const checked = selectedIds.includes(user.id);
+              {users.map((user) => {
+                const checked = selected.some((u) => u.id === user.id);
                 return (
                   <li key={user.id}>
                     <button
-                      type="button"
                       className={styles.userRow}
-                      onClick={() =>
-                        setSelectedIds((prev) =>
-                          checked
-                            ? prev.filter((id) => id !== user.id)
-                            : [...prev, user.id],
-                        )
-                      }
+                      disabled={busy}
+                      type="button"
+                      aria-pressed={step === "members" ? checked : undefined}
+                      onClick={() => {
+                        if (step === "direct") setProfile(user);
+                        else
+                          setSelected((prev) =>
+                            checked
+                              ? prev.filter((u) => u.id !== user.id)
+                              : [...prev, user],
+                          );
+                      }}
                     >
-                      <input type="checkbox" readOnly checked={checked} />
-                      <span>{userLabel(user)}</span>
+                      <Avatar
+                        name={userLabel(user)}
+                        src={photoUrl(user.avatarUrl)}
+                        size="sm"
+                      />
+                      <span className={styles.userCopy}>
+                        <strong>{userLabel(user)}</strong>
+                        <small>
+                          {user.username ? "@" + user.username : user.email}
+                        </small>
+                      </span>
+                      {step === "members" && (
+                        <span aria-hidden>{checked ? "☑" : "☐"}</span>
+                      )}
                     </button>
                   </li>
                 );
               })}
             </ul>
-            <Button
-              onClick={() => void createGroup()}
-              disabled={pending || !groupTitle.trim()}
-              loading={pending}
-            >
-              Создать группу
-            </Button>
+            {directory.hasNextPage && (
+              <Button
+                variant="ghost"
+                disabled={directory.isFetchingNextPage}
+                onClick={() => void directory.fetchNextPage()}
+              >
+                Ещё контакты
+              </Button>
+            )}
+            {step === "members" && (
+              <div className={styles.footer}>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setStep("details")}
+                >
+                  Назад
+                </Button>
+                <Button disabled={busy} loading={busy} onClick={() => void create()}>
+                  Создать группу
+                </Button>
+              </div>
+            )}
           </>
         )}
-        {error ? <p className={styles.error}>{error}</p> : null}
-        <Button variant="ghost" onClick={() => setOpen(false)}>
-          Закрыть
-        </Button>
-      </div>
-    </div>
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}
+          </p>
+        )}
+      </ChatDialog>
+      {profile && (
+        <ProfileDialog
+          initial={profile}
+          onClose={() => setProfile(undefined)}
+          onOpenChat={close}
+        />
+      )}
+    </>
   );
 }

@@ -1,3 +1,4 @@
+import { useProfiles } from "../features/conversation/profiles.js";
 import {
   toggleReaction,
   type ContentBlock,
@@ -8,8 +9,9 @@ import { useEffect, useRef, useState } from "react";
 import type { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageMedia } from "./MessageMedia.js";
-import { maskSpoilers, MessageFormatting } from "./MessageFormatting.js";
+import { firstLink, maskSpoilers, MessageFormatting } from "./MessageFormatting.js";
 import type { MediaSelection } from "./MediaViewer.js";
+import { LinkPreviewCard } from "./LinkPreviewCard.js";
 import { TicketCard } from "./TicketCard.js";
 import styles from "./MessageTimeline.module.css";
 
@@ -36,6 +38,16 @@ export function MessageBubble(props: {
   sync: ReturnType<typeof useRuntime>["sync"];
 }) {
   const { message, status, blocks, grouped } = props;
+  const mentionedUsers = useProfiles(message.mentions ?? []);
+  function resolveMention(handle: string) {
+    const candidates = [...mentionedUsers.values()].filter(
+      (user) =>
+        "@" + (user.username?.trim() || user.email?.split("@")[0])?.toLowerCase() ===
+        handle.toLowerCase(),
+    );
+    const user = candidates.length === 1 ? candidates[0] : undefined;
+    return user ? () => useUiStore.getState().setMentionProfile(user.id) : undefined;
+  }
   const resources = message.deletedAt
     ? []
     : blocks.filter((block) => block.type === "resource");
@@ -56,8 +68,7 @@ export function MessageBubble(props: {
   const seen = props.receiptCount?.seen ?? 0;
   const read = seen > 0 || message.deliveryStatus === "read";
   const delivered =
-    props.receiptCount?.delivered ||
-    message.deliveryStatus === "delivered";
+    props.receiptCount?.delivered || message.deliveryStatus === "delivered";
   const receiptLabel = seen
     ? `Прочитали ${seen} из ${props.receiptCount?.total}`
     : read
@@ -196,6 +207,7 @@ export function MessageBubble(props: {
           !ticketsOnly && (
             <MessageBody
               blocks={blocks}
+              mention={resolveMention}
               onPreview={(assetId, media) =>
                 props.onPreview({
                   ...media,
@@ -256,9 +268,11 @@ export function MessageBubble(props: {
 
 function MessageBody({
   blocks,
+  mention,
   onPreview,
 }: {
   blocks: ContentBlock[];
+  mention: (handle: string) => (() => void) | undefined;
   onPreview: (
     assetId: string,
     media: Pick<MediaSelection, "filename" | "contentType">,
@@ -266,6 +280,11 @@ function MessageBody({
 }) {
   const mediaBlocks = blocks.filter((block) => block.type === "media");
   const ordered = [...mediaBlocks, ...blocks.filter((block) => block.type !== "media")];
+  const previewUrl = mediaBlocks.length
+    ? null
+    : firstLink(
+        blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n"),
+      );
   return (
     <div className={styles.blockStack}>
       {ordered.map((block, index) => {
@@ -274,6 +293,7 @@ function MessageBody({
             <div key={`t-${index}`} className={styles.text}>
               <MessageFormatting
                 text={block.text}
+                mention={mention}
                 openTicket={(number) => {
                   const resource = blocks.find(
                     (item) =>
@@ -310,6 +330,7 @@ function MessageBody({
         }
         return null;
       })}
+      {previewUrl ? <LinkPreviewCard url={previewUrl} /> : null}
     </div>
   );
 }

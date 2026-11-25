@@ -33,17 +33,25 @@ if TYPE_CHECKING:
     from src.application.messaging.repositories import ConversationEventStore
 
 
-async def _conversation_dto(
+async def conversation_dto(
     conversation: Conversation,
     *,
+    principal_id: UUID,
     membership_repository: MembershipRepository,
 ) -> ConversationDTO:
+    peer_id = None
+    if conversation.type is ConversationType.DIRECT:
+        members = await membership_repository.list_active(conversation.id)
+        peer_id = next((m.principal_id for m in members if m.principal_id != principal_id), None)
     has_external = await membership_repository.has_role(conversation.id, role=MemberRole.GUEST)
     return ConversationDTO(
         id=conversation.id,
         organization_id=conversation.organization_id,
         type=conversation.type,
         title=conversation.title,
+        description=conversation.description,
+        avatar_url=conversation.avatar_url,
+        peer_id=peer_id,
         last_event_seq=conversation.last_event_seq,
         created_by=conversation.created_by,
         has_external_members=has_external,
@@ -77,6 +85,8 @@ async def create_group_conversation(
         organization_id=organization_id,
         type=ConversationType.GROUP,
         title=dto.title.strip(),
+        description=dto.description or None,
+        avatar_url=dto.avatar_url,
         created_by=actor.user.id,
     )
     await conversation_repository.create(conversation)
@@ -119,7 +129,7 @@ async def create_group_conversation(
         await policy_repository.upsert(policy)
 
     await uow.commit()
-    return await _conversation_dto(conversation, membership_repository=membership_repository)
+    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
 
 
 async def create_direct_conversation(
@@ -140,7 +150,7 @@ async def create_direct_conversation(
         principal_b=dto.peer_id,
     )
     if existing is not None:
-        return await _conversation_dto(existing, membership_repository=membership_repository)
+        return await conversation_dto(existing, principal_id=actor.user.id, membership_repository=membership_repository)
 
     conversation = Conversation(
         organization_id=organization_id,
@@ -167,7 +177,7 @@ async def create_direct_conversation(
         )
 
     await uow.commit()
-    return await _conversation_dto(conversation, membership_repository=membership_repository)
+    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
 
 
 async def require_active_membership(
@@ -191,10 +201,6 @@ async def require_active_membership(
     return conversation, membership
 
 
-def _can_manage_members(membership: ConversationMembership) -> bool:
-    return membership.role in {MemberRole.OWNER, MemberRole.ADMIN}
-
-
 async def add_member(
     dto: AddMemberDTO,
     *,
@@ -216,20 +222,19 @@ async def add_member(
     )
     if conversation.type is ConversationType.DIRECT:
         raise PermissionDeniedError("Cannot add members to a direct conversation.")
-    if not _can_manage_members(actor_membership):
-        raise PermissionDeniedError("Insufficient permissions to add members.")
-    if actor_membership.role is MemberRole.GUEST:
-        raise PermissionDeniedError("Guests cannot manage members.")
 
     role = _resolve_add_role(dto.role)
+    if role is MemberRole.ADMIN and actor_membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise PermissionDeniedError("Insufficient permissions to assign an administrator.")
     if role is MemberRole.GUEST and actor.user.is_customer:
         raise PermissionDeniedError("Customers cannot invite guests.")
 
-    existing = await membership_repository.get_active(
-        conversation_id=conversation_id,
-        principal_id=dto.principal_id,
-    )
-    if existing is not None:
+    locked = await conversation_repository.read(conversation_id, with_lock=True)
+    if locked is None:
+        raise ConversationNotFoundError("Conversation not found.")
+    conversation = locked
+    existing = await membership_repository.find_member(conversation_id, dto.principal_id)
+    if existing is not None and existing.is_active:
         return ConversationMemberDTO.model_validate(existing, from_attributes=True)
 
     if role is MemberRole.GUEST and policy_repository is not None:
@@ -254,8 +259,21 @@ async def add_member(
         history_from_seq=history_from_seq,
     )
     seq = await conversation_repository.allocate_event_seq(conversation.id)
-    membership.register_joined(event_seq=seq)
-    await membership_repository.create(membership)
+    if existing is not None:
+        membership = existing
+        membership.role = role
+        membership.joined_at = datetime.now(UTC)
+        membership.updated_at = membership.joined_at
+        membership.left_at = None
+        membership.deleted_at = None
+        membership.history_from_seq = history_from_seq
+        membership.last_read_message_seq = 0
+        membership.last_delivered_message_seq = 0
+        membership.register_joined(event_seq=seq)
+        await membership_repository.update(membership)
+    else:
+        membership.register_joined(event_seq=seq)
+        await membership_repository.create(membership)
     await event_store.append(
         ConversationEvent(
             conversation_id=conversation.id,
@@ -298,6 +316,7 @@ async def remove_member(
     uow: UnitOfWork,
     audit_repository: AuditRepository | None = None,
 ) -> None:
+    await conversation_repository.read(conversation_id, with_lock=True)
     conversation, actor_membership = await require_active_membership(
         conversation_id=conversation_id,
         actor=actor,
@@ -308,10 +327,13 @@ async def remove_member(
         raise PermissionDeniedError("Cannot remove members from a direct conversation.")
 
     self_leave = principal_id == actor.user.id
-    if not self_leave and not _can_manage_members(actor_membership):
+    if not self_leave and actor_membership.role is not MemberRole.OWNER:
         raise PermissionDeniedError("Insufficient permissions to remove members.")
-    if not self_leave and actor_membership.role is MemberRole.GUEST:
-        raise PermissionDeniedError("Guests cannot remove members.")
+
+    if self_leave and actor_membership.role is MemberRole.OWNER:
+        active = await membership_repository.list_active(conversation_id)
+        if any(member.principal_id != actor.user.id for member in active):
+            raise PermissionDeniedError("Transfer ownership before leaving the group.")
 
     target = await membership_repository.get_active(
         conversation_id=conversation_id,
@@ -352,4 +374,80 @@ async def remove_member(
             resource_id=str(target.principal_id),
             summary={"removedById": str(actor.user.id)},
         )
+    await uow.commit()
+
+
+async def update_group_avatar(
+    conversation_id: UUID,
+    avatar_url: str | None,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    event_store: ConversationEventStore,
+    uow: UnitOfWork,
+) -> None:
+    conversation = await conversation_repository.read(conversation_id, with_lock=True)
+    if conversation is None or conversation.organization_id != actor.user.organization_id:
+        raise ConversationNotFoundError("Conversation not found.")
+    _, membership = await require_active_membership(
+        conversation_id=conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if conversation.type is not ConversationType.GROUP or membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise PermissionDeniedError("Insufficient permissions to change group avatar.")
+    changes = {}
+    if conversation.avatar_url != avatar_url:
+        conversation.avatar_url = avatar_url
+        changes["avatarUrl"] = avatar_url
+    if title is not None:
+        title = title.strip()
+        description = (description or "").strip() or None
+        if conversation.title != title or conversation.description != description:
+            conversation.title = title
+            conversation.description = description
+            changes.update(title=title, description=description)
+    if changes:
+        conversation.updated_at = datetime.now(UTC)
+        await conversation_repository.update(conversation)
+        seq = await conversation_repository.allocate_event_seq(conversation.id)
+        await event_store.append(ConversationEvent(
+            conversation_id=conversation.id,
+            organization_id=conversation.organization_id,
+            seq=seq,
+            type="conversation.updated",
+            payload=changes,
+        ))
+    await uow.commit()
+
+
+async def transfer_group_ownership(
+    conversation_id: UUID,
+    principal_id: UUID,
+    *,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    uow: UnitOfWork,
+) -> None:
+    await conversation_repository.read(conversation_id, with_lock=True)
+    conversation, owner = await require_active_membership(
+        conversation_id=conversation_id, actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if conversation.type is not ConversationType.GROUP or owner.role is not MemberRole.OWNER:
+        raise PermissionDeniedError("Only the group owner can transfer ownership.")
+    target = await membership_repository.get_active(conversation_id=conversation_id, principal_id=principal_id)
+    if target is None or target.role not in {MemberRole.MEMBER, MemberRole.ADMIN} or target.principal_id == owner.principal_id:
+        raise PermissionDeniedError("Select an active member or administrator.")
+    owner.role = MemberRole.ADMIN
+    target.role = MemberRole.OWNER
+    owner.updated_at = target.updated_at = datetime.now(UTC)
+    await membership_repository.update(owner)
+    await membership_repository.update(target)
     await uow.commit()

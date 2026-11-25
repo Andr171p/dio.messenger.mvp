@@ -13,6 +13,7 @@ import type { MessengerDatabase } from "../storage/database.js";
 import { conversationKey } from "../storage/keys.js";
 
 export interface SendMessageInput {
+  threadId?: string;
   conversationId: string;
   content: string;
   extraBlocks?: ContentBlock[];
@@ -60,6 +61,7 @@ export async function sendMessage(
     localId: clientMessageId,
     clientMessageId,
     conversationId: input.conversationId,
+    threadId: input.threadId,
     content: preview,
     contentBlocks: JSON.stringify(blocks),
     createdAt: now,
@@ -80,6 +82,7 @@ export async function sendMessage(
 
   const command: SendMessageOutboxCommand = {
     conversationId: input.conversationId,
+    threadId: input.threadId,
     clientMessageId,
     content: input.content,
     blocksJson: JSON.stringify(blocks),
@@ -119,7 +122,9 @@ export async function sendMessage(
         });
       }
       if (input.clearConversationDraft) {
-        await db.drafts.delete(conversationKey(accountKey, input.conversationId));
+        await db.drafts.delete(
+          conversationKey(accountKey, input.conversationId, input.threadId),
+        );
       }
     },
   );

@@ -20,6 +20,9 @@ from src.application.conversations.dtos import (
     CreateDirectConversationDTO,
     CreateGroupConversationDTO,
     InviteCatalogUserDTO,
+    UpdateGroupAvatarDTO,
+    UpdateGroupDTO,
+    TransferOwnershipDTO,
 )
 from src.application.policies import commands as policy_commands
 from src.application.policies.dtos import ConversationPolicyDTO, UpdateConversationPolicyDTO
@@ -75,6 +78,54 @@ async def list_conversations(
         actor=auth,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
+    )
+
+
+@router.put("/{conversation_id}/settings", status_code=status.HTTP_204_NO_CONTENT)
+async def update_group(
+    conversation_id: UUID, dto: UpdateGroupDTO, auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    event_store: ConversationEventStoreDep,
+    session: DBSession,
+) -> None:
+    await commands.update_group_avatar(
+        conversation_id, dto.avatar_url, title=dto.title, description=dto.description, actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        event_store=event_store, uow=session,
+    )
+
+
+@router.put("/{conversation_id}/owner", status_code=status.HTTP_204_NO_CONTENT)
+async def transfer_group_owner(
+    conversation_id: UUID, dto: TransferOwnershipDTO, auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    session: DBSession,
+) -> None:
+    await commands.transfer_group_ownership(
+        conversation_id, dto.principal_id, actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository, uow=session,
+    )
+
+
+@router.put("/{conversation_id}/avatar", status_code=status.HTTP_204_NO_CONTENT)
+async def update_group_avatar(
+    conversation_id: UUID,
+    dto: UpdateGroupAvatarDTO,
+    auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    event_store: ConversationEventStoreDep,
+    session: DBSession,
+) -> None:
+    await commands.update_group_avatar(
+        conversation_id, dto.avatar_url, actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        event_store=event_store, uow=session,
     )
 
 
