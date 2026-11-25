@@ -785,7 +785,8 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             } else if (
               existing &&
               startCursor === currentCursor &&
-              (existing.threadId !== message.threadId ||
+              (JSON.stringify(existing.mentions) !== JSON.stringify(message.mentions) ||
+                existing.threadId !== message.threadId ||
                 (!pendingReactions.has(entry.id ?? "") &&
                   message.reactions !== undefined &&
                   JSON.stringify(existing.reactions) !==
@@ -793,6 +794,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             ) {
               await options.db.messages.update(existing.localId, {
                 threadId: message.threadId,
+                mentions: message.mentions,
                 ...(message.reactions !== undefined &&
                 !pendingReactions.has(entry.id ?? "")
                   ? { reactions: message.reactions }

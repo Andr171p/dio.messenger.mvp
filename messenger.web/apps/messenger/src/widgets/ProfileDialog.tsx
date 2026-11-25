@@ -1,6 +1,6 @@
 import { HttpError } from "@dio/messenger-core";
 import { Avatar, Button } from "@dio/messenger-ui";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
@@ -30,10 +30,48 @@ export function ProfileDialog({
   const queries = useQueryClient();
   const profile = useProfiles([initial.id]).get(initial.id) ?? initial;
   const own = initial.id === session?.userId;
+  const ownProfile = useQuery({
+    queryKey: ["desk-own-profile", accountKey],
+    enabled: own && !!desk,
+    queryFn: async () => fromDesk(await desk!.get<DeskUser>("/api/v1/users/me")),
+  });
+  const displayed = ownProfile.data ?? profile;
+  const company = useQuery({
+    queryKey: ["desk-company", accountKey, displayed.counterpartyId],
+    enabled: own && !!desk && !!displayed.counterpartyId,
+    queryFn: () =>
+      desk!.get<{ name: string }>(
+        `/api/v1/counterparties/${encodeURIComponent(displayed.counterpartyId!)}`,
+      ),
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  const name = userLabel(profile);
+  const name = userLabel(displayed);
+
+  function updatePhoto(updated: Profile) {
+    queries.setQueryData(["desk-profile", accountKey, initial.id], updated);
+    queries.setQueryData(["desk-own-profile", accountKey], updated);
+    void queries.invalidateQueries({ queryKey: ["directory"] });
+    void queries.invalidateQueries({ queryKey: ["directory-profiles"] });
+  }
+
+  async function removePhoto() {
+    if (!desk || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      updatePhoto(
+        fromDesk(
+          await desk.request<DeskUser>("/api/v1/users/me/avatar", { method: "DELETE" }),
+        ),
+      );
+    } catch {
+      setError("Не удалось удалить фото. Попробуйте ещё раз.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function upload(file?: File) {
     if (!file || !desk) return;
@@ -52,8 +90,7 @@ export function ProfileDialog({
           body: form,
         }),
       );
-      queries.setQueryData(["desk-profile", accountKey, initial.id], updated);
-      void queries.invalidateQueries({ queryKey: ["directory", accountKey] });
+      updatePhoto(updated);
     } catch (error) {
       if (error instanceof HttpError && error.status === 413) {
         setError("Выберите фото размером до 5 МБ.");
@@ -84,10 +121,16 @@ export function ProfileDialog({
   return (
     <ChatDialog title={own ? "Мой профиль" : "Профиль"} onClose={onClose} busy={busy}>
       <div className={styles.hero}>
-        <Avatar name={name} src={photoUrl(profile.avatarUrl)} size="lg" />
+        <Avatar name={name} src={photoUrl(displayed.avatarUrl)} size="lg" />
         <h3>{name}</h3>
-        {profile.username && <span>@{profile.username}</span>}
-        {profile.email && profile.email !== name && <span>{profile.email}</span>}
+        {displayed.username && <span>@{displayed.username}</span>}
+        {displayed.email && displayed.email !== name && <span>{displayed.email}</span>}
+        {own && displayed.counterpartyId && (
+          <span>
+            Контрагент ·{" "}
+            {company.data?.name ?? (company.isPending ? "Загружаем…" : "Недоступен")}
+          </span>
+        )}
       </div>
       {own ? (
         <>
@@ -108,6 +151,11 @@ export function ProfileDialog({
           >
             Изменить фото
           </Button>
+          {displayed.avatarUrl && (
+            <Button variant="ghost" disabled={busy} onClick={() => void removePhoto()}>
+              Удалить фото
+            </Button>
+          )}
         </>
       ) : (
         <Button disabled={busy || !http} loading={busy} onClick={() => void message()}>

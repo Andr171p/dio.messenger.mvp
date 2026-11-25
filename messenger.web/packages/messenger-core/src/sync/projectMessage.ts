@@ -27,6 +27,13 @@ export function projectContent(content: unknown): Partial<LocalMessage> {
   const forward = metadata.forwardedFrom as Record<string, unknown> | undefined;
   return {
     content: extractPlainText(content),
+    mentions: Array.isArray(
+      (metadata.mentions as { principalIds?: unknown } | undefined)?.principalIds,
+    )
+      ? (metadata.mentions as { principalIds: unknown[] }).principalIds.filter(
+          (id): id is string => typeof id === "string",
+        )
+      : undefined,
     contentBlocks: blocks.length ? JSON.stringify(blocks) : undefined,
     quoteText: typeof metadata.quoteText === "string" ? metadata.quoteText : undefined,
     forwardedFrom:

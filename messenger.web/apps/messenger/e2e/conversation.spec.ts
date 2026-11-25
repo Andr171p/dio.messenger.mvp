@@ -1336,7 +1336,8 @@ test("тема сохраняет собственную историю и че�
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
   const editor = page.getByRole("textbox", { name: "Текст сообщения" });
   await editor.fill("Черновик общего чата");
-  await page.getByRole("button", { name: /Темы.*Общий чат/ }).click();
+  await page.getByRole("button", { name: /Информация о беседе/ }).click();
+  await page.getByRole("button", { name: "Темы группы", exact: true }).click();
   await page.getByRole("button", { name: "Создать тему" }).click();
   await page.getByLabel("Название темы").fill("Поставка");
   await page.getByRole("button", { name: "Создать", exact: true }).click();
@@ -1352,4 +1353,84 @@ test("тема сохраняет собственную историю и че�
   await expect(page.getByText("История темы", { exact: true })).toBeHidden();
   await list.getByRole("button", { name: /Поставка/ }).click();
   await expect(editor).toHaveValue("Черновик темы");
+  await list.getByRole("button", { name: /Все чаты/ }).click();
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Чаты", exact: true }),
+  ).toBeVisible();
+  await expect(list.getByRole("button", { name: /Поставка/ })).toBeVisible();
+});
+
+test("открывает профиль из упоминания и показывает карточку общей ссылки", async ({
+  page,
+}) => {
+  const sharedUrl = "https://example.com/design";
+  await page.route("**/api/v1/users/" + sourceId, (route) =>
+    route.fulfill({
+      json: { id: sourceId, full_name: "Анна Смирнова", username: "anna" },
+    }),
+  );
+  const message = {
+    ...reply,
+    content: {
+      blocks: [{ type: "text", text: "**@anna** [Макет](" + sharedUrl + ")" }],
+      mentions: { principalIds: [sourceId] },
+    },
+  };
+  await page.route("**/v1/conversations/" + chatId + "/snapshot?*", (route) =>
+    route.fulfill({
+      json: {
+        conversation: chat,
+        membership: { historyFromSeq: 1 },
+        messages: [message],
+        snapshotEventSeq: 81,
+      },
+    }),
+  );
+  await page.route("**/v1/conversations/" + chatId + "/messages?*", (route) =>
+    route.fulfill({ json: [message] }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  await page.getByRole("button", { name: "@anna", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Профиль" }).getByText("Анна Смирнова"),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /Информация о беседе/ }).click();
+  const details = page.getByRole("dialog", { name: "Информация о группе" });
+  await details.getByRole("button", { name: "Ссылки", exact: true }).click();
+  await expect(details.getByRole("link", { name: /Макет/ })).toHaveAttribute(
+    "href",
+    sharedUrl,
+  );
+});
+
+test("показывает контрагента в своём профиле и удаляет фото через Desk", async ({
+  page,
+}) => {
+  const user = {
+    id: userId,
+    full_name: "Павел Орлов",
+    username: "pavel",
+    counterparty_id: resourceId,
+    avatar_url: "https://example.com/avatar.jpg",
+  };
+  let removed = false;
+  await page.route("**/api/v1/users/me", (route) => route.fulfill({ json: user }));
+  await page.route("**/api/v1/counterparties/" + resourceId, (route) =>
+    route.fulfill({ json: { name: "Команда DIO" } }),
+  );
+  await page.route("**/api/v1/users/me/avatar", (route) => {
+    removed = route.request().method() === "DELETE";
+    return route.fulfill({ json: { ...user, avatar_url: null } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Мой профиль", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Мой профиль" });
+  await expect(dialog.getByText("Павел Орлов")).toBeVisible();
+  await expect(dialog.getByText(/Команда DIO/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Удалить фото" }).click();
+  await expect(dialog.getByRole("button", { name: "Удалить фото" })).toBeHidden();
+  expect(removed).toBe(true);
 });

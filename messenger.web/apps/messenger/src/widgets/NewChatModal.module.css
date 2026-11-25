@@ -85,8 +85,7 @@
 .dialogHead,
 .footer,
 .photoRow,
-.chips,
-.topicBar {
+.chips {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -148,8 +147,7 @@
 .chips {
   flex-wrap: wrap;
 }
-.chips button,
-.topicBar {
+.chips button {
   border: 1px solid var(--dio-border);
   background: var(--dio-field);
   border-radius: 12px;
@@ -157,14 +155,6 @@
   cursor: pointer;
   padding: 5px 9px;
   font: inherit;
-}
-.topicBar {
-  align-self: flex-start;
-  margin: 5px 12px;
-  font-size: 12px;
-}
-.topicBar span {
-  color: var(--dio-text-secondary);
 }
 .userRow[aria-pressed="true"],
 .userRow[aria-current="true"] {
@@ -206,5 +196,55 @@
   overflow-wrap: anywhere;
 }
 .topicItems button span {
+  color: var(--dio-text-secondary);
+}
+
+.roleBadge {
+  background: var(--dio-accent-muted);
+  color: var(--dio-action);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.sharedSection {
+  border-block-start: 1px solid var(--dio-border);
+  padding-block-start: 12px;
+  min-width: 0;
+}
+.sharedCategories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-block: 6px;
+}
+.sharedCategories button {
+  width: auto;
+}
+.sharedResults {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+}
+.sharedResults:not(:empty) + .emptyShared {
+  display: none;
+}
+.sharedAttachment {
+  max-width: 100%;
+  min-width: 0;
+}
+.linkCard {
+  display: grid;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--dio-field);
+  border-inline-start: 3px solid var(--dio-action);
+  color: var(--dio-action);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.linkCard small {
   color: var(--dio-text-secondary);
 }

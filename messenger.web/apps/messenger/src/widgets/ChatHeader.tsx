@@ -14,8 +14,9 @@ import {
   userLabel,
   type Profile,
 } from "../features/conversation/profiles.js";
+import { ChatSharedContent } from "./ChatSharedContent.js";
 import { ChatDialog } from "./ChatDialog.js";
-import { GroupTopics } from "./GroupTopics.js";
+import { useGroupTopics } from "./GroupTopics.js";
 import { ProfileDialog } from "./ProfileDialog.js";
 import dialog from "./NewChatModal.module.css";
 import styles from "./ChatHeader.module.css";
@@ -74,6 +75,9 @@ export function ChatHeader() {
     return db.conversations.get(conversationId);
   }, [db, conversationId]);
 
+  const topics = useGroupTopics(conversation?.kind === "group" ? conversationId : null);
+  const threadId = useUiStore((s) => s.selectedThreadId);
+  const topicTitle = topics.data?.find((topic) => topic.id === threadId)?.title;
   const peerId =
     conversation?.kind === "direct"
       ? (conversation.peerId ??
@@ -188,7 +192,7 @@ export function ChatHeader() {
           >
             <Avatar name={title} src={photo} size="md" online={peerOnline === true} />
             <div className={styles.copy}>
-              <h1 className={styles.title}>{title}</h1>
+              <h1 className={styles.title}>{topicTitle || title}</h1>
               <p className={styles.subtitle} aria-live="polite">
                 {activityLabel ? (
                   <span className={styles.typing}>{activityLabel}</span>
@@ -237,30 +241,55 @@ export function ChatHeader() {
           />
         ) : null}
       </header>
-      {conversation?.kind === "group" && (
-        <GroupTopics key={conversationId} conversationId={conversationId} />
-      )}
       {infoFor === conversationId && (
         <>
-          {conversation?.kind === "direct" && peerId ? (
-            <ProfileDialog
-              initial={peer ?? { id: peerId, fullName: title }}
-              onClose={() => setInfoFor(undefined)}
-            />
-          ) : (
-            <ChatDialog
-              title={
-                conversation?.kind === "direct"
-                  ? "Личная переписка"
-                  : "Информация о группе"
-              }
-              onClose={() => setInfoFor(undefined)}
-            >
-              <div className={dialog.hero}>
-                <Avatar name={title} src={photo} size="lg" />
-                <h3>{title}</h3>
-                {conversation?.description && <p>{conversation.description}</p>}
-              </div>
+          <ChatDialog
+            title={
+              conversation?.kind === "direct"
+                ? "Личная переписка"
+                : "Информация о группе"
+            }
+            onClose={() => setInfoFor(undefined)}
+          >
+            <div className={dialog.hero}>
+              <Avatar name={title} src={photo} size="lg" />
+              <h3>{title}</h3>
+              {conversation?.kind === "group" && (
+                <div className={dialog.footer}>
+                  <button
+                    className={dialog.textButton}
+                    onClick={() => {
+                      useUiStore.getState().setTopicsOpen(true);
+                      setInfoFor(undefined);
+                    }}
+                  >
+                    Темы группы
+                  </button>
+                  {canManage && (
+                    <button
+                      className={dialog.textButton}
+                      onClick={() => {
+                        setPolicyFor(conversationId);
+                        setInfoFor(undefined);
+                      }}
+                    >
+                      Настройки
+                    </button>
+                  )}
+                </div>
+              )}
+              {conversation?.description && <p>{conversation.description}</p>}
+            </div>
+            {conversation?.kind === "direct" && peerId && (
+              <button
+                className={dialog.userRow}
+                onClick={() => setProfile(peer ?? { id: peerId, fullName: title })}
+              >
+                Открыть профиль собеседника
+              </button>
+            )}
+            <ChatSharedContent key={conversationId} conversationId={conversationId} />
+            <section className={dialog.sharedSection}>
               <h3>Участники{members.data ? ` · ${members.data.length}` : ""}</h3>
               {members.isPending && <p role="status">Загружаем участников…</p>}
               {members.isError && (
@@ -289,17 +318,22 @@ export function ChatHeader() {
                             {user.id === session?.userId ? " (вы)" : ""}
                           </strong>
                           <small>
+                            {onlineStates.get(user.id) === "online"
+                              ? "В сети"
+                              : "Не в сети"}
+                          </small>
+                        </span>
+                        {member.role !== "member" && (
+                          <span className={dialog.roleBadge}>
                             {
                               {
                                 owner: "Владелец",
                                 admin: "Администратор",
-                                member: "Участник",
                                 guest: "Гость",
                               }[member.role]
                             }
-                          </small>
-                        </span>
-                        ›
+                          </span>
+                        )}
                       </button>
                     </li>
                   );
@@ -313,8 +347,8 @@ export function ChatHeader() {
                   Ещё участники
                 </button>
               )}
-            </ChatDialog>
-          )}
+            </section>
+          </ChatDialog>
           {profile && (
             <ProfileDialog
               initial={profile}

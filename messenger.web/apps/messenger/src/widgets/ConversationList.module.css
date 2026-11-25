@@ -187,3 +187,32 @@
     display: none;
   }
 }
+
+.compactRail {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-block: 12px;
+}
+.compactRail button {
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 0;
+  background: none;
+  border-radius: 12px;
+  padding: 5px;
+  cursor: pointer;
+}
+.compactRail button[aria-current="true"],
+.compactRail button:hover {
+  background: var(--dio-accent-muted);
+}
+.compactRail button > :nth-child(2) {
+  position: absolute;
+  inset-inline-end: 0;
+  bottom: 0;
+}

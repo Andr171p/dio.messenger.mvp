@@ -25,6 +25,7 @@ export function ChatDialog({
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         if (!busy) onClose();
       }}
       onClick={(event) => {

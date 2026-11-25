@@ -34,12 +34,13 @@ function Spoiler({ children }: { children: ReactNode }) {
 function inline(
   text: string,
   openTicket: ((number: string) => void) | undefined,
+  mention?: (handle: string) => (() => void) | undefined,
   depth = 0,
   links = true,
 ): ReactNode[] {
   if (depth >= 6) return [text];
   const result: ReactNode[] = [];
-  const specials = /\\[\\#*_~|()[\]\x60]|[#[*_~|\x60]/g;
+  const specials = /\\[\\#*_~|()[\]\x60]|https?:\/\/|[@#[*_~|\x60]/gi;
   let cursor = 0;
   for (let match = specials.exec(text); match; match = specials.exec(text)) {
     const start = match.index;
@@ -49,6 +50,34 @@ function inline(
     if (literal.startsWith("\\")) {
       formatted = literal.slice(1);
       end = start + literal.length;
+    } else if (literal.toLowerCase().startsWith("http") && links) {
+      const raw = /^https?:\/\/[^\s<>"']+/i.exec(text.slice(start))?.[0];
+      const href = raw?.replace(/[.,;!?)}\]]+$/, "");
+      if (href) {
+        formatted = (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {href}
+          </a>
+        );
+        end = start + href.length;
+      }
+    } else if (
+      literal === "@" &&
+      links &&
+      !/[\p{L}\p{N}_]/u.test(text[start - 1] ?? "")
+    ) {
+      const handle = /^@[\p{L}\p{N}_.-]+/u
+        .exec(text.slice(start))?.[0]
+        .replace(/[.-]+$/, "");
+      const open = handle && mention?.(handle);
+      if (handle && open) {
+        formatted = (
+          <button className={styles.mention} type="button" onClick={open}>
+            {handle}
+          </button>
+        );
+        end = start + handle.length;
+      }
     } else if (literal === "[" && links) {
       const link = /^\[([^\]\n]+)\]\((https?:\/\/[^\s()<>"']+)\)/i.exec(
         text.slice(start),
@@ -56,7 +85,7 @@ function inline(
       if (link) {
         formatted = (
           <a href={link[2]} target="_blank" rel="noopener noreferrer">
-            {inline(link[1]!, undefined, depth + 1, false)}
+            {inline(link[1]!, undefined, undefined, depth + 1, false)}
           </a>
         );
         end = start + link[0].length;
@@ -101,7 +130,7 @@ function inline(
           const children =
             Tag === "code" || Tag === "spoiler"
               ? body
-              : inline(body, openTicket, depth + 1, links);
+              : inline(body, openTicket, mention, depth + 1, links);
           formatted =
             Tag === "spoiler" ? (
               links ? (
@@ -132,9 +161,11 @@ function inline(
 export function MessageFormatting({
   text,
   openTicket,
+  mention,
 }: {
   text: string;
   openTicket?: (number: string) => void;
+  mention?: (handle: string) => (() => void) | undefined;
 }) {
   const fence = /(?:^|\n)\x60{3}[\w+-]*[ \t]*\r?\n([\s\S]*?)\r?\n\x60{3}(?=\r?\n|$)/g;
   const renderText = (value: string) =>
@@ -143,10 +174,10 @@ export function MessageFormatting({
       .map((part, index) =>
         index % 2 ? (
           <blockquote key={index}>
-            {inline(part.replace(/^> /gm, ""), openTicket)}
+            {inline(part.replace(/^> /gm, ""), openTicket, mention)}
           </blockquote>
         ) : (
-          <Fragment key={index}>{inline(part, openTicket)}</Fragment>
+          <Fragment key={index}>{inline(part, openTicket, mention)}</Fragment>
         ),
       );
   const result: ReactNode[] = [];

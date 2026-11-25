@@ -1,3 +1,4 @@
+import { useProfiles } from "../features/conversation/profiles.js";
 import {
   toggleReaction,
   type ContentBlock,
@@ -36,6 +37,16 @@ export function MessageBubble(props: {
   sync: ReturnType<typeof useRuntime>["sync"];
 }) {
   const { message, status, blocks, grouped } = props;
+  const mentionedUsers = useProfiles(message.mentions ?? []);
+  function resolveMention(handle: string) {
+    const candidates = [...mentionedUsers.values()].filter(
+      (user) =>
+        "@" + (user.username?.trim() || user.email?.split("@")[0])?.toLowerCase() ===
+        handle.toLowerCase(),
+    );
+    const user = candidates.length === 1 ? candidates[0] : undefined;
+    return user ? () => useUiStore.getState().setMentionProfile(user.id) : undefined;
+  }
   const resources = message.deletedAt
     ? []
     : blocks.filter((block) => block.type === "resource");
@@ -56,8 +67,7 @@ export function MessageBubble(props: {
   const seen = props.receiptCount?.seen ?? 0;
   const read = seen > 0 || message.deliveryStatus === "read";
   const delivered =
-    props.receiptCount?.delivered ||
-    message.deliveryStatus === "delivered";
+    props.receiptCount?.delivered || message.deliveryStatus === "delivered";
   const receiptLabel = seen
     ? `Прочитали ${seen} из ${props.receiptCount?.total}`
     : read
@@ -196,6 +206,7 @@ export function MessageBubble(props: {
           !ticketsOnly && (
             <MessageBody
               blocks={blocks}
+              mention={resolveMention}
               onPreview={(assetId, media) =>
                 props.onPreview({
                   ...media,
@@ -256,9 +267,11 @@ export function MessageBubble(props: {
 
 function MessageBody({
   blocks,
+  mention,
   onPreview,
 }: {
   blocks: ContentBlock[];
+  mention: (handle: string) => (() => void) | undefined;
   onPreview: (
     assetId: string,
     media: Pick<MediaSelection, "filename" | "contentType">,
@@ -274,6 +287,7 @@ function MessageBody({
             <div key={`t-${index}`} className={styles.text}>
               <MessageFormatting
                 text={block.text}
+                mention={mention}
                 openTicket={(number) => {
                   const resource = blocks.find(
                     (item) =>

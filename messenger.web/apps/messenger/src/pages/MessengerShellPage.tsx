@@ -3,7 +3,9 @@ import { MessengerLayout } from "../app/layouts/MessengerLayout.js";
 import { MessageComposer } from "../features/composer/MessageComposer.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { AppRail } from "../widgets/AppRail.js";
-import { TopicList } from "../widgets/GroupTopics.js";
+import { useLiveQuery } from "dexie-react-hooks";
+import { useRuntime } from "../app/providers/RuntimeProvider.js";
+import { TopicList, useGroupTopics } from "../widgets/GroupTopics.js";
 import { ChatHeader } from "../widgets/ChatHeader.js";
 import { ContextResourcePanel } from "../widgets/ContextResourcePanel.js";
 import { ConversationList } from "../widgets/ConversationList.js";
@@ -13,6 +15,7 @@ import { GuestConversationNotice } from "../widgets/GuestConversationNotice.js";
 import { MessageTimeline } from "../widgets/MessageTimeline.js";
 import { NewChatModal } from "../widgets/NewChatModal.js";
 import { OfflineIndicator } from "../widgets/OfflineIndicator.js";
+import { ProfileDialog } from "../widgets/ProfileDialog.js";
 import { PinBar } from "../widgets/PinBar.js";
 import styles from "./MessengerShellPage.module.css";
 
@@ -23,7 +26,19 @@ function closeContext() {
 }
 
 export function MessengerShellPage() {
-  const groupId = useUiStore((s) => s.topicsOpen && s.selectedConversationId);
+  const mentionProfileId = useUiStore((s) => s.mentionProfileId);
+  const setMentionProfile = useUiStore((s) => s.setMentionProfile);
+  const selected = useUiStore((s) => s.selectedConversationId);
+  const topicsOpen = useUiStore((s) => s.topicsOpen);
+  const { db } = useRuntime();
+  const chat = useLiveQuery(
+    () => (selected && db ? db.conversations.get(selected) : undefined),
+    [db, selected],
+  );
+  const topics = useGroupTopics(
+    chat && chat.id === selected && chat.kind === "group" ? selected : null,
+  );
+  const groupId = selected && (topicsOpen || topics.data?.length) ? selected : null;
   const thread = useUiStore((s) => s.selectedThreadId);
   const theme = useUiStore((s) => s.theme);
   const contextOpen = useUiStore((s) => s.contextDrawerOpen);
@@ -47,13 +62,20 @@ export function MessengerShellPage() {
 
   return (
     <>
+      {mentionProfileId && (
+        <ProfileDialog
+          key={mentionProfileId}
+          initial={{ id: mentionProfileId }}
+          onClose={() => setMentionProfile(undefined)}
+        />
+      )}
       <NewChatModal />
       <ForwardModal />
       <MessengerLayout
         mobilePane={mobilePane}
         contextOpen={contextOpen}
         onCloseContext={closeContext}
-        rail={<AppRail />}
+        rail={groupId && !searchOpen ? <ConversationList compact /> : <AppRail />}
         list={
           searchOpen ? (
             <GlobalSearchPanel />

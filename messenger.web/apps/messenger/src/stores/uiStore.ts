@@ -24,6 +24,8 @@ interface UiState {
   theme: DioTheme;
   navActive: NavItem;
   selectedConversationId: string | null;
+  mentionProfileId?: string;
+  setMentionProfile: (id?: string) => void;
   topicsOpen: boolean;
   setTopicsOpen: (open: boolean) => void;
   selectedThreadId?: string;
@@ -75,6 +77,7 @@ export const useUiStore = create<UiState>()(
       searchConversationId: null,
       messageTarget: null,
       newChatOpen: false,
+      setMentionProfile: (mentionProfileId) => set({ mentionProfileId }),
       topicsOpen: false,
       setTopicsOpen: (topicsOpen) =>
         set({ topicsOpen, searchPanelOpen: false, mobilePane: "list" }),
@@ -92,6 +95,7 @@ export const useUiStore = create<UiState>()(
       setSelectedConversation: (id) =>
         set({
           selectedConversationId: id,
+          mentionProfileId: undefined,
           topicsOpen: false,
           selectedThreadId: undefined,
           replyTarget: null,

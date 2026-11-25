@@ -10,6 +10,7 @@ export interface Profile {
   fullName?: string | null;
   username?: string | null;
   avatarUrl?: string | null;
+  counterpartyId?: string | null;
   principalKind?: string;
 }
 
@@ -19,6 +20,7 @@ export interface DeskUser {
   full_name?: string | null;
   username?: string | null;
   avatar_url?: string | null;
+  counterparty_id?: string | null;
 }
 
 export function fromDesk(user: DeskUser): Profile {
@@ -28,6 +30,7 @@ export function fromDesk(user: DeskUser): Profile {
     fullName: user.full_name,
     username: user.username,
     avatarUrl: user.avatar_url,
+    counterpartyId: user.counterparty_id,
   };
 }
 

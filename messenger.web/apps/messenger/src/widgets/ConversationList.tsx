@@ -37,7 +37,7 @@ function formatTime(ts?: number): string {
   }).format(date);
 }
 
-export function ConversationList() {
+export function ConversationList({ compact = false }: { compact?: boolean }) {
   const { db, accountKey, syncStatus } = useRuntime();
   const { logout, session } = useAuth();
   const [ownProfile, setOwnProfile] = useState(false);
@@ -90,6 +90,24 @@ export function ConversationList() {
     syncStatus.runtime === "starting" ||
     syncStatus.runtime === "syncing";
 
+  if (compact)
+    return (
+      <nav className={styles.compactRail} aria-label="Чаты">
+        {(conversations ?? []).map((chat) => (
+          <button
+            key={chat.id}
+            type="button"
+            aria-label={chatTitle(chat)}
+            title={chatTitle(chat)}
+            aria-current={selectedId === chat.id || undefined}
+            onClick={() => setSelected(chat.id)}
+          >
+            <Avatar name={chatTitle(chat)} src={photoUrl(chat.avatarUrl)} size="md" />
+            {chat.unreadCount > 0 && <Badge tone="info">{chat.unreadCount}</Badge>}
+          </button>
+        ))}
+      </nav>
+    );
   return (
     <div className={styles.root}>
       <header className={styles.header}>
