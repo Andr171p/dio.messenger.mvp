@@ -20,6 +20,7 @@ from src.application.conversations.dtos import (
     CreateDirectConversationDTO,
     CreateGroupConversationDTO,
     InviteCatalogUserDTO,
+    UpdateGroupAvatarDTO,
 )
 from src.application.policies import commands as policy_commands
 from src.application.policies.dtos import ConversationPolicyDTO, UpdateConversationPolicyDTO
@@ -75,6 +76,24 @@ async def list_conversations(
         actor=auth,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
+    )
+
+
+@router.put("/{conversation_id}/avatar", status_code=status.HTTP_204_NO_CONTENT)
+async def update_group_avatar(
+    conversation_id: UUID,
+    dto: UpdateGroupAvatarDTO,
+    auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    event_store: ConversationEventStoreDep,
+    session: DBSession,
+) -> None:
+    await commands.update_group_avatar(
+        conversation_id, dto.avatar_url, actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        event_store=event_store, uow=session,
     )
 
 

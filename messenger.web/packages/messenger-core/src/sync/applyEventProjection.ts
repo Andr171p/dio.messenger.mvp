@@ -141,6 +141,10 @@ export async function applyEventProjection(
         accountKey,
         id: event.conversationId,
         title: asString(payload.title) ?? conv?.title ?? "Беседа",
+        avatarUrl:
+          payload.avatarUrl === null
+            ? undefined
+            : (asString(payload.avatarUrl) ?? conv?.avatarUrl),
         lastMessagePreview: conv?.lastMessagePreview,
         lastMessageAt: conv?.lastMessageAt,
         unreadCount: conv?.unreadCount ?? 0,
@@ -153,7 +157,7 @@ export async function applyEventProjection(
         kind: conv?.kind,
         memberCount: conv?.memberCount,
         isPinned: conv?.isPinned ?? false,
-        updatedAt: Date.now(),
+        updatedAt: conv?.updatedAt ?? Date.now(),
       });
       break;
     }

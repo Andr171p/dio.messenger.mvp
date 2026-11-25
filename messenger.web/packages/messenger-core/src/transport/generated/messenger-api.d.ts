@@ -56,6 +56,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Group Avatar */
+        put: operations["update_group_avatar_v1_conversations__conversation_id__avatar_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -2033,6 +2050,11 @@ export interface components {
             /** Messageeditwindowseconds */
             messageEditWindowSeconds?: number | null;
         };
+        /** UpdateGroupAvatarDTO */
+        UpdateGroupAvatarDTO: {
+            /** Avatarurl */
+            avatarUrl: string | null;
+        };
         /** UploadResponseDTO */
         UploadResponseDTO: {
             /**
@@ -2205,6 +2227,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationDTO"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_avatar_v1_conversations__conversation_id__avatar_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupAvatarDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

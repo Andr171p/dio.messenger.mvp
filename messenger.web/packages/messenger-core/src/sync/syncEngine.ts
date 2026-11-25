@@ -60,7 +60,7 @@ export interface SyncEngine {
 interface ApiConversation {
   peerId?: string;
   description?: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   id: string;
   title?: string | null;
   type?: string;
@@ -461,7 +461,10 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
           entry.title ||
           (meta?.type === "direct" ? "Личный чат" : "Беседа"),
         peerId: meta?.peerId ?? existing?.peerId,
-        avatarUrl: meta?.avatarUrl ?? existing?.avatarUrl,
+        avatarUrl:
+          meta?.avatarUrl === null && meta.type?.toLowerCase() === "group"
+            ? undefined
+            : (meta?.avatarUrl ?? existing?.avatarUrl),
         description: meta?.description ?? existing?.description,
         lastMessagePreview: existing?.lastMessagePreview,
         lastMessageAt: existing?.lastMessageAt,

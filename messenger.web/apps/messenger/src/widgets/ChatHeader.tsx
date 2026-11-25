@@ -2,7 +2,7 @@ import type { Conversation } from "@dio/messenger-core";
 import { Avatar, Badge, Icon, IconButton } from "@dio/messenger-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
@@ -14,6 +14,7 @@ import {
   userLabel,
   type Profile,
 } from "../features/conversation/profiles.js";
+import { groupPhoto } from "./groupPhoto.js";
 import { ChatMemberPicker } from "./ChatMemberPicker.js";
 import { ChatSharedContent } from "./ChatSharedContent.js";
 import { ChatDialog } from "./ChatDialog.js";
@@ -43,6 +44,9 @@ export function ChatHeader() {
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const queries = useQueryClient();
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState("");
   const [more, setMore] = useState(false);
   const [adding, setAdding] = useState(false);
   const [memberError, setMemberError] = useState("");
@@ -180,7 +184,27 @@ export function ChatHeader() {
   const title =
     conversation?.kind === "direct" && peer ? userLabel(peer) : chatTitle(conversation);
   const photo = photoUrl(peer?.avatarUrl ?? conversation?.avatarUrl);
+  async function saveAvatar(file: File | null) {
+    if (!http || !db || !conversationId || avatarBusy) return;
+    setAvatarBusy(true);
+    setAvatarError("");
+    try {
+      const avatarUrl = file ? await groupPhoto(file) : null;
+      await http.put(`/v1/conversations/${conversationId}/avatar`, { avatarUrl });
+      await db.conversations.update(conversationId, {
+        avatarUrl: avatarUrl ?? undefined,
+      });
+    } catch {
+      setAvatarError(
+        "Не удалось обновить фото. Выберите JPEG, PNG или WebP до 5 МБ или проверьте подключение.",
+      );
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
   function openInfo() {
+    setAvatarError("");
     setMemberError("");
     setMore(false);
     setAdding(false);
@@ -268,7 +292,19 @@ export function ChatHeader() {
             }
             onClose={() => setInfoFor(undefined)}
             variant="chat"
+            busy={avatarBusy}
           >
+            <input
+              ref={avatarInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void saveAvatar(file);
+              }}
+            />
             <div className={dialog.hero}>
               <Avatar name={title} src={photo} size="lg" />
               <h3>{topicTitle || title}</h3>
@@ -304,6 +340,34 @@ export function ChatHeader() {
                         <Icon name="user-plus" />
                         Добавить участника
                       </button>
+                      {canManage && conversation?.kind === "group" && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={avatarBusy}
+                            onClick={() => {
+                              setMore(false);
+                              avatarInput.current?.click();
+                            }}
+                          >
+                            <Icon name="image" />
+                            {photo ? "Сменить аватар" : "Добавить аватар"}
+                          </button>
+                          {photo && (
+                            <button
+                              type="button"
+                              disabled={avatarBusy}
+                              onClick={() => {
+                                setMore(false);
+                                void saveAvatar(null);
+                              }}
+                            >
+                              <Icon name="trash" />
+                              Удалить аватар
+                            </button>
+                          )}
+                        </>
+                      )}
                       <button type="button" disabled>
                         <Icon name="sliders" />
                         Управление группой
@@ -321,6 +385,8 @@ export function ChatHeader() {
                 </div>
               </div>
             </div>
+            {avatarBusy && <p role="status">Сохраняем аватар…</p>}
+            {avatarError && <p role="alert">{avatarError}</p>}
             {conversation?.description && <p>{conversation.description}</p>}
             {conversation?.kind === "group" && !topics.data?.length && (
               <button

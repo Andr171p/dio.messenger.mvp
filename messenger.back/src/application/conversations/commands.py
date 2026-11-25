@@ -369,3 +369,39 @@ async def remove_member(
             summary={"removedById": str(actor.user.id)},
         )
     await uow.commit()
+
+
+async def update_group_avatar(
+    conversation_id: UUID,
+    avatar_url: str | None,
+    *,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
+    event_store: ConversationEventStore,
+    uow: UnitOfWork,
+) -> None:
+    conversation = await conversation_repository.read(conversation_id, with_lock=True)
+    if conversation is None or conversation.organization_id != actor.user.organization_id:
+        raise ConversationNotFoundError("Conversation not found.")
+    _, membership = await require_active_membership(
+        conversation_id=conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+    )
+    if conversation.type is not ConversationType.GROUP or membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
+        raise PermissionDeniedError("Insufficient permissions to change group avatar.")
+    if conversation.avatar_url != avatar_url:
+        conversation.avatar_url = avatar_url
+        conversation.updated_at = datetime.now(UTC)
+        await conversation_repository.update(conversation)
+        seq = await conversation_repository.allocate_event_seq(conversation.id)
+        await event_store.append(ConversationEvent(
+            conversation_id=conversation.id,
+            organization_id=conversation.organization_id,
+            seq=seq,
+            type="conversation.updated",
+            payload={"avatarUrl": avatar_url},
+        ))
+    await uow.commit()

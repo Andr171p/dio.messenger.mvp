@@ -1441,3 +1441,44 @@ test("показывает контрагента в своём профиле �
   await expect(dialog.getByRole("button", { name: "Удалить фото" })).toBeHidden();
   expect(removed).toBe(true);
 });
+
+test("меняет и удаляет аватар группы из меню", async ({ page }) => {
+  let avatarUrl: string | null = null;
+  await page.route(`**/v1/conversations/${chatId}/members`, (route) =>
+    route.fulfill({
+      json: [
+        {
+          principalId: userId,
+          role: "owner",
+          historyFromSeq: 1,
+          lastReadMessageSeq: 2,
+          lastDeliveredMessageSeq: 2,
+        },
+      ],
+    }),
+  );
+  await page.route(`**/v1/conversations/${chatId}/avatar`, (route) => {
+    avatarUrl = route.request().postDataJSON().avatarUrl;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/v1/users/" + userId, (route) =>
+    route.fulfill({ json: { id: userId, full_name: "Владелец" } }),
+  );
+  await page.goto("/");
+  await page
+    .locator("li")
+    .getByRole("button", { name: /Дежурная смена/ })
+    .click();
+  await page.getByRole("button", { name: /Информация о беседе/ }).click();
+  const group = page.getByRole("dialog", { name: "Информация о группе" });
+  await group.getByRole("button", { name: "Ещё", exact: true }).click();
+  const chooser = page.waitForEvent("filechooser");
+  await group.getByRole("button", { name: "Добавить аватар" }).click();
+  await (await chooser).setFiles(transparentPng);
+  await expect(group.locator("img")).toHaveCount(1);
+  expect(avatarUrl).toMatch(/^data:image\/jpeg;base64,/);
+  await group.getByRole("button", { name: "Ещё", exact: true }).click();
+  await group.getByRole("button", { name: "Удалить аватар" }).click();
+  await expect(group.locator("img")).toHaveCount(0);
+  expect(avatarUrl).toBeNull();
+});
