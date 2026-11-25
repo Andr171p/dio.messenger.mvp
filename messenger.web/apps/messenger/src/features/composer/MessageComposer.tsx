@@ -5,6 +5,7 @@ import {
   sendMessage,
   upsertDraft,
   type ContentBlock,
+  type Draft,
 } from "@dio/messenger-core";
 import { Icon, IconButton } from "@dio/messenger-ui";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -12,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
+import { AttachmentDialog } from "./AttachmentDialog.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
 import { VoiceRecorder } from "./VoiceRecorder.js";
 import { useUiStore } from "../../stores/uiStore.js";
@@ -27,6 +29,8 @@ const formats = [
   ["Моноширинный", "\x60", "m"],
 ] as const;
 type ComposerTool = "mention" | "ticket" | "emoji" | "attach" | "format";
+type Attachments = NonNullable<Draft["attachments"]>;
+const maxFiles = 10;
 
 export function MessageComposer() {
   const conversationId = useUiStore((state) => state.selectedConversationId);
@@ -51,6 +55,9 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const [text, setText] = useState("");
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [failedUpload, setFailedUpload] = useState<string | null>(null);
+  const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
   const [pickerMode, setPickerMode] = useState<"mention" | "ticket" | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [tool, setTool] = useState<ComposerTool | null>(null);
@@ -61,9 +68,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [draftText, setDraftText] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [attachments, setAttachments] = useState<
-    NonNullable<import("@dio/messenger-core").Draft["attachments"]>
-  >([]);
+  const [attachments, setAttachments] = useState<Attachments>([]);
+  const [stagedUploads, setStagedUploads] = useState<Attachments>([]);
+  const savedMedia = attachments.filter(({ block }) => block.type === "media");
+  const otherAttachments = attachments.filter(({ block }) => block.type !== "media");
   const [mentions, setMentions] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const sendLock = useRef(false);
@@ -124,7 +132,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
       draftText,
       reply?.localId,
       reply ?? undefined,
-      attachments,
+      [...attachments, ...stagedUploads],
       mentions,
     ).catch(() => setSendError("Не удалось сохранить черновик"));
   }, [
@@ -137,6 +145,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     hydrated,
     sending,
     attachments,
+    stagedUploads,
     mentions,
   ]);
 
@@ -166,10 +175,10 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     };
   }, [conversationId, sync]);
 
-  const onSend = async () => {
-    if (!db || !accountKey || !session || !hydrated || sendLock.current) return;
-    if (!text.trim() && (!attachments.length || editingId)) return;
-    inputRef.current?.focus({ preventScroll: true });
+  const onSend = async (items = attachments): Promise<boolean> => {
+    if (!db || !accountKey || !session || !hydrated || sendLock.current) return false;
+    if (!text.trim() && (!items.length || editingId)) return false;
+    if (!attachmentDialogOpen) inputRef.current?.focus({ preventScroll: true });
     sendLock.current = true;
     setSending(true);
     setSendError(null);
@@ -194,7 +203,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         if (useUiStore.getState().editingMessageId === editingId) setEditing(null);
         setText(draftText);
         sync?.requestFlush();
-        return;
+        return true;
       }
 
       const usedMentions = new Set(
@@ -207,7 +216,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         clearConversationDraft: true,
         content: text.trim(),
         authorId: session.userId,
-        extraBlocks: attachments.map((attachment): ContentBlock => attachment.block),
+        extraBlocks: items.map((attachment): ContentBlock => attachment.block),
         mentions: [
           ...new Set(
             Object.entries(mentions)
@@ -230,6 +239,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         clearReply(null);
       }
       sync?.requestFlush();
+      return true;
     } catch {
       if (!editingId) {
         const restore = (current: string) => (current ? text + "\n" + current : text);
@@ -237,32 +247,39 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         setDraftText(restore);
       }
       setSendError("Не удалось сохранить сообщение для отправки");
+      return false;
     } finally {
       sendLock.current = false;
       setSending(false);
     }
   };
 
-  const onAttach = async (fileList: FileList | null) => {
-    if (policy?.allowAttachments === false) return;
-    if (!fileList?.length || !conversationId || !media) return;
-    const file = fileList.item(0);
-    if (!file) return;
-    if (policy && file.size > policy.maxAttachmentBytes) {
-      setFailedUpload(null);
-      setUploadNote("Размер файла превышает лимит беседы");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      return;
-    }
-    setUploadNote(`Загрузка ${file.name}…`);
-    try {
-      await media.enqueue(file, conversationId);
-    } catch (error) {
-      setUploadNote(error instanceof Error ? error.message : "Ошибка загрузки");
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
+  function onAttach(input: HTMLInputElement) {
+    const files = Array.from(input.files ?? []);
+    input.value = "";
+    if (!files.length || !media || policy?.allowAttachments === false) return;
+    const limit = policy?.maxAttachmentBytes ?? Infinity;
+    const available = Math.max(0, maxFiles - savedMedia.length - selectedFiles.length);
+    const valid = files.filter((file) => file.size <= limit);
+    setSelectionError(
+      valid.length !== files.length
+        ? "Размер одного или нескольких файлов превышает лимит беседы"
+        : valid.length > available
+          ? `К одному сообщению можно прикрепить до ${maxFiles} файлов`
+          : null,
+    );
+    setSelectedFiles((current) => [...current, ...valid.slice(0, available)]);
+    closeTools();
+    setAttachmentDialogOpen(true);
+  }
+
+  function closeAttachmentDialog() {
+    setAttachmentDialogOpen(false);
+    setSelectedFiles([]);
+    setSelectionError(null);
+    setStagedUploads([]);
+    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+  }
 
   const onVoiceRecording = async (file: File) => {
     if (
@@ -295,7 +312,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
   };
 
   useEffect(() => {
-    if (!media || !hydrated || editingId || sending) return;
+    if (!media || !hydrated || editingId || sending || attachmentDialogOpen) return;
     const updateJobs = () => {
       for (const job of media.getJobs()) {
         if (job.conversationId !== conversationId) continue;
@@ -308,7 +325,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             continue;
           }
           const block =
-            job.presentation && job.presentation !== "file"
+            job.presentation
               ? { type: "media" as const, assetId, presentation: job.presentation }
               : { type: "media" as const, assetId };
           setAttachments((items) =>
@@ -332,7 +349,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     };
     updateJobs();
     return media.subscribe(updateJobs);
-  }, [media, conversationId, hydrated, editingId, sending]);
+  }, [media, conversationId, hydrated, editingId, sending, attachmentDialogOpen]);
 
   function updateText(value: string) {
     setText(value);
@@ -441,6 +458,15 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
     fileInputRef.current.click();
   }
 
+  function sendFromComposer() {
+    if (savedMedia.length && !editingId && media && policy?.allowAttachments !== false) {
+      closeTools();
+      setAttachmentDialogOpen(true);
+    } else {
+      void onSend();
+    }
+  }
+
   const disabled = !hydrated || sending;
   const attachDisabled = disabled || !!editingId || policy?.allowAttachments === false;
 
@@ -532,14 +558,14 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         </div>
       ) : null}
       {!editingId
-        ? attachments.map((attachment, index) => (
+        ? otherAttachments.map((attachment, index) => (
             <button
               key={index}
               type="button"
               className={styles.attachment}
               aria-label={`Убрать ${attachment.label}`}
               onClick={() =>
-                setAttachments((items) => items.filter((_, i) => i !== index))
+                setAttachments((items) => items.filter((item) => item !== attachment))
               }
             >
               {attachment.label} ×
@@ -568,7 +594,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
                 icon="send"
                 variant="send"
                 iconSize={18}
-                onClick={() => void onSend()}
+                onClick={sendFromComposer}
                 disabled={
                   disabled || (!text.trim() && (!attachments.length || !!editingId))
                 }
@@ -582,7 +608,8 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
             ref={fileInputRef}
             type="file"
             hidden
-            onChange={(e) => void onAttach(e.target.files)}
+            multiple
+            onChange={(event) => onAttach(event.currentTarget)}
           />
           <span {...hoverTool("attach", attachDisabled)}>
             <IconButton
@@ -609,6 +636,21 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
               onClick={() => chooseFile()}
             />
           </span>
+          {!editingId && savedMedia.length > 0 ? (
+            <button
+              type="button"
+              className={styles.savedMedia}
+              aria-label={`Вложения · ${savedMedia.length}`}
+              disabled={attachDisabled}
+              onClick={() => {
+                closeTools();
+                setAttachmentDialogOpen(true);
+              }}
+            >
+              <Icon name="file" size={15} />
+              <span>Вложения · {savedMedia.length}</span>
+            </button>
+          ) : null}
           <textarea
             ref={inputRef}
             className={[styles.input, "dio-scroll"].join(" ")}
@@ -654,7 +696,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
               }
               if (e.key === "Enter" && !e.shiftKey && !pickerMode) {
                 e.preventDefault();
-                void onSend();
+                sendFromComposer();
               }
             }}
           />
@@ -737,7 +779,7 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         >
           {[
             ["Документ", ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"],
-            ["Изображение", "image/*"],
+            ["Фото или видео", "image/*,video/*"],
             ["Статья", ".md,.txt,.pdf"],
             ["Музыка", "audio/*"],
           ].map(([label, accept]) => (
@@ -789,6 +831,49 @@ function ConversationComposer({ conversationId }: { conversationId: string }) {
         <p role="alert" className={styles.note}>
           {sendError}
         </p>
+      ) : null}
+      {attachmentDialogOpen && media ? (
+        <AttachmentDialog
+          conversationId={conversationId}
+          media={media}
+          files={selectedFiles}
+          saved={savedMedia}
+          caption={text}
+          selectionError={selectionError}
+          onCaptionChange={updateText}
+          onFileSelection={onAttach}
+          onRemoveFile={(file) => {
+            setSelectedFiles((current) => current.filter((item) => item !== file));
+            setSelectionError(null);
+          }}
+          onRemoveSaved={(attachment) =>
+            setAttachments((items) => items.filter((item) => item !== attachment))
+          }
+          onUploaded={(attachment) =>
+            setStagedUploads((items) => {
+              const block = attachment.block;
+              if (
+                block.type !== "media" ||
+                items.some(
+                  (item) => item.block.type === "media" && item.block.assetId === block.assetId,
+                )
+              ) {
+                return items;
+              }
+              return [...items, attachment];
+            })
+          }
+          onDiscardUploads={(assetIds) =>
+            setStagedUploads((items) =>
+              items.filter(({ block }) => block.type !== "media" || !assetIds.includes(block.assetId)),
+            )
+          }
+          onClose={closeAttachmentDialog}
+          onSend={(items) => {
+            if (policy?.allowAttachments === false) return Promise.resolve(false);
+            return onSend([...items, ...otherAttachments]);
+          }}
+        />
       ) : null}
     </div>
   );

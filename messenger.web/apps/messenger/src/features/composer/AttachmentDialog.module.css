@@ -1,0 +1,181 @@
+.dialog {
+  width: min(496px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-xl);
+  background: var(--dio-sidebar);
+  color: var(--dio-text);
+  box-shadow: 0 18px 52px rgb(10 16 24 / 26%);
+  overflow: auto;
+}
+
+.dialog::backdrop {
+  background: var(--dio-overlay);
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.header,
+.previewName,
+.file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header,
+.previewName {
+  justify-content: space-between;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.preview {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  overflow: hidden;
+  background: var(--dio-field);
+  border-radius: var(--dio-radius-md);
+}
+
+.preview :is(img, video) {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: min(340px, 42dvh);
+  object-fit: contain;
+}
+
+.preview img[data-png],
+.fileIcon img[data-png] {
+  background: #fff;
+}
+
+.previewName {
+  margin-top: -9px;
+  color: var(--dio-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.files {
+  display: grid;
+  gap: 6px;
+  max-height: min(260px, 36dvh);
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.files:empty {
+  display: none;
+}
+
+.file {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--dio-radius-md);
+  background: var(--dio-details);
+}
+
+.fileIcon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  block-size: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--dio-field);
+  color: var(--dio-text-secondary);
+}
+
+.fileIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.fileName {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.fileName small,
+.note,
+.caption label {
+  color: var(--dio-text-secondary);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  font-size: 13px;
+}
+
+.option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--dio-action);
+}
+
+.caption {
+  display: grid;
+  gap: 6px;
+}
+
+.caption label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.caption textarea {
+  width: 100%;
+  min-height: 62px;
+  max-height: 160px;
+  padding: 9px 10px;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  background: var(--dio-field);
+  color: var(--dio-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.caption textarea:focus-visible {
+  outline: 2px solid var(--dio-focus-ring);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.actions > :first-child {
+  margin-inline-end: auto;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+}

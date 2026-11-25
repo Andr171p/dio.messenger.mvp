@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 from ddf.application.exceptions import UniqueConstraintViolationError
-from sqlalchemy import text
+from sqlalchemy import text, update
 
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.messaging.builders import build_message_dto
@@ -18,6 +18,7 @@ from src.application.receipts.cursors import monotonic_receipt_cursor
 from src.application.search.criteria import build_in_conversation_criteria
 from src.domain.media.exceptions import MediaNotReadyError
 from src.domain.messages import create_message
+from src.infra.database.models import MessageOrm
 from src.infra.database.repositories.conversations import SqlAlchemyMembershipRepository
 from src.infra.database.repositories.media import SqlAlchemyMediaRepository
 from src.infra.database.repositories.messages import SqlAlchemyMessageRepository
@@ -272,7 +273,9 @@ async def test_media_gallery_numbers_only_visible_photos_in_order(db_session) ->
     conversation = await seed_conversation(db_session)
     repository = SqlAlchemyMediaRepository(db_session)
     entries = []
-    for seq, mime in enumerate(("image/png", "image/png", "video/mp4", "image/png"), start=1):
+    for seq, mime in enumerate(
+        ("image/png", "image/png", "video/mp4", "image/png", "image/png"), start=1
+    ):
         message_id = await seed_message(
             db_session, conversation=conversation, sender_id=conversation.created_by,
             created_seq=seq, text="Gallery fixture",
@@ -283,6 +286,12 @@ async def test_media_gallery_numbers_only_visible_photos_in_order(db_session) ->
         asset.mark_ready()
         await repository.update(asset)
         await repository.link_to_message(message_id=message_id, asset_ids=[asset.id])
+        if seq == 5:
+            await db_session.execute(
+                update(MessageOrm).where(MessageOrm.id == message_id).values(
+                    content={"blocks": [{"type": "media", "assetId": str(asset.id), "presentation": "file"}]},
+                )
+            )
         entries.append((message_id, asset.id))
 
     criteria = dict(conversation_id=conversation.id, history_from_seq=2, media_kind="image")
@@ -305,3 +314,7 @@ async def test_media_gallery_numbers_only_visible_photos_in_order(db_session) ->
     assert last is not None and (last.position, last.total) == (2, 2)
     assert last.next is None and last.previous is not None
     assert (last.previous.message_id, last.previous.asset_id) == (first_message, first_asset)
+    file_message, file_asset = entries[4]
+    assert await repository.get_gallery_position(
+        **criteria, message_id=file_message, asset_id=file_asset,
+    ) is None

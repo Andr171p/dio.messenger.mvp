@@ -12,11 +12,11 @@
 }
 
 [data-dio-theme="dark"] {
-  --dio-icon-muted: #8a948c;
-  --dio-icon-default: #c1cbc3;
-  --dio-icon-strong: #f2f3f0;
+  --dio-icon-muted: #8b97a4;
+  --dio-icon-default: #bfc9d3;
+  --dio-icon-strong: #f1f3f6;
   --dio-icon-active: #ffa5af;
   --dio-icon-danger: #ffa5af;
-  --dio-icon-disabled: #6a736c;
+  --dio-icon-disabled: #6d7885;
   --dio-surface-hover: rgba(255, 255, 255, 0.06);
 }

@@ -43,7 +43,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #3d9a5f;
+  background: var(--dio-presence-online);
   border: 2px solid var(--dio-sidebar);
   box-sizing: border-box;
 }

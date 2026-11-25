@@ -77,6 +77,12 @@ def test_build_content_omits_default_file_presentation() -> None:
     asset_id = uuid4()
     content = build_message_content([MediaBlock(asset_id=asset_id)])
     assert content == {"blocks": [{"type": "media", "assetId": str(asset_id)}]}
+    explicit = build_message_content(
+        [MediaBlock(asset_id=asset_id, presentation=MediaPresentation.FILE)]
+    )
+    assert explicit == {
+        "blocks": [{"type": "media", "assetId": str(asset_id), "presentation": "file"}],
+    }
 
 
 def test_fingerprint_distinguishes_presentation() -> None:

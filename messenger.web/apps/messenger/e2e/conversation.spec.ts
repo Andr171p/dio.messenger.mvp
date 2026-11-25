@@ -1,4 +1,5 @@
 import { expect, test, type WebSocketRoute } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 
 test.use({ serviceWorkers: "block" });
 
@@ -8,6 +9,7 @@ const sourceId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const replyId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const resourceId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const otherChatId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const transparentPng = fileURLToPath(new URL("../public/brand/dios-mark.png", import.meta.url));
 const chat = { id: chatId, type: "GROUP", title: "Дежурная смена", lastEventSeq: 81 };
 const source = {
   id: sourceId,
@@ -286,8 +288,14 @@ test("завершает загрузку в черновик исходной �
     mimeType: "text/plain",
     buffer: Buffer.from("test fixture"),
   });
+  await page
+    .getByRole("dialog", { name: "Отправить вложения" })
+    .getByRole("button", { name: "Отправить" })
+    .click();
   await complete;
-  await page.getByRole("button", { name: /Вторая группа/ }).click();
+  // Simulate navigation outside the modal while the server checks the upload.
+  await page.getByRole("button", { name: /Вторая группа/, includeHidden: true })
+    .evaluate((button: HTMLButtonElement) => button.click());
   finishUpload();
   await expect
     .poll(() =>
@@ -321,7 +329,78 @@ test("завершает загрузку в черновик исходной �
   await expect(page.getByRole("button", { name: "Убрать vpn.txt" })).toHaveCount(0);
   await page.reload();
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
-  await expect(page.getByRole("button", { name: "Убрать vpn.txt" })).toBeVisible();
+  await page.getByRole("button", { name: "Вложения · 1" }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Убрать vpn.txt" })).toBeVisible();
+});
+
+test("просматривает фото и переносит черновик в подпись к файлу", async ({ page }) => {
+  const assetId = "12345678-3456-4000-8000-123456789012";
+  const filename = "dios-mark.png";
+  let uploads = 0;
+  await page.route("**/v1/media/uploads", (route) => {
+    uploads += 1;
+    return route.fulfill({
+      json: {
+        uploadId: assetId,
+        asset: { id: assetId },
+        uploadUrl: new URL("/test-image-upload", page.url()).href,
+      },
+    });
+  });
+  await page.route("**/test-image-upload", (route) => route.fulfill({ status: 204 }));
+  await page.route(`**/v1/media/uploads/${assetId}/complete`, (route) =>
+    route.fulfill({ json: { id: assetId, status: "ready" } }),
+  );
+  await page.route(`**/v1/media/${assetId}`, (route) =>
+    route.fulfill({ json: { id: assetId, filename, contentType: "image/png", size: 201914, status: "ready" } }),
+  );
+  await page.route(`**/v1/conversations/${chatId}/messages`, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 201,
+          json: {
+            id: crypto.randomUUID(),
+            clientMessageId: route.request().postDataJSON().clientMessageId,
+            createdSeq: 3,
+            eventSeq: 82,
+          },
+        })
+      : route.fallback(),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: /Дежурная смена/ }).click();
+  const editor = page.getByRole("textbox", { name: "Текст сообщения" });
+  await expect(editor).toBeEnabled();
+  await page.locator("input[type=file]").setInputFiles(transparentPng);
+  const dialog = page.getByRole("dialog", { name: "Отправить изображение" });
+  const caption = dialog.getByRole("textbox", { name: "Подпись" });
+  await expect(caption).toBeFocused();
+  await expect(caption).toHaveValue("");
+  await expect(dialog.getByRole("img", { name: filename })).toHaveCSS(
+    "background-color",
+    "rgb(255, 255, 255)",
+  );
+  await dialog.getByRole("button", { name: "Отмена" }).click();
+  expect(uploads).toBe(0);
+  await expect(editor).toBeFocused();
+
+  await editor.fill("Логотип для документации");
+  await page.locator("input[type=file]").setInputFiles(transparentPng);
+  await expect(caption).toHaveValue("Логотип для документации");
+  await dialog.getByRole("checkbox", { name: "Отправить как файл" }).check();
+  await expect(dialog.getByText(filename, { exact: true })).toBeVisible();
+  const sent = page.waitForRequest((request) =>
+    request.method() === "POST" && request.url().endsWith(`/${chatId}/messages`),
+  );
+  await dialog.getByRole("button", { name: "Отправить" }).click();
+  expect((await sent).postDataJSON().blocks).toEqual([
+    { type: "text", text: "Логотип для документации" },
+    { type: "media", assetId, presentation: "file" },
+  ]);
+  await expect(dialog).toHaveCount(0);
+  await expect(editor).toHaveValue("");
+  await expect(page.getByRole("button", { name: /dios-mark\.png/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: filename })).toHaveCount(0);
 });
 
 test("запрашивает подтверждение пересылки внешней аудитории", async ({ page }) => {
@@ -639,7 +718,7 @@ test("открывает меню редактора наведением и с�
     (await editor.boundingBox())!.x,
   );
   await paperclip.hover();
-  for (const name of ["Документ", "Изображение", "Статья", "Музыка"]) {
+  for (const name of ["Документ", "Фото или видео", "Статья", "Музыка"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   }
   const chooser = page.waitForEvent("filechooser");
@@ -825,7 +904,7 @@ test("открывает заявку по номеру и запрашивае�
   await expect(card).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(page.locator(".dio-chat-canvas")).toHaveCSS("background-image", "none");
   await page.getByRole("button", { name: "Сменить тему" }).click();
-  await expect(card).toHaveCSS("background-color", "rgb(49, 50, 47)");
+  await expect(card).toHaveCSS("background-color", "rgb(48, 52, 59)");
   await expect(page.locator(".dio-chat-canvas")).toHaveCSS("background-image", "none");
   await context.route("**/tickets/INC-228", (route) =>
     route.fulfill({ body: "Заявка INC-228" }),
@@ -978,8 +1057,12 @@ test("открывает изображение внутри чата и воз�
         messages: [
           {
             ...source,
-            reactions: { "👍": [userId] },
-            content: { blocks: [{ type: "media", assetId }] },
+            content: {
+              blocks: [
+                { type: "text", text: "Подпись к логотипу" },
+                { type: "media", assetId },
+              ],
+            },
           },
         ],
         snapshotEventSeq: 81,
@@ -994,6 +1077,7 @@ test("открывает изображение внутри чата и воз�
         size: 68,
         contentType: "image/png",
         status: "ready",
+        meta: { type: "image", width: 1, height: 1 },
       },
     }),
   );
@@ -1010,16 +1094,26 @@ test("открывает изображение внутри чата и воз�
   await page.route("**/v1/media/" + assetId + "/content", (route) =>
     route.fulfill({
       contentType: "image/png",
-      body: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=",
-        "base64",
-      ),
+      path: transparentPng,
     }),
   );
   await page.goto("/");
   await page.getByRole("button", { name: /Дежурная смена/ }).click();
-  await expect(page.getByRole("button", { name: "👍 1", exact: true })).toBeVisible();
   const opener = page.getByRole("button", { name: /preview\.png/ });
+  await expect(opener).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  const caption = page.getByText("Подпись к логотипу", { exact: true });
+  await expect(caption).toBeVisible();
+  await expect(opener.getByRole("img")).toHaveAttribute("width", "1024");
+  const imageBounds = (await opener.boundingBox())!;
+  expect(imageBounds.width).toBeGreaterThan(300);
+  const bubble = page.locator(".dio-message-text").filter({ has: opener });
+  const bubbleBounds = (await bubble.boundingBox())!;
+  expect(imageBounds.x).toBeCloseTo(bubbleBounds.x, 0);
+  expect(imageBounds.width).toBeCloseTo(bubbleBounds.width, 0);
+  const captionBounds = (await caption.boundingBox())!;
+  const timeBounds = (await bubble.locator("time").boundingBox())!;
+  expect(captionBounds.y).toBeGreaterThanOrEqual(imageBounds.y + imageBounds.height);
+  expect(timeBounds.y).toBeLessThan(captionBounds.y + captionBounds.height);
   await opener.click();
   const viewer = page.getByRole("dialog", { name: "Предпросмотр preview.png" });
   await expect(viewer.getByRole("img")).toHaveAttribute("src", /^blob:/);

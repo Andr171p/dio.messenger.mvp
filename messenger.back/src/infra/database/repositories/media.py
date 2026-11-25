@@ -3,7 +3,7 @@ from uuid import UUID
 from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.infra.database.sqlalchemy import SqlAlchemyRepository
 from ddf.infra.database.sqlalchemy.utils import get_constraint_name, is_unique_violation
-from sqlalchemy import delete, func, select
+from sqlalchemy import String, cast, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -147,6 +147,14 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
         history_from_seq: int, media_kind: str,
     ) -> MediaGalleryPositionDTO | None:
         order = (MessageOrm.created_seq, MessageMediaOrm.position)
+        sent_as_file = MessageOrm.content["blocks"].contains(
+            func.jsonb_build_array(
+                func.jsonb_build_object(
+                    "type", "media", "assetId", cast(MessageMediaOrm.asset_id, String),
+                    "presentation", "file",
+                )
+            )
+        )
         gallery = (
             select(
                 MessageMediaOrm.asset_id,
@@ -171,6 +179,7 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
                 MediaAssetOrm.deleted_at.is_(None),
                 MediaAssetOrm.content_type.startswith(f"{media_kind}/"),
                 MediaAssetOrm.organization_id == MessageOrm.organization_id,
+                ~func.coalesce(sent_as_file, False),
             )
             .subquery()
         )

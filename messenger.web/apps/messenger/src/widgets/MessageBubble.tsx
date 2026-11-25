@@ -264,9 +264,11 @@ function MessageBody({
     media: Pick<MediaSelection, "filename" | "contentType">,
   ) => void;
 }) {
+  const mediaBlocks = blocks.filter((block) => block.type === "media");
+  const ordered = [...mediaBlocks, ...blocks.filter((block) => block.type !== "media")];
   return (
     <div className={styles.blockStack}>
-      {blocks.map((block, index) => {
+      {ordered.map((block, index) => {
         if (block.type === "text") {
           return (
             <div key={`t-${index}`} className={styles.text}>

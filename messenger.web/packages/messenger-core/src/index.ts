@@ -57,7 +57,11 @@ export { MessengerAuthAdapter } from "./auth/MessengerAuthAdapter.js";
 export { memoryAuthStore } from "./auth/memoryAuthStore.js";
 export type { AuthAdapter, LoginCredentials } from "./auth/types.js";
 
-export { MediaUploadManager } from "./media/MediaUploadManager.js";
+export {
+  getInlineMediaPresentation,
+  MediaUploadManager,
+  type MediaUploadJob,
+} from "./media/MediaUploadManager.js";
 export { createAudioRecorder } from "./media/capture/audioRecorder.js";
 export type {
   AudioRecorder,
