@@ -1,0 +1,30 @@
+.summary {
+  border-top: 1px solid var(--dio-border) !important;
+  min-height: 44px;
+}
+
+.avatars {
+  display: flex;
+  gap: 3px;
+  margin-inline-start: auto;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.person time {
+  display: block;
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+}

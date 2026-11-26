@@ -31,6 +31,94 @@ export function useGroupTopics(conversationId: string | null) {
   return useTopics(conversationId, false).topics;
 }
 
+export function TopicEditorDialog({
+  conversationId,
+  topic,
+  onClose,
+  onSaved,
+  onBack,
+}: {
+  conversationId: string;
+  topic?: Topic;
+  onClose: () => void;
+  onSaved?: () => void;
+  onBack?: () => void;
+}) {
+  const { key, endpoint, http } = useTopics(conversationId, false);
+  const client = useQueryClient();
+  const [title, setTitle] = useState(topic?.title ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    const name = title.trim();
+    if (!http || !name || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = topic
+        ? await http.request<Topic>(`${endpoint}/${topic.id}`, {
+            method: "PATCH",
+            json: { title: name },
+          })
+        : await http.post<Topic>(endpoint, { title: name });
+      await client.cancelQueries({ queryKey: key, exact: true });
+      client.setQueryData<Topic[]>(key, (previous) => [
+        saved,
+        ...(previous ?? []).filter((item) => item.id !== saved.id),
+      ]);
+      if (!topic) {
+        const ui = useUiStore.getState();
+        if (ui.selectedConversationId === conversationId) ui.setThread(saved.id);
+      }
+      void client.invalidateQueries({ queryKey: key, exact: true });
+      (onSaved ?? onClose)();
+    } catch {
+      setError(
+        topic
+          ? "Не удалось сохранить название темы."
+          : "Не удалось создать тему. Проверьте подключение и попробуйте ещё раз.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ChatDialog
+      title={topic ? "Переименовать тему" : "Новая тема"}
+      onClose={onClose}
+      onBack={busy ? undefined : onBack}
+      busy={busy}
+    >
+      <form
+        className={styles.form}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <Input
+          label="Название темы"
+          value={title}
+          maxLength={256}
+          onChange={(event) => setTitle(event.target.value)}
+          autoFocus
+          disabled={busy}
+        />
+        {error && (
+          <p role="alert" className={styles.error}>
+            {error}
+          </p>
+        )}
+        <Button type="submit" disabled={!http || !title.trim() || busy} loading={busy}>
+          {topic ? "Сохранить" : "Создать"}
+        </Button>
+      </form>
+    </ChatDialog>
+  );
+}
+
 export function TopicList({ conversationId }: { conversationId: string }) {
   const { session } = useAuth();
   const members = useConversationMembers(conversationId);
@@ -45,7 +133,6 @@ export function TopicList({ conversationId }: { conversationId: string }) {
   const [editing, setEditing] = useState<Topic>();
   const [deleting, setDeleting] = useState<Topic>();
   const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const close = () => {
@@ -53,7 +140,6 @@ export function TopicList({ conversationId }: { conversationId: string }) {
     setEditing(undefined);
     setDeleting(undefined);
     setError("");
-    setTitle("");
   };
   useEffect(() => {
     if (active && topics.data && !topics.data.some((topic) => topic.id === active))
@@ -73,33 +159,6 @@ export function TopicList({ conversationId }: { conversationId: string }) {
       close();
     } catch {
       setError("Не удалось удалить тему.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function create() {
-    if (!http || !title.trim() || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const topic = editing
-        ? await http.request<Topic>(`${endpoint}/${editing.id}`, {
-            method: "PATCH",
-            json: { title: title.trim() },
-          })
-        : await http.post<Topic>(endpoint, { title: title.trim() });
-      client.setQueryData<Topic[]>(key, (prev) => [
-        topic,
-        ...(prev ?? []).filter((t) => t.id !== topic.id),
-      ]);
-      if (!editing) select(topic.id);
-      close();
-    } catch {
-      setError(
-        editing
-          ? "Не удалось сохранить название темы."
-          : "Не удалось создать тему. Проверьте подключение.",
-      );
     } finally {
       setBusy(false);
     }
@@ -125,10 +184,7 @@ export function TopicList({ conversationId }: { conversationId: string }) {
                 label={`Переименовать тему ${t.title ?? ""}`}
                 icon="edit"
                 size="sm"
-                onClick={() => {
-                  setEditing(t);
-                  setTitle(t.title ?? "");
-                }}
+                onClick={() => setEditing(t)}
               />
             )}
             {t.id && owner && (
@@ -160,35 +216,11 @@ export function TopicList({ conversationId }: { conversationId: string }) {
         </ChatDialog>
       )}
       {(creating || editing) && (
-        <ChatDialog
-          title={editing ? "Переименовать тему" : "Новая тема"}
+        <TopicEditorDialog
+          conversationId={conversationId}
+          topic={editing}
           onClose={close}
-          busy={busy}
-        >
-          <form
-            className={styles.form}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void create();
-            }}
-          >
-            <Input
-              label="Название темы"
-              value={title}
-              maxLength={256}
-              onChange={(e) => setTitle(e.target.value)}
-              autoFocus
-            />
-            {error && (
-              <p role="alert" className={styles.error}>
-                {error}
-              </p>
-            )}
-            <Button type="submit" disabled={!title.trim() || busy} loading={busy}>
-              {editing ? "Сохранить" : "Создать"}
-            </Button>
-          </form>
-        </ChatDialog>
+        />
       )}
     </nav>
   );

@@ -1,8 +1,9 @@
 import type { HttpClient } from "@dio/messenger-core";
 import { DIODESK_PROVIDER } from "@dio/messenger-core";
-import { Spinner } from "@dio/messenger-ui";
+import { Avatar, Spinner } from "@dio/messenger-ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { photoUrl } from "../conversation/profiles.js";
 import styles from "./MentionTicketPicker.module.css";
 
 export type MentionTicketPickerMode = "mention" | "ticket";
@@ -12,6 +13,15 @@ interface DirectoryUser {
   fullName?: string | null;
   email: string;
   username?: string | null;
+  avatarUrl?: string | null;
+}
+
+interface PickerRow {
+  id: string;
+  label: string;
+  sub?: string;
+  token: string;
+  avatarUrl?: string | null;
 }
 
 interface ResourcePreview {
@@ -210,17 +220,13 @@ export function MentionTicketPicker({
         label: userLabel(user),
         sub: user.email,
         token: mentionToken(user),
+        avatarUrl: user.avatarUrl,
       }));
   }, [mode, directory.data, members.data]);
 
-  const rows =
+  const rows: PickerRow[] =
     mode === "mention"
-      ? mentionItems.map((m) => ({
-          id: m.id,
-          label: m.label,
-          sub: m.sub,
-          token: m.token,
-        }))
+      ? mentionItems
       : ticketItems.map((t) => ({
           id: t.id,
           label: t.label,
@@ -320,14 +326,25 @@ export function MentionTicketPicker({
                 role="option"
                 aria-selected={index === activeIndex}
                 data-active={index === activeIndex ? "true" : undefined}
-                className={[styles.row, index === activeIndex ? styles.rowActive : ""]
+                className={[
+                  styles.row,
+                  mode === "mention" ? styles.mentionRow : "",
+                  index === activeIndex ? styles.rowActive : "",
+                ]
                   .filter(Boolean)
                   .join(" ")}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => onPick(row.token, row.id)}
               >
-                <span className={styles.label}>{row.label}</span>
-                {row.sub ? <span className={styles.sub}>{row.sub}</span> : null}
+                {mode === "mention" ? (
+                  <span aria-hidden="true" className={styles.rowAvatar}>
+                    <Avatar name={row.label} src={photoUrl(row.avatarUrl)} size="sm" />
+                  </span>
+                ) : null}
+                <span className={styles.rowText}>
+                  <span className={styles.label}>{row.label}</span>
+                  {row.sub ? <span className={styles.sub}>{row.sub}</span> : null}
+                </span>
               </button>
             </li>
           ))}

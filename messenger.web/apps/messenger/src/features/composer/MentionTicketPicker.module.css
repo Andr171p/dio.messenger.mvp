@@ -63,6 +63,25 @@
   background: var(--dio-field);
 }
 
+.mentionRow {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--dio-space-2);
+}
+
+.rowAvatar {
+  flex: none;
+  display: flex;
+}
+
+.rowText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .label {
   font-weight: 600;
   font-size: 14px;

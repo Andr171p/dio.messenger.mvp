@@ -121,8 +121,8 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
             )
         await self._session.flush()
 
-    async def link_to_message(self, *, message_id: UUID, asset_ids: list[UUID]) -> None:
-        for position, asset_id in enumerate(asset_ids):
+    async def link_to_message(self, *, message_id: UUID, asset_ids: list[UUID], start_position: int = 0) -> None:
+        for position, asset_id in enumerate(asset_ids, start=start_position):
             self._session.add(
                 MessageMediaOrm(
                     message_id=message_id,

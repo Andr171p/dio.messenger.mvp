@@ -19,6 +19,7 @@ export async function wipeConversation(
       db.outbox,
       db.syncCursors,
       db.voiceUploads,
+      db.polls,
     ],
     async () => {
       await db.messages
@@ -49,6 +50,7 @@ export async function wipeConversation(
       }
 
       await db.syncCursors.delete([accountKey, conversationId]);
+      await db.polls.where("conversationId").equals(conversationId).delete();
       await db.conversations.delete(conversationId);
     },
   );

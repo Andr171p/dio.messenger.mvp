@@ -19,6 +19,21 @@ export async function applyEventProjection(
   const payload = event.payload;
 
   switch (event.type) {
+    case "poll.created":
+    case "poll.option_added":
+    case "poll.voted":
+    case "poll.closed": {
+      const id = asString(payload.pollId);
+      if (!id) return;
+      const existing = await db.polls.get(id);
+      await db.polls.put({
+        ...existing,
+        id,
+        conversationId: event.conversationId,
+        eventSeq: Math.max(existing?.eventSeq ?? 0, event.eventSeq),
+      });
+      return;
+    }
     case "message.created": {
       const message = projectMessage(
         {

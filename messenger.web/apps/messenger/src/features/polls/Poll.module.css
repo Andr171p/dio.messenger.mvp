@@ -1,0 +1,315 @@
+.card,
+.form,
+.form fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.card {
+  width: min(360px, 70vw);
+  overflow-wrap: anywhere;
+  gap: 10px;
+}
+
+.card h3,
+.card p {
+  margin: 0;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 3em 1fr;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.choiceInput {
+  grid-column: 1 / -1;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.choiceInput input,
+.setting input {
+  accent-color: var(--dio-action);
+}
+
+.percent {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.resultLabel,
+.voterPreview,
+.setting,
+.selectedFile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voterPreview {
+  flex: none;
+  color: var(--dio-text-secondary);
+  font-size: 12px;
+}
+
+.voterPreview > span[title] {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
+.check {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: end;
+  color: var(--dio-action);
+  display: inline-flex;
+}
+
+.extras {
+  grid-column: 2 / -1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.extras > div {
+  max-width: 100%;
+}
+
+.extras a {
+  color: var(--dio-action);
+  font-size: 13px;
+}
+
+.description {
+  white-space: pre-wrap;
+}
+
+.selected {
+  font-weight: 650;
+}
+
+.bar {
+  grid-column: 2;
+  display: block;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 10px;
+  background: var(--dio-border);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--dio-text-secondary);
+  transition: width 220ms ease;
+}
+
+.selected .fill {
+  background: var(--dio-action);
+}
+
+.form fieldset {
+  margin: 0;
+  padding: 8px 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--dio-border);
+}
+
+.form legend {
+  padding: 0;
+  color: var(--dio-action);
+  font-weight: 650;
+}
+
+.form textarea,
+.form input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-bottom: 1px solid var(--dio-border);
+  padding: 8px;
+  font: inherit;
+}
+
+.optionEditor,
+.optionTools {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.optionInput input {
+  flex: 1;
+  min-width: 0;
+}
+
+.optionTools {
+  margin-inline: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.selectedFile {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.emoji {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding-top: 5px;
+  border-top: 1px solid var(--dio-border);
+}
+
+.card button.addOption,
+.form button.addOption {
+  background: none;
+  border: 0;
+  padding: 7px 0;
+  display: inline-flex;
+  gap: 8px;
+  justify-self: start;
+  align-items: center;
+  min-height: 36px;
+  color: var(--dio-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cardActions button {
+  border: none;
+  background: transparent;
+  color: var(--dio-action);
+  font: inherit;
+  font-weight: 650;
+  padding: 8px 3px;
+  min-height: 38px;
+  cursor: pointer;
+}
+
+.cardActions button.secondaryAction {
+  font-size: 12px;
+  color: var(--dio-text-secondary);
+}
+
+.votesButton {
+  flex: 0 0 100%;
+  order: 1;
+}
+
+.cardActions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.setting {
+  min-height: 34px;
+}
+
+.setting input {
+  appearance: none;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  padding: 2px;
+  margin: 0;
+  border-radius: 12px;
+  background: var(--dio-border);
+  cursor: pointer;
+}
+
+.setting input::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--dio-sidebar);
+}
+
+.setting input:checked {
+  background: var(--dio-action);
+}
+
+.setting input:checked::before {
+  margin-inline-start: auto;
+}
+
+.optionInput,
+.actions,
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions {
+  flex-wrap: wrap;
+}
+
+.form .actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--dio-sidebar);
+  padding: 8px 0;
+  justify-content: end;
+}
+
+.actions button,
+.form button,
+.optionInput button {
+  color: inherit;
+  background: var(--dio-field);
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  padding: 6px 10px;
+  font: inherit;
+}
+
+.form .optionInput button,
+.form .emoji button {
+  padding: 4px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.form .optionInput button:hover,
+.form .emoji button:hover {
+  background: var(--dio-field);
+}
+
+.actions button:disabled,
+.form button:disabled {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

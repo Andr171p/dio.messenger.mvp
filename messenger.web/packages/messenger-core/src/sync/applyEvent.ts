@@ -15,6 +15,7 @@ export async function applyEvent(
     db.messages,
     db.syncCursors,
     db.conversations,
+    db.polls,
     async () => {
       if (requireConversation && !(await db.conversations.get(event.conversationId)))
         return;

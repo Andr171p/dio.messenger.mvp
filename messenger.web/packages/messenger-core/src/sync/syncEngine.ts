@@ -9,6 +9,7 @@ import type {
 } from "../models/types.js";
 import type { MessengerDatabase } from "../storage/database.js";
 import { OutboxProcessor } from "../outbox/outboxProcessor.js";
+import { markConversationRead } from "../commands/readCursor.js";
 import { HttpClient, HttpError } from "../transport/httpClient.js";
 import { WebSocketClient } from "../transport/websocketClient.js";
 import { applyEvent } from "./applyEvent.js";
@@ -331,6 +332,7 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       options.db.messages,
       options.db.conversations,
       options.db.syncCursors,
+      options.db.polls,
       async () => {
         if (
           revoked.has(conversationId) ||
@@ -393,6 +395,15 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
             ...message,
             isOutgoing: message.isOutgoing || local?.isOutgoing === true,
           });
+          if (message.pollId && !message.deletedAt) {
+            const existingPoll = await options.db.polls.get(message.pollId);
+            await options.db.polls.put({
+              ...existingPoll,
+              id: message.pollId,
+              conversationId,
+              eventSeq: Math.max(existingPoll?.eventSeq ?? 0, snap.snapshotEventSeq),
+            });
+          }
         }
 
         await options.db.syncCursors.put({
@@ -659,6 +670,24 @@ export function createSyncEngine(options: SyncEngineOptions): SyncEngine {
       await applyManifest(manifest, previouslyRevoked);
       if (stopped) return;
       accessVerified = true;
+      const pendingReads = await options.db.conversations
+        .filter(
+          (conversation) =>
+            (conversation.pendingReadMessageSeq ?? 0) >
+            (conversation.lastReadMessageSeq ?? 0),
+        )
+        .toArray();
+      await Promise.allSettled(
+        pendingReads.map((conversation) =>
+          markConversationRead(
+            options.db,
+            options.http,
+            options.accountKey,
+            conversation.id,
+            conversation.pendingReadMessageSeq!,
+          ),
+        ),
+      );
       options.onTiming?.("sync_recovery", performance.now() - started);
       outbox.requestFlush();
       notify({ runtime: "connected", lastSyncAt: Date.now(), lastError: undefined });

@@ -8,6 +8,7 @@ import { Icon } from "@dio/messenger-ui";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useUiStore } from "../stores/uiStore.js";
+import { MessageReaders } from "../features/read/MessageReaders.js";
 import styles from "./MessageTimeline.module.css";
 
 const MENU_REACTIONS = ["❤️", "👍", "🔥", "🎉", "🤝", "👀"];
@@ -20,6 +21,7 @@ export function MessageContextMenu(props: {
   userId?: string;
   onClose: () => void;
   onCreateTicket?: (id: string) => void;
+  onShowReaders: (id: string, anchor: DOMRect) => void;
 }) {
   const { db, accountKey, sync } = useRuntime();
   const setReply = useUiStore((s) => s.setReplyTarget);
@@ -187,7 +189,10 @@ export function MessageContextMenu(props: {
             <Icon name="pin" size={18} /> {message.isPinned ? "Открепить" : "Закрепить"}
           </button>
         ) : null}
-        {message.isOutgoing && message.serverId && !message.deletedAt ? (
+        {message.isOutgoing &&
+        message.serverId &&
+        !message.deletedAt &&
+        !message.pollId ? (
           <button
             type="button"
             role="menuitem"
@@ -213,6 +218,17 @@ export function MessageContextMenu(props: {
             Удалить
           </button>
         ) : null}
+        {message.isOutgoing && message.serverId && !message.deletedAt && (
+          <MessageReaders
+            conversationId={conversationId}
+            messageId={message.serverId}
+            expanded={false}
+            onExpand={(readerAnchor) =>
+              act(() => props.onShowReaders(message.serverId!, readerAnchor))
+            }
+            onClose={onClose}
+          />
+        )}
       </div>
     </div>
   );

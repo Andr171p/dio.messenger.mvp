@@ -25,7 +25,9 @@ export function projectContent(content: unknown): Partial<LocalMessage> {
   const metadata = (content ?? {}) as Record<string, unknown>;
   const blocks = extractBlocks(content);
   const forward = metadata.forwardedFrom as Record<string, unknown> | undefined;
+  const poll = metadata.poll as { pollId?: unknown } | undefined;
   return {
+    pollId: typeof poll?.pollId === "string" ? poll.pollId : undefined,
     content: extractPlainText(content),
     mentions: Array.isArray(
       (metadata.mentions as { principalIds?: unknown } | undefined)?.principalIds,

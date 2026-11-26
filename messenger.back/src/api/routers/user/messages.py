@@ -20,6 +20,9 @@ from src.application.messaging.dtos import (
     ConversationEventDTO,
     EditMessageDTO,
     MessageDTO,
+    MessageReadersDTO,
+    MessageReceiptRequestDTO,
+    MessageReceiptSummaryDTO,
     DeliveryCursorDTO,
     ReadCursorDTO,
     SendMessageDTO,
@@ -27,6 +30,36 @@ from src.application.messaging.dtos import (
 from src.infra.observability.metrics import observe_send_ack_latency
 
 router = APIRouter(prefix="/v1/conversations", tags=["messages"])
+
+
+@router.post("/{conversation_id}/message-receipts")
+async def message_receipt_summaries(
+    conversation_id: UUID, dto: MessageReceiptRequestDTO, auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep, membership_repository: MembershipRepositoryDep,
+    message_repository: MessageRepositoryDep,
+) -> dict[UUID, MessageReceiptSummaryDTO]:
+    return await queries.get_receipt_summaries(
+        conversation_id, dto.message_ids, actor=auth, conversation_repository=conversation_repository,
+        membership_repository=membership_repository, message_repository=message_repository,
+    )
+
+
+@router.get("/{conversation_id}/messages/{message_id}/readers")
+async def message_readers(
+    conversation_id: UUID,
+    message_id: UUID,
+    auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    message_repository: MessageRepositoryDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> MessageReadersDTO:
+    return await queries.get_message_readers(
+        conversation_id, message_id, actor=auth, conversation_repository=conversation_repository,
+        membership_repository=membership_repository, message_repository=message_repository,
+        offset=offset, limit=limit,
+    )
 
 
 @router.post(

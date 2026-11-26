@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { photoUrl } from "../features/conversation/profiles.js";
 import { ChatDialog } from "./ChatDialog.js";
+import { TopicEditorDialog } from "./GroupTopics.js";
 import { groupPhoto } from "./groupPhoto.js";
 import styles from "./NewChatModal.module.css";
 
@@ -14,6 +15,7 @@ export function ManageGroupDialog({
   eligible,
   onClose,
   onTransfer,
+  onTopicCreated,
 }: {
   id: string;
   title: string;
@@ -22,6 +24,7 @@ export function ManageGroupDialog({
   eligible?: { id: string; label: string }[];
   onClose: () => void;
   onTransfer: () => void;
+  onTopicCreated: () => void;
 }) {
   const { http, db } = useRuntime();
   const [name, setName] = useState(title);
@@ -30,6 +33,7 @@ export function ManageGroupDialog({
   const [nextOwner, setNextOwner] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [creatingTopic, setCreatingTopic] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   async function save() {
@@ -78,6 +82,18 @@ export function ManageGroupDialog({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (creatingTopic) {
+    const back = () => setCreatingTopic(false);
+    return (
+      <TopicEditorDialog
+        conversationId={id}
+        onClose={back}
+        onBack={back}
+        onSaved={onTopicCreated}
+      />
+    );
   }
 
   return (
@@ -146,6 +162,16 @@ export function ManageGroupDialog({
             onChange={(event) => setAbout(event.target.value)}
           />
         </label>
+        <section className={styles.sharedSection}>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => setCreatingTopic(true)}
+          >
+            Создать тему
+          </Button>
+        </section>
         {eligible && eligible.length > 0 && (
           <section className={styles.sharedSection}>
             <label className={styles.manageField}>

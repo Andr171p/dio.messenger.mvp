@@ -14,6 +14,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../../app/providers/AuthProvider.js";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
+import { PollComposer } from "../polls/PollComposer.js";
+import { useConversationMembers } from "../read/useConversationMembers.js";
 import { AttachmentDialog } from "./AttachmentDialog.js";
 import { MentionTicketPicker } from "./MentionTicketPicker.js";
 import { VoiceRecorder } from "./VoiceRecorder.js";
@@ -57,6 +59,12 @@ function ConversationComposer({
   const { db, sync, accountKey, media, http } = useRuntime();
   const { data: policy } = useConversationPolicy(conversationId);
   const { session } = useAuth();
+  const members = useConversationMembers(conversationId);
+  const role = members.data?.find(
+    (member) => member.principalId === session?.userId,
+  )?.role;
+  const canCreatePoll = !!role && role !== "guest";
+  const [pollOpen, setPollOpen] = useState(false);
   const reply = useUiStore((s) => s.replyTarget);
   const clearReply = useUiStore((s) => s.setReplyTarget);
   const editingId = useUiStore((s) => s.editingMessageId);
@@ -499,7 +507,8 @@ function ConversationComposer({
   }
 
   const disabled = !hydrated || sending;
-  const attachDisabled = disabled || !!editingId || policy?.allowAttachments === false;
+  const attachDisabled =
+    disabled || !!editingId || (!canCreatePoll && policy?.allowAttachments === false);
 
   return (
     <div
@@ -645,7 +654,7 @@ function ConversationComposer({
           <span {...hoverTool("attach", attachDisabled)}>
             <IconButton
               label={
-                policy?.allowAttachments === false
+                !canCreatePoll && policy?.allowAttachments === false
                   ? "Вложения запрещены правилами беседы"
                   : "Вложение"
               }
@@ -664,7 +673,7 @@ function ConversationComposer({
                     ?.focus({ preventScroll: true }),
                 );
               }}
-              onClick={() => chooseFile()}
+              onClick={() => openTool("attach", false)}
             />
           </span>
           {!editingId && savedMedia.length > 0 ? (
@@ -808,16 +817,28 @@ function ConversationComposer({
           aria-label="Тип вложения"
           {...popupHover}
         >
-          {[
-            ["Документ", ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"],
-            ["Фото или видео", "image/*,video/*"],
-            ["Статья", ".md,.txt,.pdf"],
-            ["Музыка", "audio/*"],
-          ].map(([label, accept]) => (
-            <button type="button" key={label} onClick={() => chooseFile(accept)}>
-              {label}
+          {policy?.allowAttachments !== false &&
+            [
+              ["Документ", ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"],
+              ["Фото или видео", "image/*,video/*"],
+              ["Статья", ".md,.txt,.pdf"],
+              ["Музыка", "audio/*"],
+            ].map(([label, accept]) => (
+              <button type="button" key={label} onClick={() => chooseFile(accept)}>
+                {label}
+              </button>
+            ))}
+          {canCreatePoll && (
+            <button
+              type="button"
+              onClick={() => {
+                closeTools();
+                setPollOpen(true);
+              }}
+            >
+              Опрос
             </button>
-          ))}
+          )}
         </div>
       ) : null}
       {tool === "format" ? (
@@ -911,6 +932,13 @@ function ConversationComposer({
           }}
         />
       ) : null}
+      {pollOpen && (
+        <PollComposer
+          conversationId={conversationId}
+          threadId={threadId}
+          onClose={() => setPollOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -62,8 +62,6 @@ class ConversationMemberDTO(BaseModel):
     principal_id: UUID
     role: MemberRole
     history_from_seq: NonNegativeInt
-    last_read_message_seq: NonNegativeInt
-    last_delivered_message_seq: NonNegativeInt
 
 
 class ConversationPresenceDTO(BaseModel):
