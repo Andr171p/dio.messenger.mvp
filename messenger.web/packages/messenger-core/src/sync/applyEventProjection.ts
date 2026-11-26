@@ -20,6 +20,7 @@ export async function applyEventProjection(
 
   switch (event.type) {
     case "poll.created":
+    case "poll.option_added":
     case "poll.voted":
     case "poll.closed": {
       const id = asString(payload.pollId);
