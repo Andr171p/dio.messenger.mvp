@@ -737,8 +737,9 @@ test("открывает меню редактора наведением и с�
   for (const name of ["Документ", "Фото или видео", "Статья", "Музыка"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   }
-  const chooser = page.waitForEvent("filechooser");
   await paperclip.click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Документ", exact: true }).click();
   await chooser;
   await page.getByRole("button", { name: "Заявка", exact: true }).hover();
   await page.getByRole("option", { name: /INC-228/ }).click();

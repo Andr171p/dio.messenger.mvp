@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 
 from ddf.infra.database.sqlalchemy import Base, EntityMixin
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -38,3 +38,12 @@ class ConversationMemberOrm(EntityMixin, Base):
             name="uq_conversation_members_conversation_principal",
         ),
     )
+
+
+class ConversationReadAdvanceOrm(Base):
+    __tablename__ = "conversation_read_advances"
+
+    membership_id: Mapped[UUID] = mapped_column(ForeignKey("conversation_members.id", ondelete="CASCADE"), primary_key=True)
+    through_seq: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    after_seq: Mapped[int] = mapped_column(BigInteger)
+    read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

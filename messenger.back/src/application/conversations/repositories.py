@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from datetime import datetime
 from uuid import UUID
 
 from src.domain.conversations import Conversation
@@ -58,7 +59,9 @@ class MembershipRepository(Protocol):
         conversation_id: UUID,
         principal_id: UUID,
         last_read_message_seq: int,
-    ) -> None: ...
+    ) -> int: ...
+
+    async def read_times(self, membership_ids: list[UUID], message_seq: int) -> dict[UUID, datetime]: ...
 
     async def update_delivery_cursor(
         self,

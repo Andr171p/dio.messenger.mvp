@@ -165,8 +165,6 @@ def to_realtime_event(domain_event: DomainEvent) -> Event[dict[str, Any]] | None
             "pollId": str(domain_event.poll_id),
             "messageId": str(domain_event.message_id),
             "createdSeq": domain_event.message_created_seq,
-            "voterId": str(domain_event.voter_id),
-            "optionId": str(domain_event.option_id),
         }
         return Event(
             id=domain_event.event_id,

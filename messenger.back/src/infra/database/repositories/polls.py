@@ -7,12 +7,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.polls import Poll, PollOption
-from src.infra.database.models.polls import PollOptionOrm, PollOrm, PollVoteOrm
+from src.infra.database.models.polls import PollOptionOrm, PollOrm, PollVoteOperationOrm, PollVoteOrm
 
 
 class SqlAlchemyPollRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def has_vote_operation(self, poll_id: UUID, voter_id: UUID, operation_id: UUID) -> bool:
+        return await self._session.get(PollVoteOperationOrm, (poll_id, voter_id, operation_id)) is not None
+
+    async def record_vote_operation(self, poll_id: UUID, voter_id: UUID, operation_id: UUID) -> None:
+        self._session.add(PollVoteOperationOrm(poll_id=poll_id, voter_id=voter_id, operation_id=operation_id))
 
     async def create(self, entity: Poll) -> Poll:
         try:
@@ -27,12 +33,15 @@ class SqlAlchemyPollRepository:
                     organization_id=entity.organization_id,
                     question=entity.question,
                     allows_multiple=entity.allows_multiple,
+                    show_voters=entity.show_voters,
+                    allows_revoting=entity.allows_revoting,
                     is_closed=entity.is_closed,
                     created_by=entity.created_by,
                     closed_at=entity.closed_at,
                     closed_by=entity.closed_by,
                 )
             )
+            await self._session.flush()
             for opt in entity.options:
                 self._session.add(
                     PollOptionOrm(
@@ -53,8 +62,10 @@ class SqlAlchemyPollRepository:
             raise
         return entity
 
-    async def read(self, poll_id: UUID) -> Poll | None:
+    async def read(self, poll_id: UUID, *, lock: bool = False) -> Poll | None:
         stmt = select(PollOrm).where(PollOrm.id == poll_id, PollOrm.deleted_at.is_(None))
+        if lock:
+            stmt = stmt.with_for_update().execution_options(populate_existing=True)
         model = await self._session.scalar(stmt)
         if model is None:
             return None
@@ -134,6 +145,8 @@ class SqlAlchemyPollRepository:
             organization_id=model.organization_id,
             question=model.question,
             allows_multiple=model.allows_multiple,
+            show_voters=model.show_voters,
+            allows_revoting=model.allows_revoting,
             is_closed=model.is_closed,
             created_by=model.created_by,
             closed_at=model.closed_at,

@@ -13,6 +13,7 @@ import { firstLink, maskSpoilers, MessageFormatting } from "./MessageFormatting.
 import type { MediaSelection } from "./MediaViewer.js";
 import { LinkPreviewCard } from "./LinkPreviewCard.js";
 import { TicketCard } from "./TicketCard.js";
+import { PollCard } from "../features/polls/PollCard.js";
 import styles from "./MessageTimeline.module.css";
 
 function formatClock(ts: number): string {
@@ -204,23 +205,33 @@ export function MessageBubble(props: {
           </button>
         ) : null}
         {!message.deletedAt ? (
-          !ticketsOnly && (
-            <MessageBody
-              blocks={blocks}
-              mention={resolveMention}
-              onPreview={(assetId, media) =>
-                props.onPreview({
-                  ...media,
-                  assetId,
-                  messageId: message.serverId,
-                  conversationId: props.conversationId,
-                  authorName: message.isOutgoing
-                    ? "Вы"
-                    : (message.authorDisplayName ?? "Участник"),
-                  sentAt: message.createdAt,
-                })
-              }
+          message.pollId ? (
+            <PollCard
+              key={message.pollId}
+              id={message.pollId}
+              conversationId={props.conversationId}
+              userId={props.userId}
+              question={message.content}
             />
+          ) : (
+            !ticketsOnly && (
+              <MessageBody
+                blocks={blocks}
+                mention={resolveMention}
+                onPreview={(assetId, media) =>
+                  props.onPreview({
+                    ...media,
+                    assetId,
+                    messageId: message.serverId,
+                    conversationId: props.conversationId,
+                    authorName: message.isOutgoing
+                      ? "Вы"
+                      : (message.authorDisplayName ?? "Участник"),
+                    sentAt: message.createdAt,
+                  })
+                }
+              />
+            )
           )
         ) : (
           <p className={styles.text}>Сообщение удалено</p>
@@ -283,7 +294,9 @@ function MessageBody({
   const previewUrl = mediaBlocks.length
     ? null
     : firstLink(
-        blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n"),
+        blocks
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join("\n"),
       );
   return (
     <div className={styles.blockStack}>

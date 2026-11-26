@@ -24,6 +24,8 @@ class Poll(AggregateRoot):
     question: str
     created_by: UUID
     allows_multiple: bool = False
+    show_voters: bool = True
+    allows_revoting: bool = True
     is_closed: bool = False
     closed_at: datetime | None = None
     closed_by: UUID | None = None

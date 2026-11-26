@@ -108,3 +108,31 @@ class DeliveryCursorDTO(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 
     last_delivered_message_seq: NonNegativeInt
+
+
+class MessageReceiptSummaryDTO(BaseModel):
+    seen: int
+    total: int
+    delivered: bool
+
+
+class MessageReceiptRequestDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    message_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+
+class MessageReaderDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    user_id: UUID
+    read_at: datetime | None = None
+
+
+class MessageReadersDTO(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    read_count: int
+    eligible_count: int
+    readers: list[MessageReaderDTO]
+    next_offset: int | None = None

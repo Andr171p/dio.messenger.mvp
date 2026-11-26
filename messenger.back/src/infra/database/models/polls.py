@@ -14,6 +14,8 @@ class PollOrm(EntityMixin, Base):
     organization_id: Mapped[UUID]
     question: Mapped[str] = mapped_column(String(500))
     allows_multiple: Mapped[bool] = mapped_column(Boolean, default=False)
+    show_voters: Mapped[bool] = mapped_column(Boolean, default=True)
+    allows_revoting: Mapped[bool] = mapped_column(Boolean, default=True)
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[UUID]
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -47,3 +49,11 @@ class PollVoteOrm(EntityMixin, Base):
             name="uq_poll_votes_poll_option_voter",
         ),
     )
+
+
+class PollVoteOperationOrm(Base):
+    __tablename__ = "poll_vote_operations"
+
+    poll_id: Mapped[UUID] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), primary_key=True)
+    voter_id: Mapped[UUID] = mapped_column(primary_key=True)
+    operation_id: Mapped[UUID] = mapped_column(primary_key=True)

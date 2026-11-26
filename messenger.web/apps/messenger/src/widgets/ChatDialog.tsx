@@ -8,13 +8,15 @@ export function ChatDialog({
   busy = false,
   onBack,
   variant,
+  anchor,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   busy?: boolean;
   onBack?: () => void;
-  variant?: "chat";
+  variant?: "chat" | "fullscreen" | "sheet";
+  anchor?: DOMRect;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -25,7 +27,29 @@ export function ChatDialog({
   return (
     <dialog
       ref={ref}
-      className={[styles.modal, variant === "chat" ? styles.chatModal : ""].join(" ")}
+      className={[
+        styles.modal,
+        variant === "chat" ? styles.chatModal : "",
+        variant === "fullscreen" ? styles.fullscreenModal : "",
+        variant === "sheet" ? styles.sheetModal : "",
+        anchor ? styles.anchoredModal : "",
+      ].join(" ")}
+      style={
+        anchor
+          ? {
+              left: Math.max(
+                8,
+                Math.min(
+                  anchor.right + 8 <= window.innerWidth - 348
+                    ? anchor.right + 8
+                    : anchor.left - 348,
+                  window.innerWidth - 348,
+                ),
+              ),
+              top: Math.max(8, Math.min(anchor.top, window.innerHeight - 390)),
+            }
+          : undefined
+      }
       aria-label={title}
       onCancel={(event) => {
         event.preventDefault();

@@ -1,0 +1,112 @@
+.card,
+.form,
+.form fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.card {
+  width: min(330px, 66vw);
+  overflow-wrap: anywhere;
+}
+
+.card h3,
+.card p {
+  margin: 0;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--dio-text-secondary);
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 3em 1fr;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.selected {
+  font-weight: 650;
+}
+
+.bar {
+  grid-column: 2;
+  display: block;
+  overflow: hidden;
+  height: 5px;
+  border-radius: 10px;
+  background: var(--dio-border);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--dio-text-secondary);
+  transition: width 220ms ease;
+}
+
+.selected .fill {
+  background: var(--dio-action);
+}
+
+.form fieldset {
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+}
+
+.form textarea,
+.form input:not([type="checkbox"]) {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--dio-field);
+  color: inherit;
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  padding: 8px;
+  font: inherit;
+}
+
+.optionInput,
+.actions,
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.actions {
+  flex-wrap: wrap;
+}
+
+.form .actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--dio-sidebar);
+  padding: 8px 0;
+  justify-content: end;
+}
+
+.actions button,
+.form button,
+.optionInput button {
+  color: inherit;
+  background: var(--dio-field);
+  border: 1px solid var(--dio-border);
+  border-radius: var(--dio-radius-md);
+  padding: 6px 10px;
+  font: inherit;
+}
+
+.actions button:disabled,
+.form button:disabled {
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+}

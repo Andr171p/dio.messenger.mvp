@@ -12,6 +12,8 @@ class CreatePollDTO(BaseModel):
     question: str = Field(min_length=1, max_length=500)
     options: list[str] = Field(min_length=2, max_length=10)
     allows_multiple: bool = False
+    show_voters: bool = True
+    allows_revoting: bool = True
     thread_id: UUID | None = None
 
 
@@ -19,6 +21,7 @@ class VotePollDTO(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True)
 
     option_ids: list[UUID] = Field(min_length=1)
+    operation_id: UUID | None = None
 
 
 class PollOptionDTO(BaseModel):
@@ -38,6 +41,9 @@ class PollDTO(BaseModel):
     conversation_id: UUID
     question: str
     allows_multiple: bool
+    show_voters: bool = True
+    allows_revoting: bool = True
+    total_voters: NonNegativeInt = 0
     is_closed: bool
     created_by: UUID
     created_at: datetime

@@ -1,11 +1,13 @@
 import { readMessageBlocks, type LocalMessage } from "@dio/messenger-core";
 import { Avatar } from "@dio/messenger-ui";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../app/providers/AuthProvider.js";
 import { useRuntime } from "../app/providers/RuntimeProvider.js";
 import { useReadCursor } from "../features/read/useReadCursor.js";
+import { MessageReaders } from "../features/read/MessageReaders.js";
 import { useConversationMembers } from "../features/read/useConversationMembers.js";
 import { useUiStore } from "../stores/uiStore.js";
 import { MessageBubble } from "./MessageBubble.js";
@@ -46,7 +48,7 @@ function sameDay(a: number, b: number): boolean {
 }
 
 export function MessageTimeline() {
-  const { db, accountKey, sync } = useRuntime();
+  const { db, accountKey, sync, http } = useRuntime();
   const { session } = useAuth();
   const conversationId = useUiStore((s) => s.selectedConversationId);
   const [historyState, setHistoryState] = useState<"loading" | "ready" | "error">(
@@ -87,6 +89,11 @@ export function MessageTimeline() {
 
   const parentRef = useRef<HTMLDivElement | null>(null);
   const menuTrigger = useRef<HTMLElement | null>(null);
+  const [readerSource, setReaderSource] = useState<{
+    conversationId: string;
+    messageId: string;
+    anchor: DOMRect;
+  }>();
   const [viewingMedia, setViewingMedia] = useState<MediaSelection | null>(null);
   const [menu, setMenu] = useState<{
     message: LocalMessage;
@@ -300,6 +307,25 @@ export function MessageTimeline() {
   }, [menu]);
 
   const virtualItems = virtualizer.getVirtualItems();
+  const outgoingIds = virtualItems
+    .flatMap(({ index }) => {
+      const message = items[index];
+      return message?.isOutgoing && !message.deletedAt && message.serverId
+        ? [message.serverId]
+        : [];
+    })
+    .slice(0, 100);
+  const receipts = useQuery({
+    queryKey: ["message-receipts", accountKey, conversationId, outgoingIds],
+    enabled: !!http && !!conversationId && outgoingIds.length > 0,
+    queryFn: () =>
+      http!.post<Record<string, { seen: number; total: number; delivered: boolean }>>(
+        `/v1/conversations/${conversationId}/message-receipts`,
+        { messageIds: outgoingIds },
+      ),
+    staleTime: 2000,
+    refetchInterval: 5000,
+  });
   const profiles = useProfiles(virtualItems.map((row) => items[row.index]?.authorId));
 
   useEffect(() => {
@@ -466,27 +492,7 @@ export function MessageTimeline() {
                     onPreview={setViewingMedia}
                     status={status}
                     receiptCount={
-                      message.isOutgoing && readSeq > 0 && members.data
-                        ? {
-                            total: members.data.filter(
-                              (member) =>
-                                member.principalId !== session?.userId &&
-                                member.historyFromSeq <= readSeq,
-                            ).length,
-                            seen: members.data.filter(
-                              (member) =>
-                                member.principalId !== session?.userId &&
-                                member.historyFromSeq <= readSeq &&
-                                member.lastReadMessageSeq >= readSeq,
-                            ).length,
-                            delivered: members.data.some(
-                              (member) =>
-                                member.principalId !== session?.userId &&
-                                member.historyFromSeq <= readSeq &&
-                                member.lastDeliveredMessageSeq >= readSeq,
-                            ),
-                          }
-                        : undefined
+                      message.serverId ? receipts.data?.[message.serverId] : undefined
                     }
                     blocks={readMessageBlocks(message)}
                     grouped={grouped}
@@ -565,6 +571,9 @@ export function MessageTimeline() {
           message={menu.message}
           conversationId={conversationId}
           userId={session?.userId}
+          onShowReaders={(messageId, anchor) =>
+            setReaderSource({ conversationId, messageId, anchor })
+          }
           onCreateTicket={
             myRole && myRole !== "guest"
               ? (id) => setTicketSource({ conversationId, id })
@@ -576,6 +585,18 @@ export function MessageTimeline() {
           }}
         />
       ) : null}
+      {readerSource?.conversationId === conversationId && (
+        <MessageReaders
+          conversationId={conversationId}
+          messageId={readerSource.messageId}
+          expanded
+          anchor={readerSource.anchor}
+          onClose={() => {
+            setReaderSource(undefined);
+            menuTrigger.current?.focus({ preventScroll: true });
+          }}
+        />
+      )}
       {ticketSource?.conversationId === conversationId ? (
         <TicketFromMessageDialog
           key={ticketSource.id}

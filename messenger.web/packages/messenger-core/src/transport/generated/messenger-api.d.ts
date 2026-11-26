@@ -950,6 +950,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/message-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Message Receipt Summaries */
+        post: operations["message_receipt_summaries_v1_conversations__conversation_id__message_receipts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/messages/{message_id}/readers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Message Readers */
+        get: operations["message_readers_v1_conversations__conversation_id__messages__message_id__readers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/polls/{poll_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Poll */
+        get: operations["get_poll_v1_conversations__conversation_id__polls__poll_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conversation_id}/polls/{poll_id}/voters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Poll Voters */
+        get: operations["get_poll_voters_v1_conversations__conversation_id__polls__poll_id__voters_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1159,10 +1227,6 @@ export interface components {
             role: components["schemas"]["MemberRole"];
             /** Historyfromseq */
             historyFromSeq: number;
-            /** Lastreadmessageseq */
-            lastReadMessageSeq: number;
-            /** Lastdeliveredmessageseq */
-            lastDeliveredMessageSeq: number;
         };
         /** ConversationPolicyDTO */
         ConversationPolicyDTO: {
@@ -1263,6 +1327,16 @@ export interface components {
              * @default false
              */
             allowsMultiple: boolean;
+            /**
+             * Showvoters
+             * @default true
+             */
+            showVoters: boolean;
+            /**
+             * Allowsrevoting
+             * @default true
+             */
+            allowsRevoting: boolean;
             /** Threadid */
             threadId?: string | null;
         };
@@ -1599,6 +1673,41 @@ export interface components {
             /** Deletedat */
             deletedAt: string | null;
         };
+        /** MessageReaderDTO */
+        MessageReaderDTO: {
+            /**
+             * Userid
+             * Format: uuid
+             */
+            userId: string;
+            /** Readat */
+            readAt?: string | null;
+        };
+        /** MessageReadersDTO */
+        MessageReadersDTO: {
+            /** Readcount */
+            readCount: number;
+            /** Eligiblecount */
+            eligibleCount: number;
+            /** Readers */
+            readers: components["schemas"]["MessageReaderDTO"][];
+            /** Nextoffset */
+            nextOffset?: number | null;
+        };
+        /** MessageReceiptRequestDTO */
+        MessageReceiptRequestDTO: {
+            /** Messageids */
+            messageIds: string[];
+        };
+        /** MessageReceiptSummaryDTO */
+        MessageReceiptSummaryDTO: {
+            /** Seen */
+            seen: number;
+            /** Total */
+            total: number;
+            /** Delivered */
+            delivered: boolean;
+        };
         /** MessageUploadTarget */
         MessageUploadTarget: {
             /**
@@ -1665,6 +1774,21 @@ export interface components {
             question: string;
             /** Allowsmultiple */
             allowsMultiple: boolean;
+            /**
+             * Showvoters
+             * @default true
+             */
+            showVoters: boolean;
+            /**
+             * Allowsrevoting
+             * @default true
+             */
+            allowsRevoting: boolean;
+            /**
+             * Totalvoters
+             * @default 0
+             */
+            totalVoters: number;
             /** Isclosed */
             isClosed: boolean;
             /**
@@ -2189,6 +2313,8 @@ export interface components {
         VotePollDTO: {
             /** Optionids */
             optionIds: string[];
+            /** Operationid */
+            operationId?: string | null;
         };
         /** WsTicketDTO */
         WsTicketDTO: {
@@ -4310,6 +4436,144 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    message_receipt_summaries_v1_conversations__conversation_id__message_receipts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageReceiptRequestDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["MessageReceiptSummaryDTO"];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    message_readers_v1_conversations__conversation_id__messages__message_id__readers_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageReadersDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_poll_v1_conversations__conversation_id__polls__poll_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                poll_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollDTO"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_poll_voters_v1_conversations__conversation_id__polls__poll_id__voters_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                poll_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string[];
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

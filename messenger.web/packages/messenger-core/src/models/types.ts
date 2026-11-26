@@ -21,6 +21,7 @@ export interface ForwardedFrom {
 }
 
 export interface LocalMessage {
+  pollId?: string;
   accountKey: AccountKey;
   localId: string;
   clientMessageId: string;
@@ -63,6 +64,7 @@ export interface Conversation {
   lastMessageAt?: number;
   unreadCount: number;
   lastReadMessageSeq?: number;
+  pendingReadMessageSeq?: number;
   isGuest: boolean;
   hasExternalMembers?: boolean;
   kind?: ConversationKind;
@@ -177,6 +179,9 @@ export interface SyncCursor {
 }
 
 export type ConversationEventType =
+  | "poll.created"
+  | "poll.voted"
+  | "poll.closed"
   | "message.created"
   | "message.edited"
   | "message.deleted"

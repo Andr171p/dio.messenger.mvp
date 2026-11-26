@@ -362,6 +362,8 @@ async def edit_message(
         message_repository=message_repository,
     )
     _ensure_edit_window(message, config=settings)
+    if "poll" in message.content:
+        raise MessageContentInvalidError("Published polls cannot be edited.")
 
     content = build_message_content(list(command.blocks), config=settings)
     for key in ("quoteText", "forwardedFrom", "mentions"):
@@ -466,7 +468,7 @@ async def update_read_cursor(
     )
 
     if changed:
-        await membership_repository.update_read_cursor(
+        next_seq = await membership_repository.update_read_cursor(
             conversation_id=conversation_id,
             principal_id=actor.user.id,
             last_read_message_seq=next_seq,

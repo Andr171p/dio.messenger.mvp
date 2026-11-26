@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import type { LocalPoll } from "../models/poll.js";
 import type {
   AccountKey,
   Conversation,
@@ -18,6 +19,7 @@ export class MessengerDatabase extends Dexie {
   outbox!: Table<OutboxItem, string>;
   syncCursors!: Table<SyncCursor, [AccountKey, string]>;
   voiceUploads!: Table<VoiceUpload, string>;
+  polls!: Table<LocalPoll, string>;
 
   constructor(accountKey: AccountKey) {
     super(`${DB_NAME_PREFIX}:${accountKey}`);
@@ -31,6 +33,9 @@ export class MessengerDatabase extends Dexie {
     });
     this.version(2).stores({
       voiceUploads: "&id, accountKey",
+    });
+    this.version(3).stores({
+      polls: "&id, conversationId",
     });
   }
 }

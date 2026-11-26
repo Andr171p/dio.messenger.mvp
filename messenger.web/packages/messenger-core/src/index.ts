@@ -1,4 +1,5 @@
 export type * from "./models/index.js";
+export type { PollState } from "./models/poll.js";
 export type { components } from "./transport/generated/messenger-api.js";
 
 export {
