@@ -554,6 +554,10 @@ export function ChatHeader() {
               }
               onClose={() => setManage(false)}
               onTransfer={refreshMembers}
+              onTopicCreated={() => {
+                setManage(false);
+                setInfoFor(undefined);
+              }}
             />
           )}
           {adding && (
