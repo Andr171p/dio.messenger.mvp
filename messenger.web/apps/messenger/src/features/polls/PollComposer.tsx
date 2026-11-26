@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRuntime } from "../../app/providers/RuntimeProvider.js";
 import { ChatDialog } from "../../widgets/ChatDialog.js";
+import { useConversationPolicy } from "../conversation/useConversationPolicy.js";
+import { PollOptionEditor } from "./PollOptionEditor.js";
+import { emptyPollOption, uploadPollOptions, validPollOption } from "./pollOptions.js";
 import styles from "./Poll.module.css";
 
 export function PollComposer({
@@ -13,39 +16,65 @@ export function PollComposer({
   onClose: () => void;
 }) {
   const { http, sync } = useRuntime();
+  const policy = useConversationPolicy(conversationId);
   const [clientMessageId] = useState(() => crypto.randomUUID());
   const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState(["", ""]);
+  const [description, setDescription] = useState("");
+  const [options, setOptions] = useState(() => [emptyPollOption(), emptyPollOption()]);
   const [showVoters, setShowVoters] = useState(true);
   const [allowsMultiple, setAllowsMultiple] = useState(false);
   const [allowsRevoting, setAllowsRevoting] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const labels = options.map((option) => option.trim());
+  const [error, setError] = useState("");
+  const uploaded = useRef(new Map<File, string>());
+  const request = useRef<AbortController>(undefined);
+  useEffect(() => () => request.current?.abort(), []);
+  const labels = options.map((option) => option.label.trim());
   const valid =
     !!question.trim() &&
-    labels.every(Boolean) &&
+    options.every(validPollOption) &&
     new Set(labels.map((label) => label.toLowerCase())).size === labels.length;
 
   async function publish() {
     if (!http || !valid || busy) return;
+    const controller = new AbortController();
+    request.current = controller;
     setBusy(true);
-    setError(false);
+    setError("");
     try {
-      await http.post(`/v1/conversations/${conversationId}/polls`, {
-        clientMessageId,
-        question: question.trim(),
-        options: labels,
-        showVoters,
-        allowsMultiple,
-        allowsRevoting,
-        threadId,
+      const optionDetails = await uploadPollOptions(
+        options,
+        http,
+        conversationId,
+        uploaded.current,
+        controller.signal,
+      );
+      await http.request(`/v1/conversations/${conversationId}/polls`, {
+        method: "POST",
+        signal: controller.signal,
+        json: {
+          clientMessageId,
+          question: question.trim(),
+          description: description.trim() || undefined,
+          options: labels,
+          optionDetails,
+          showVoters,
+          allowsMultiple,
+          allowsRevoting,
+          threadId,
+        },
       });
       void sync?.synchronize().catch(() => undefined);
       onClose();
-    } catch {
-      setError(true);
-      setBusy(false);
+    } catch (failure) {
+      if (!controller.signal.aborted) {
+        setError(
+          failure instanceof Error && failure.message.startsWith("Не удалось")
+            ? failure.message
+            : "Не удалось опубликовать опрос. Повторите попытку.",
+        );
+        setBusy(false);
+      }
     }
   }
 
@@ -58,79 +87,89 @@ export function PollComposer({
           void publish();
         }}
       >
-        <label>
-          Вопрос
+        <fieldset disabled={busy}>
+          <legend>Вопрос</legend>
           <textarea
+            aria-label="Вопрос"
+            placeholder="Задайте вопрос"
             required
             maxLength={500}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
           />
-        </label>
-        <fieldset>
+          <textarea
+            aria-label="Описание"
+            placeholder="Добавить описание"
+            maxLength={1000}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={2}
+          />
+        </fieldset>
+        <fieldset disabled={busy}>
           <legend>Варианты ответа</legend>
           {options.map((option, index) => (
-            <div className={styles.optionInput} key={index}>
-              <input
-                aria-label={`Вариант ${index + 1}`}
-                required
-                maxLength={256}
-                value={option}
-                onChange={(event) =>
-                  setOptions((items) =>
-                    items.map((item, i) => (i === index ? event.target.value : item)),
-                  )
-                }
-              />
-              {options.length > 2 && (
-                <button
-                  type="button"
-                  aria-label={`Удалить вариант ${index + 1}`}
-                  onClick={() =>
-                    setOptions((items) => items.filter((_, i) => i !== index))
-                  }
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            <PollOptionEditor
+              key={option.id}
+              index={index}
+              option={option}
+              allowMedia={policy.data?.allowAttachments !== false}
+              onChange={(updated) =>
+                setOptions((items) =>
+                  items.map((item) => (item.id === option.id ? updated : item)),
+                )
+              }
+              onRemove={
+                options.length > 2
+                  ? () =>
+                      setOptions((items) =>
+                        items.filter((item) => item.id !== option.id),
+                      )
+                  : undefined
+              }
+            />
           ))}
-          <button
-            type="button"
-            disabled={options.length >= 10}
-            onClick={() => setOptions((items) => [...items, ""])}
-          >
-            Добавить вариант
-          </button>
+          {options.length < 10 && (
+            <button
+              className={styles.addOption}
+              type="button"
+              onClick={() => setOptions((items) => [...items, emptyPollOption()])}
+            >
+              ＋ <span>Добавить вариант</span>
+            </button>
+          )}
         </fieldset>
-        <fieldset>
+        <fieldset disabled={busy}>
           <legend>Настройки</legend>
-          <label>
+          <label className={styles.setting}>
+            Показывать, кто голосовал
             <input
               type="checkbox"
+              role="switch"
               checked={showVoters}
               onChange={(event) => setShowVoters(event.target.checked)}
-            />{" "}
-            Показывать, кто голосовал
+            />
           </label>
-          <label>
+          <label className={styles.setting}>
+            Несколько ответов
             <input
               type="checkbox"
+              role="switch"
               checked={allowsMultiple}
               onChange={(event) => setAllowsMultiple(event.target.checked)}
-            />{" "}
-            Несколько ответов
+            />
           </label>
-          <label>
+          <label className={styles.setting}>
+            Разрешить изменить голос
             <input
               type="checkbox"
+              role="switch"
               checked={allowsRevoting}
               onChange={(event) => setAllowsRevoting(event.target.checked)}
-            />{" "}
-            Разрешить изменить голос
+            />
           </label>
         </fieldset>
-        {error && <p role="alert">Не удалось создать опрос. Повторите попытку.</p>}
+        {error && <p role="alert">{error}</p>}
         <footer className={styles.actions}>
           <button type="button" disabled={busy} onClick={onClose}>
             Отмена

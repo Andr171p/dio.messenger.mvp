@@ -212,6 +212,18 @@ export function MessageBubble(props: {
               conversationId={props.conversationId}
               userId={props.userId}
               question={message.content}
+              onPreview={(assetId, file) =>
+                props.onPreview({
+                  ...file,
+                  assetId,
+                  messageId: message.serverId,
+                  conversationId: props.conversationId,
+                  authorName: message.isOutgoing
+                    ? "Вы"
+                    : (message.authorDisplayName ?? "Участник"),
+                  sentAt: message.createdAt,
+                })
+              }
             />
           ) : (
             !ticketsOnly && (

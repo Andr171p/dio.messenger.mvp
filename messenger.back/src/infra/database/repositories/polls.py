@@ -32,6 +32,7 @@ class SqlAlchemyPollRepository:
                     conversation_id=entity.conversation_id,
                     organization_id=entity.organization_id,
                     question=entity.question,
+                    description=entity.description,
                     allows_multiple=entity.allows_multiple,
                     show_voters=entity.show_voters,
                     allows_revoting=entity.allows_revoting,
@@ -51,6 +52,8 @@ class SqlAlchemyPollRepository:
                         poll_id=entity.id,
                         position=opt.position,
                         label=opt.label,
+                        link=opt.link,
+                        asset_id=opt.asset_id,
                     )
                 )
             await self._session.flush()
@@ -61,6 +64,13 @@ class SqlAlchemyPollRepository:
                 ) from exc
             raise
         return entity
+
+    async def add_option(self, option: PollOption) -> None:
+        self._session.add(PollOptionOrm(
+            id=option.id, poll_id=option.poll_id, position=option.position,
+            label=option.label, link=option.link, asset_id=option.asset_id,
+        ))
+        await self._session.flush()
 
     async def read(self, poll_id: UUID, *, lock: bool = False) -> Poll | None:
         stmt = select(PollOrm).where(PollOrm.id == poll_id, PollOrm.deleted_at.is_(None))
@@ -132,6 +142,8 @@ class SqlAlchemyPollRepository:
                 poll_id=opt.poll_id,
                 position=opt.position,
                 label=opt.label,
+                link=opt.link,
+                asset_id=opt.asset_id,
             )
             for opt in (await self._session.scalars(opt_stmt)).all()
         ]
@@ -144,6 +156,7 @@ class SqlAlchemyPollRepository:
             conversation_id=model.conversation_id,
             organization_id=model.organization_id,
             question=model.question,
+            description=model.description,
             allows_multiple=model.allows_multiple,
             show_voters=model.show_voters,
             allows_revoting=model.allows_revoting,

@@ -13,6 +13,8 @@ class PollOption:
     poll_id: UUID
     position: int
     label: str
+    link: str | None = None
+    asset_id: UUID | None = None
     id: UUID | None = None
 
 
@@ -23,6 +25,7 @@ class Poll(AggregateRoot):
     organization_id: UUID
     question: str
     created_by: UUID
+    description: str | None = None
     allows_multiple: bool = False
     show_voters: bool = True
     allows_revoting: bool = True

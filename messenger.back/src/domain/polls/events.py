@@ -20,6 +20,11 @@ class PollCreated(Event):
 
 
 @dataclass(kw_only=True, frozen=True)
+class PollOptionAdded(PollCreated):
+    event_type: ClassVar[str] = "poll.option_added"
+
+
+@dataclass(kw_only=True, frozen=True)
 class PollVoted(Event):
     event_type: ClassVar[str] = "poll.voted"
 

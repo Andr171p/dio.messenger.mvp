@@ -9,9 +9,10 @@ from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.media import MediaRepositoryDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.polls import PollRepositoryDep
+from src.api.dependencies.policies import ConversationPolicyRepositoryDep
 from src.api.dependencies.threads import ThreadRepositoryDep
 from src.application.polls import commands
-from src.application.polls.dtos import CreatePollDTO, PollDTO, VotePollDTO
+from src.application.polls.dtos import AddPollOptionDTO, CreatePollDTO, PollDTO, VotePollDTO
 from src.application.auth.exceptions import PermissionDeniedError
 from src.domain.conversations import Conversation
 from src.domain.memberships import ConversationMembership
@@ -47,6 +48,7 @@ async def get_poll(visible: VisiblePoll, auth: CurrentUser, poll_repository: Pol
 @router.get("/{conversation_id}/polls/{poll_id}/voters")
 async def get_poll_voters(
     visible: VisiblePoll, membership_repository: MembershipRepositoryDep, poll_repository: PollRepositoryDep,
+    preview: bool = False,
 ) -> dict[UUID, list[UUID]]:
     conversation, _, poll, message = visible
     if not poll.show_voters:
@@ -55,7 +57,7 @@ async def get_poll_voters(
     recipients = {member.principal_id for member in active if member.history_from_seq <= message.created_seq}
     result: dict[UUID, list[UUID]] = {}
     for option, voter in await poll_repository.list_votes_for_poll(poll.id):
-        if voter in recipients:
+        if voter in recipients and (not preview or len(result.get(option, ())) < 2):
             result.setdefault(option, []).append(voter)
     return result
 
@@ -76,6 +78,7 @@ async def create_poll(
     event_store: ConversationEventStoreDep,
     poll_repository: PollRepositoryDep,
     media_repository: MediaRepositoryDep,
+    policy_repository: ConversationPolicyRepositoryDep,
     thread_repository: ThreadRepositoryDep,
     outbox_store: OutboxDep,
 ) -> PollDTO:
@@ -89,9 +92,25 @@ async def create_poll(
         event_store=event_store,
         poll_repository=poll_repository,
         media_repository=media_repository,
+        policy_repository=policy_repository,
         thread_repository=thread_repository,
         outbox_store=outbox_store,
         uow=session,
+    )
+
+
+@router.post("/{conversation_id}/polls/{poll_id}/options", status_code=status.HTTP_201_CREATED)
+async def add_poll_option(
+    conversation_id: UUID, poll_id: UUID, dto: AddPollOptionDTO, auth: CurrentUser, session: DBSession,
+    conversation_repository: ConversationRepositoryDep, membership_repository: MembershipRepositoryDep,
+    poll_repository: PollRepositoryDep, message_repository: MessageRepositoryDep, event_store: ConversationEventStoreDep,
+    media_repository: MediaRepositoryDep, policy_repository: ConversationPolicyRepositoryDep, outbox_store: OutboxDep,
+) -> PollDTO:
+    return await commands.append_poll_option(
+        dto, conversation_id=conversation_id, poll_id=poll_id, actor=auth,
+        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        poll_repository=poll_repository, message_repository=message_repository, event_store=event_store,
+        media_repository=media_repository, policy_repository=policy_repository, outbox_store=outbox_store, uow=session,
     )
 
 

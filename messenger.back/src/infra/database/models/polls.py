@@ -13,6 +13,7 @@ class PollOrm(EntityMixin, Base):
     conversation_id: Mapped[UUID] = mapped_column(ForeignKey("conversations.id"))
     organization_id: Mapped[UUID]
     question: Mapped[str] = mapped_column(String(500))
+    description: Mapped[str | None] = mapped_column(String(1000))
     allows_multiple: Mapped[bool] = mapped_column(Boolean, default=False)
     show_voters: Mapped[bool] = mapped_column(Boolean, default=True)
     allows_revoting: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -28,6 +29,8 @@ class PollOptionOrm(EntityMixin, Base):
     poll_id: Mapped[UUID] = mapped_column(ForeignKey("polls.id"))
     position: Mapped[int] = mapped_column(Integer)
     label: Mapped[str] = mapped_column(String(256))
+    link: Mapped[str | None] = mapped_column(String(2083))
+    asset_id: Mapped[UUID | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL", name="fk_poll_options_asset"))
 
     __table_args__ = (
         UniqueConstraint("poll_id", "position", name="uq_poll_options_poll_position"),

@@ -180,6 +180,7 @@ export interface SyncCursor {
 
 export type ConversationEventType =
   | "poll.created"
+  | "poll.option_added"
   | "poll.voted"
   | "poll.closed"
   | "message.created"

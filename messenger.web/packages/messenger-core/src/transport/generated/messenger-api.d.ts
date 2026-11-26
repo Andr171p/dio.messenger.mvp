@@ -1018,6 +1018,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conversation_id}/polls/{poll_id}/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Poll Option */
+        post: operations["add_poll_option_v1_conversations__conversation_id__polls__poll_id__options_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1039,6 +1056,20 @@ export interface components {
              * Format: uuid
              */
             messageId: string;
+        };
+        /** AddPollOptionDTO */
+        AddPollOptionDTO: {
+            /** Link */
+            link?: string | null;
+            /** Assetid */
+            assetId?: string | null;
+            /**
+             * Optionid
+             * Format: uuid
+             */
+            optionId: string;
+            /** Label */
+            label: string;
         };
         /** AddReactionDTO */
         AddReactionDTO: {
@@ -1322,6 +1353,10 @@ export interface components {
             question: string;
             /** Options */
             options: string[];
+            /** Description */
+            description?: string | null;
+            /** Optiondetails */
+            optionDetails?: components["schemas"]["PollOptionDetailsDTO"][] | null;
             /**
              * Allowsmultiple
              * @default false
@@ -1772,6 +1807,8 @@ export interface components {
             conversationId: string;
             /** Question */
             question: string;
+            /** Description */
+            description?: string | null;
             /** Allowsmultiple */
             allowsMultiple: boolean;
             /**
@@ -1819,11 +1856,22 @@ export interface components {
             position: number;
             /** Label */
             label: string;
+            /** Link */
+            link?: string | null;
+            /** Assetid */
+            assetId?: string | null;
             /**
              * Votecount
              * @default 0
              */
             voteCount: number;
+        };
+        /** PollOptionDetailsDTO */
+        PollOptionDetailsDTO: {
+            /** Link */
+            link?: string | null;
+            /** Assetid */
+            assetId?: string | null;
         };
         /** ProvisionContextConversationDTO */
         ProvisionContextConversationDTO: {
@@ -4546,7 +4594,9 @@ export interface operations {
     };
     get_poll_voters_v1_conversations__conversation_id__polls__poll_id__voters_get: {
         parameters: {
-            query?: never;
+            query?: {
+                preview?: boolean;
+            };
             header?: never;
             path: {
                 conversation_id: string;
@@ -4565,6 +4615,42 @@ export interface operations {
                     "application/json": {
                         [key: string]: string[];
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_poll_option_v1_conversations__conversation_id__polls__poll_id__options_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                poll_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPollOptionDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollDTO"];
                 };
             };
             /** @description Validation Error */

@@ -1,10 +1,11 @@
 from typing import Protocol
 from uuid import UUID
 
-from src.domain.polls import Poll
+from src.domain.polls import Poll, PollOption
 
 
 class PollRepository(Protocol):
+    async def add_option(self, option: PollOption) -> None: ...
     async def has_vote_operation(self, poll_id: UUID, voter_id: UUID, operation_id: UUID) -> bool: ...
 
     async def record_vote_operation(self, poll_id: UUID, voter_id: UUID, operation_id: UUID) -> None: ...

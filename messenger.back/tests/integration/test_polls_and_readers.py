@@ -6,12 +6,13 @@ from ddf.infra.outbox.sqlalchemy import SqlAlchemyOutboxStore
 from src.application.auth import Auth, AuthType, AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.messaging.queries import get_message_readers
-from src.application.polls.commands import create_poll_message, vote_poll
-from src.application.polls.dtos import CreatePollDTO, VotePollDTO
+from src.application.polls.commands import append_poll_option, create_poll_message, vote_poll
+from src.application.polls.dtos import AddPollOptionDTO, CreatePollDTO, VotePollDTO
 from src.infra.database.repositories.conversations import SqlAlchemyConversationRepository, SqlAlchemyMembershipRepository
 from src.infra.database.repositories.media import SqlAlchemyMediaRepository
 from src.infra.database.repositories.messages import SqlAlchemyConversationEventStore, SqlAlchemyMessageRepository
 from src.infra.database.repositories.polls import SqlAlchemyPollRepository
+from src.infra.database.repositories.policies import SqlAlchemyConversationPolicyRepository
 
 from .helpers import seed_conversation, seed_membership
 
@@ -60,6 +61,19 @@ async def test_poll_vote_replay_and_reader_permissions(db_session) -> None:
     assert replay.my_option_ids == [option_b]
     assert [option.vote_count for option in replay.options] == [0, 1]
     assert not replay.show_voters
+
+    added = AddPollOptionDTO(option_id=uuid4(), label="C ✨", link="https://example.org/details")
+    append_dependencies = dict(
+        **writes, poll_id=poll.id, media_repository=SqlAlchemyMediaRepository(db_session),
+        policy_repository=SqlAlchemyConversationPolicyRepository(db_session),
+    )
+    with pytest.raises(PermissionDeniedError):
+        await append_poll_option(added, actor=actor(reader_id), **append_dependencies)
+    updated = await append_poll_option(added, actor=actor(author_id), **append_dependencies)
+    retried = await append_poll_option(added, actor=actor(author_id), **append_dependencies)
+    assert [option.id for option in retried.options] == [option_a, option_b, added.option_id]
+    assert str(updated.options[-1].link) == "https://example.org/details"
+    assert [option.vote_count for option in updated.options] == [0, 1, 0]
 
     message = await messages.read(poll.message_id)
     assert message is not None
