@@ -76,11 +76,7 @@ async def _ensure_reply_target(
             raise MessageContentInvalidError("A quote requires a reply target.")
         return
     reply = await message_repository.read(reply_to_id)
-    if (
-        reply is None
-        or reply.conversation_id != conversation_id
-        or reply.created_seq < history_from_seq
-    ):
+    if reply is None or reply.conversation_id != conversation_id or reply.created_seq < history_from_seq:
         raise MessageNotFoundError("Reply target message not found.")
     if quote_text is not None:
         if reply.is_tombstone:

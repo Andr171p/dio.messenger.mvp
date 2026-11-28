@@ -6,8 +6,8 @@ __all__ = [
     "Auth",
     "AuthType",
     "AuthUser",
-    "PrincipalKind",
     "PermissionDeniedError",
+    "PrincipalKind",
     "UnauthorizedError",
     "principal_kind_from_roles",
 ]

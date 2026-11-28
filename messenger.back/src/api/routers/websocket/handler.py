@@ -155,7 +155,7 @@ async def _handle_ephemeral(
     conversation_raw = body.get("conversationId") or body.get("conversation_id")
     try:
         conversation_id = UUID(str(conversation_raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         send_reply(
             connection,
             "error",

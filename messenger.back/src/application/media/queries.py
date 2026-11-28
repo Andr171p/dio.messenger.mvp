@@ -36,7 +36,9 @@ async def get_media_asset(
 
 
 async def get_gallery_position(
-    asset_id: UUID, message_id: UUID, *,
+    asset_id: UUID,
+    message_id: UUID,
+    *,
     actor: AuthUser,
     media_repository: MediaRepository,
     conversation_repository: ConversationRepository,
@@ -44,7 +46,8 @@ async def get_gallery_position(
 ) -> MediaGalleryPositionDTO:
     asset = await media_repository.read(asset_id)
     if (
-        asset is None or asset.organization_id != actor.user.organization_id
+        asset is None
+        or asset.organization_id != actor.user.organization_id
         or asset.status is not MediaStatus.READY
     ):
         raise MediaNotFoundError("Media asset not found.")
@@ -58,8 +61,11 @@ async def get_gallery_position(
         membership_repository=membership_repository,
     )
     item = await media_repository.get_gallery_position(
-        conversation_id=asset.conversation_id, asset_id=asset_id, message_id=message_id,
-        history_from_seq=membership.history_from_seq, media_kind=kind,
+        conversation_id=asset.conversation_id,
+        asset_id=asset_id,
+        message_id=message_id,
+        history_from_seq=membership.history_from_seq,
+        media_kind=kind,
     )
     if item is None:
         raise MediaNotFoundError("Media is not in the visible gallery.")

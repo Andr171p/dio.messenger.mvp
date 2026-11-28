@@ -17,16 +17,16 @@ optional ``--reset-passwords`` which shells into the DioDesk backend container).
 
 from __future__ import annotations
 
+from typing import Any
+
 import argparse
 import json
 import subprocess
 import sys
-import uuid
-from typing import Any
-
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 IAM_URL = "http://127.0.0.1:8001"
 API_URL = "http://127.0.0.1:8002"
@@ -81,9 +81,7 @@ def _request(
     except urllib.error.HTTPError as exc:
         status = exc.code
         raw = exc.read().decode()
-        if status not in (
-            expected if isinstance(expected, tuple) else (expected,)
-        ):
+        if status not in (expected if isinstance(expected, tuple) else (expected,)):
             raise SystemExit(f"{method} {url} -> {status}: {raw}") from exc
 
     allowed = expected if isinstance(expected, tuple) else (expected,)
@@ -159,7 +157,7 @@ asyncio.run(main())
 
 def seed(api: str, iam: str) -> None:
     admin = login(iam, ADMIN_EMAIL, ADMIN_PASSWORD)
-    print(f"OK admin login")
+    print("OK admin login")
 
     anna_id, ivan_id, maria_id = (u["id"] for u in DEMO_USERS)
 
@@ -232,7 +230,7 @@ def seed(api: str, iam: str) -> None:
             continue
 
         if user["email"].startswith("anna"):
-            a = send_message(
+            send_message(
                 api,
                 token,
                 g,

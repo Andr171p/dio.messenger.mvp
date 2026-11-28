@@ -5,11 +5,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import asyncio
 import json
 import sys
 import uuid
-from typing import Any
+from http import HTTPStatus
 
 import aiohttp
 
@@ -19,7 +21,7 @@ ADMIN_EMAIL = "admin@admin.com"
 ADMIN_PASSWORD = "admin"
 
 
-class Fail(Exception):
+class SmokeTestError(Exception):
     pass
 
 
@@ -29,7 +31,7 @@ def _ok(name: str) -> None:
 
 def _require(cond: bool, msg: str) -> None:
     if not cond:
-        raise Fail(msg)
+        raise SmokeTestError(msg)
 
 
 async def login(session: aiohttp.ClientSession) -> str:
@@ -38,7 +40,7 @@ async def login(session: aiohttp.ClientSession) -> str:
     data.add_field("password", ADMIN_PASSWORD)
     async with session.post(f"{IAM_URL}/api/v1/auth/login", data=data) as resp:
         body = await resp.json()
-        _require(resp.status == 200, f"login status={resp.status} body={body}")
+        _require(resp.status == HTTPStatus.OK, f"login status={resp.status} body={body}")
         token = body["access_token"]
         _ok("IAM login")
         return token
@@ -72,12 +74,13 @@ async def api(
         return payload
 
 
-async def run() -> None:
+# Keep the ordered end-to-end scenario together so each step can use the previous response.
+async def run() -> None:  # noqa: C901, PLR0915
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         # health
         async with session.get(f"{API_URL}/health/live") as resp:
-            _require(resp.status == 200, "health/live failed")
+            _require(resp.status == HTTPStatus.OK, "health/live failed")
             _ok("messenger health")
 
         token = await login(session)
@@ -160,7 +163,8 @@ async def run() -> None:
             token=token,
             json_body={"blocks": [{"type": "text", "text": "hello edited"}]},
         )
-        _require(edited["revision"] == 2, f"revision={edited['revision']}")
+        expected_revision = 2
+        _require(edited["revision"] == expected_revision, f"revision={edited['revision']}")
         _ok("PATCH edit")
 
         # read cursor
@@ -267,7 +271,7 @@ async def run() -> None:
         _require(access.get("url"), "access url missing")
         async with session.get(access["url"]) as get_resp:
             data = await get_resp.read()
-            _require(get_resp.status == 200, f"download status={get_resp.status}")
+            _require(get_resp.status == HTTPStatus.OK, f"download status={get_resp.status}")
             _require(data == b"hello", f"download body={data!r}")
             _ok("POST media access + GET object")
 
@@ -380,7 +384,9 @@ async def run() -> None:
         deadline = asyncio.get_running_loop().time() + 10
         matched = False
         while asyncio.get_running_loop().time() < deadline:
-            evt = await asyncio.wait_for(ws.receive(), timeout=max(0.1, deadline - asyncio.get_running_loop().time()))
+            evt = await asyncio.wait_for(
+                ws.receive(), timeout=max(0.1, deadline - asyncio.get_running_loop().time())
+            )
             if evt.type != aiohttp.WSMsgType.TEXT:
                 continue
             evt_payload = json.loads(evt.data)
@@ -403,7 +409,9 @@ async def run() -> None:
         )
         _require(snapshot["conversation"]["id"] == conversation_id, "snapshot conversation id")
         _require(snapshot["snapshotEventSeq"] == snapshot["conversation"]["lastEventSeq"], "snapshot seq")
-        _require(isinstance(snapshot["messages"], list) and len(snapshot["messages"]) >= 1, "snapshot messages")
+        _require(
+            isinstance(snapshot["messages"], list) and len(snapshot["messages"]) >= 1, "snapshot messages"
+        )
         _ok("GET conversation snapshot")
 
         # kick/leave → access.revoked (отдельная беседа, чтобы не ломать предыдущий контекст)
@@ -497,7 +505,9 @@ async def run() -> None:
             expected=201,
         )
         _require(created_ticket.get("ticketId"), "ticketId missing")
-        _require(created_ticket.get("link", {}).get("resourceId") == created_ticket["ticketId"], "link mismatch")
+        _require(
+            created_ticket.get("link", {}).get("resourceId") == created_ticket["ticketId"], "link mismatch"
+        )
         _ok("POST create ticket from chat")
 
         link = await api(session, "GET", f"/v1/conversations/{itsm_id}/context-link", token=token)
@@ -668,7 +678,9 @@ async def run() -> None:
         _ok("GET /v1/system/metrics")
 
         conv_meta = await api(session, "GET", f"/v1/conversations/{conversation_id}", token=token)
-        _require("hasExternalMembers" in conv_meta or "has_external_members" in conv_meta, "hasExternalMembers")
+        _require(
+            "hasExternalMembers" in conv_meta or "has_external_members" in conv_meta, "hasExternalMembers"
+        )
         _ok("GET conversation hasExternalMembers")
 
         print("\nALL SMOKE CHECKS PASSED")
@@ -677,10 +689,10 @@ async def run() -> None:
 def main() -> int:
     try:
         asyncio.run(run())
-    except Fail as exc:
+    except SmokeTestError as exc:
         print(f"FAIL {exc}", file=sys.stderr)
         return 1
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"ERROR {exc}", file=sys.stderr)
         return 2
     return 0

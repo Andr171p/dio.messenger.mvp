@@ -121,7 +121,9 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
             )
         await self._session.flush()
 
-    async def link_to_message(self, *, message_id: UUID, asset_ids: list[UUID], start_position: int = 0) -> None:
+    async def link_to_message(
+        self, *, message_id: UUID, asset_ids: list[UUID], start_position: int = 0
+    ) -> None:
         for position, asset_id in enumerate(asset_ids, start=start_position):
             self._session.add(
                 MessageMediaOrm(
@@ -143,15 +145,24 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
         return await self._session.scalar(stmt)
 
     async def get_gallery_position(
-        self, *, conversation_id: UUID, asset_id: UUID, message_id: UUID,
-        history_from_seq: int, media_kind: str,
+        self,
+        *,
+        conversation_id: UUID,
+        asset_id: UUID,
+        message_id: UUID,
+        history_from_seq: int,
+        media_kind: str,
     ) -> MediaGalleryPositionDTO | None:
         order = (MessageOrm.created_seq, MessageMediaOrm.position)
         sent_as_file = MessageOrm.content["blocks"].contains(
             func.jsonb_build_array(
                 func.jsonb_build_object(
-                    "type", "media", "assetId", cast(MessageMediaOrm.asset_id, String),
-                    "presentation", "file",
+                    "type",
+                    "media",
+                    "assetId",
+                    cast(MessageMediaOrm.asset_id, String),
+                    "presentation",
+                    "file",
                 )
             )
         )
@@ -183,21 +194,32 @@ class SqlAlchemyMediaRepository(SqlAlchemyRepository[MediaAsset, MediaAssetOrm])
             )
             .subquery()
         )
-        result = await self._session.execute(select(gallery).where(
-            gallery.c.asset_id == asset_id, gallery.c.message_id == message_id,
-        ))
+        result = await self._session.execute(
+            select(gallery).where(
+                gallery.c.asset_id == asset_id,
+                gallery.c.message_id == message_id,
+            )
+        )
         row = result.mappings().one_or_none()
         if row is None:
             return None
         return MediaGalleryPositionDTO(
-            position=row["position"], total=row["total"],
-            sender_id=row["sender_id"], sent_at=row["sent_at"],
+            position=row["position"],
+            total=row["total"],
+            sender_id=row["sender_id"],
+            sent_at=row["sent_at"],
             previous=MediaGalleryKeyDTO(
-                asset_id=row["previous_asset"], message_id=row["previous_message"],
-            ) if row["previous_asset"] else None,
+                asset_id=row["previous_asset"],
+                message_id=row["previous_message"],
+            )
+            if row["previous_asset"]
+            else None,
             next=MediaGalleryKeyDTO(
-                asset_id=row["next_asset"], message_id=row["next_message"],
-            ) if row["next_asset"] else None,
+                asset_id=row["next_asset"],
+                message_id=row["next_message"],
+            )
+            if row["next_asset"]
+            else None,
         )
 
     async def claim_for_scanning(self, *, limit: int = 10) -> list[MediaAsset]:

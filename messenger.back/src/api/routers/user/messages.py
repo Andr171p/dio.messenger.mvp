@@ -1,29 +1,29 @@
-import time
 from typing import Annotated
 
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 
+from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
 from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.media import MediaRepositoryDep
-from src.api.dependencies.policies import ConversationPolicyRepositoryDep
-from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
-from src.api.dependencies.threads import ThreadRepositoryDep
-from src.api.dependencies.realtime import EphemeralStoreDep
+from src.api.dependencies.policies import ConversationPolicyRepositoryDep
 from src.api.dependencies.reactions import ReactionRepositoryDep
+from src.api.dependencies.realtime import EphemeralStoreDep
+from src.api.dependencies.threads import ThreadRepositoryDep
 from src.application.messaging import commands, queries
 from src.application.messaging.dtos import (
     ConversationEventDTO,
+    DeliveryCursorDTO,
     EditMessageDTO,
     MessageDTO,
     MessageReadersDTO,
     MessageReceiptRequestDTO,
     MessageReceiptSummaryDTO,
-    DeliveryCursorDTO,
     ReadCursorDTO,
     SendMessageDTO,
 )
@@ -34,13 +34,20 @@ router = APIRouter(prefix="/v1/conversations", tags=["messages"])
 
 @router.post("/{conversation_id}/message-receipts")
 async def message_receipt_summaries(
-    conversation_id: UUID, dto: MessageReceiptRequestDTO, auth: CurrentUser,
-    conversation_repository: ConversationRepositoryDep, membership_repository: MembershipRepositoryDep,
+    conversation_id: UUID,
+    dto: MessageReceiptRequestDTO,
+    auth: CurrentUser,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
     message_repository: MessageRepositoryDep,
 ) -> dict[UUID, MessageReceiptSummaryDTO]:
     return await queries.get_receipt_summaries(
-        conversation_id, dto.message_ids, actor=auth, conversation_repository=conversation_repository,
-        membership_repository=membership_repository, message_repository=message_repository,
+        conversation_id,
+        dto.message_ids,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        message_repository=message_repository,
     )
 
 
@@ -56,9 +63,14 @@ async def message_readers(
     limit: Annotated[int, Query(ge=1, le=50)] = 20,
 ) -> MessageReadersDTO:
     return await queries.get_message_readers(
-        conversation_id, message_id, actor=auth, conversation_repository=conversation_repository,
-        membership_repository=membership_repository, message_repository=message_repository,
-        offset=offset, limit=limit,
+        conversation_id,
+        message_id,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        message_repository=message_repository,
+        offset=offset,
+        limit=limit,
     )
 
 

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -5,8 +7,8 @@ from fastapi import APIRouter, Query, status
 from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import MembershipRepositoryDep
-from src.application.audit.dtos import AuditEventDTO
 from src.application.audit import queries
+from src.application.audit.dtos import AuditEventDTO
 
 router = APIRouter(prefix="/v1/audit", tags=["audit"])
 
@@ -20,8 +22,8 @@ async def list_audit(
     auth: CurrentUser,
     membership_repository: MembershipRepositoryDep,
     audit_repository: AuditRepositoryDep,
-    conversation_id: UUID = Query(..., alias="conversationId"),
-    limit: int = Query(100, ge=1, le=500),
+    conversation_id: Annotated[UUID, Query(alias="conversationId")],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
 ) -> list[AuditEventDTO]:
     return await queries.list_conversation_audit(
         conversation_id=conversation_id,

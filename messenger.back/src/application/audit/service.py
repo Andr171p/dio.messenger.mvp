@@ -1,4 +1,5 @@
 from typing import Any
+
 from uuid import UUID
 
 from src.application.audit.repositories import AuditRepository

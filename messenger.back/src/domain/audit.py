@@ -1,5 +1,6 @@
-from dataclasses import dataclass, field
 from typing import Any
+
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from ddf.domain.models import Entity

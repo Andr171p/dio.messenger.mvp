@@ -5,7 +5,12 @@ from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
-from src.application.itsm.dtos import ContextLinkDTO, ResourcePreviewDTO, ResourceReference, TicketSuggestionDTO
+from src.application.itsm.dtos import (
+    ContextLinkDTO,
+    ResourcePreviewDTO,
+    ResourceReference,
+    TicketSuggestionDTO,
+)
 from src.application.itsm.exceptions import ItsmNotFoundError, UnsupportedResourceError
 from src.application.itsm.policies import is_guest_role
 from src.application.itsm.ports import ResourcePreviewResolver
@@ -20,7 +25,7 @@ from src.application.messaging.repositories import MessageRepository
 from src.domain.memberships import MemberRole
 
 
-def _link_dto(link) -> ContextLinkDTO:  # noqa: ANN001
+def _link_dto(link) -> ContextLinkDTO:
     return ContextLinkDTO(
         id=link.id,
         conversation_id=link.conversation_id,
@@ -64,7 +69,9 @@ async def get_resource_preview(
         guest = is_guest_role(membership.role)
 
     if include_activity:
-        return await preview_resolver.preview(ref, access_token=access_token, guest=guest, include_activity=True)
+        return await preview_resolver.preview(
+            ref, access_token=access_token, guest=guest, include_activity=True
+        )
     return await preview_resolver.preview(ref, access_token=access_token, guest=guest)
 
 

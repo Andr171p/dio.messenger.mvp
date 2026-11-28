@@ -64,27 +64,47 @@ async def list_threads(
         thread_repository=thread_repository,
     )
 
+
 @router.patch("/{conversation_id}/threads/{thread_id}")
 async def rename_thread(
-    conversation_id: UUID, thread_id: UUID, dto: RenameThreadDTO, auth: CurrentUser,
-    session: DBSession, conversation_repository: ConversationRepositoryDep,
-    membership_repository: MembershipRepositoryDep, thread_repository: ThreadRepositoryDep,
+    conversation_id: UUID,
+    thread_id: UUID,
+    dto: RenameThreadDTO,
+    auth: CurrentUser,
+    session: DBSession,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
+    thread_repository: ThreadRepositoryDep,
 ) -> ThreadDTO:
     return await commands.manage_thread(
-        conversation_id, thread_id, title=dto.title, actor=auth,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
-        thread_repository=thread_repository, uow=session,
+        conversation_id,
+        thread_id,
+        title=dto.title,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        thread_repository=thread_repository,
+        uow=session,
     )
 
 
 @router.delete("/{conversation_id}/threads/{thread_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_thread(
-    conversation_id: UUID, thread_id: UUID, auth: CurrentUser, session: DBSession,
-    conversation_repository: ConversationRepositoryDep, membership_repository: MembershipRepositoryDep,
+    conversation_id: UUID,
+    thread_id: UUID,
+    auth: CurrentUser,
+    session: DBSession,
+    conversation_repository: ConversationRepositoryDep,
+    membership_repository: MembershipRepositoryDep,
     thread_repository: ThreadRepositoryDep,
 ) -> None:
     await commands.manage_thread(
-        conversation_id, thread_id, title=None, actor=auth,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
-        thread_repository=thread_repository, uow=session,
+        conversation_id,
+        thread_id,
+        title=None,
+        actor=auth,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        thread_repository=thread_repository,
+        uow=session,
     )

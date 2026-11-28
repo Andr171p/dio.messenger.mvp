@@ -31,38 +31,56 @@ async def test_quote_survives_storage_history_and_retry(db_session) -> None:
     await seed_membership(db_session, conversation=conversation, principal_id=sender_id, history_from_seq=2)
     await seed_membership(db_session, conversation=conversation, principal_id=conversation.created_by)
     hidden = await seed_message(
-        db_session, conversation=conversation, sender_id=conversation.created_by,
-        created_seq=1, text="VPN credentials",
+        db_session,
+        conversation=conversation,
+        sender_id=conversation.created_by,
+        created_seq=1,
+        text="VPN credentials",
     )
     original = await seed_message(
-        db_session, conversation=conversation, sender_id=conversation.created_by,
-        created_seq=2, text="Check **VPN** access first.",
+        db_session,
+        conversation=conversation,
+        sender_id=conversation.created_by,
+        created_seq=2,
+        text="Check **VPN** access first.",
     )
     actor = AuthUser(
-        id=sender_id, type=AuthType.USER,
-        user=Auth.User(id=sender_id, email="sender@example.org", organization_id=conversation.organization_id),
-    )
-    reader = AuthUser(
-        id=conversation.created_by, type=AuthType.USER,
+        id=sender_id,
+        type=AuthType.USER,
         user=Auth.User(
-            id=conversation.created_by, email="reader@example.org", organization_id=conversation.organization_id,
+            id=sender_id, email="sender@example.org", organization_id=conversation.organization_id
         ),
     )
-    repositories = dict(
-        conversation_repository=SqlAlchemyConversationRepository(db_session),
-        membership_repository=SqlAlchemyMembershipRepository(db_session),
-        message_repository=SqlAlchemyMessageRepository(db_session),
+    reader = AuthUser(
+        id=conversation.created_by,
+        type=AuthType.USER,
+        user=Auth.User(
+            id=conversation.created_by,
+            email="reader@example.org",
+            organization_id=conversation.organization_id,
+        ),
     )
+    repositories = {
+        "conversation_repository": SqlAlchemyConversationRepository(db_session),
+        "membership_repository": SqlAlchemyMembershipRepository(db_session),
+        "message_repository": SqlAlchemyMessageRepository(db_session),
+    }
     events = SqlAlchemyConversationEventStore(db_session)
     send_dependencies = dict(
-        **repositories, conversation_id=conversation.id, actor=actor, event_store=events,
+        **repositories,
+        conversation_id=conversation.id,
+        actor=actor,
+        event_store=events,
         media_repository=SqlAlchemyMediaRepository(db_session),
         policy_repository=SqlAlchemyConversationPolicyRepository(db_session),
         outbox_store=SqlAlchemyOutboxStore(db_session),
-        audit_repository=SqlAlchemyAuditRepository(db_session), uow=db_session,
+        audit_repository=SqlAlchemyAuditRepository(db_session),
+        uow=db_session,
     )
     request = SendMessageDTO(
-        client_message_id=uuid4(), reply_to_id=original, quote_text="VPN access",
+        client_message_id=uuid4(),
+        reply_to_id=original,
+        quote_text="VPN access",
         blocks=[TextBlock(text="Confirmed.")],
     )
     with pytest.raises(MessageNotFoundError):
@@ -77,12 +95,17 @@ async def test_quote_survives_storage_history_and_retry(db_session) -> None:
     history = await get_history(conversation.id, actor=reader, **repositories)
     assert history[-1].reply_to_id == original
     assert history[-1].content["quoteText"] == "VPN access"
-    event = (await get_events(
-        conversation.id, actor=reader, after_seq=response.created_seq - 1, limit=1,
-        conversation_repository=repositories["conversation_repository"],
-        membership_repository=repositories["membership_repository"],
-        event_store=events,
-    ))[0]
+    event = (
+        await get_events(
+            conversation.id,
+            actor=reader,
+            after_seq=response.created_seq - 1,
+            limit=1,
+            conversation_repository=repositories["conversation_repository"],
+            membership_repository=repositories["membership_repository"],
+            event_store=events,
+        )
+    )[0]
     assert event.payload["content"]["quoteText"] == "VPN access"
     target = await get_history(conversation.id, actor=reader, around_message_id=original, **repositories)
     assert target[-1].id == original

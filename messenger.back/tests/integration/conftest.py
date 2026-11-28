@@ -86,5 +86,3 @@ async def db_session(integration_engine: AsyncEngine) -> AsyncIterator[AsyncSess
         finally:
             await session.close()
             await transaction.rollback()
-
-

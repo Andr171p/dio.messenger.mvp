@@ -26,7 +26,8 @@ def build_message_dto(message: Message, *, event_seq: int | None = None) -> Mess
 
 
 async def build_history_message_dtos(
-    messages: list[Message], reaction_repository: ReactionRepository | None,
+    messages: list[Message],
+    reaction_repository: ReactionRepository | None,
 ) -> list[MessageDTO]:
     if reaction_repository is None:
         return [build_message_dto(message) for message in messages]

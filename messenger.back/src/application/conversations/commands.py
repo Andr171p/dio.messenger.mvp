@@ -9,6 +9,8 @@ from ddf.application.outbox import OutboxStore, save_events_to_outbox
 from ddf.application.uow import UnitOfWork
 from ddf.domain.exceptions import InvalidStateError
 
+from src.application.audit.repositories import AuditRepository
+from src.application.audit.service import log_audit
 from src.application.auth import AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.dtos import (
@@ -19,10 +21,8 @@ from src.application.conversations.dtos import (
     CreateGroupConversationDTO,
 )
 from src.application.conversations.exceptions import ConversationNotFoundError
-from src.application.audit.repositories import AuditRepository
-from src.application.audit.service import log_audit
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.application.policies.helpers import assert_external_members_allowed, effective_policy
+from src.application.policies.helpers import assert_external_members_allowed
 from src.application.policies.repositories import ConversationPolicyRepository
 from src.domain.conversations import Conversation, ConversationType
 from src.domain.events import ConversationEvent
@@ -129,7 +129,9 @@ async def create_group_conversation(
         await policy_repository.upsert(policy)
 
     await uow.commit()
-    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
+    return await conversation_dto(
+        conversation, principal_id=actor.user.id, membership_repository=membership_repository
+    )
 
 
 async def create_direct_conversation(
@@ -150,7 +152,9 @@ async def create_direct_conversation(
         principal_b=dto.peer_id,
     )
     if existing is not None:
-        return await conversation_dto(existing, principal_id=actor.user.id, membership_repository=membership_repository)
+        return await conversation_dto(
+            existing, principal_id=actor.user.id, membership_repository=membership_repository
+        )
 
     conversation = Conversation(
         organization_id=organization_id,
@@ -177,7 +181,9 @@ async def create_direct_conversation(
         )
 
     await uow.commit()
-    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
+    return await conversation_dto(
+        conversation, principal_id=actor.user.id, membership_repository=membership_repository
+    )
 
 
 async def require_active_membership(
@@ -201,7 +207,7 @@ async def require_active_membership(
     return conversation, membership
 
 
-async def add_member(
+async def add_member(  # noqa: C901
     dto: AddMemberDTO,
     *,
     conversation_id: UUID,
@@ -398,7 +404,10 @@ async def update_group_avatar(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
-    if conversation.type is not ConversationType.GROUP or membership.role not in {MemberRole.OWNER, MemberRole.ADMIN}:
+    if conversation.type is not ConversationType.GROUP or membership.role not in {
+        MemberRole.OWNER,
+        MemberRole.ADMIN,
+    }:
         raise PermissionDeniedError("Insufficient permissions to change group avatar.")
     changes = {}
     if conversation.avatar_url != avatar_url:
@@ -415,13 +424,15 @@ async def update_group_avatar(
         conversation.updated_at = datetime.now(UTC)
         await conversation_repository.update(conversation)
         seq = await conversation_repository.allocate_event_seq(conversation.id)
-        await event_store.append(ConversationEvent(
-            conversation_id=conversation.id,
-            organization_id=conversation.organization_id,
-            seq=seq,
-            type="conversation.updated",
-            payload=changes,
-        ))
+        await event_store.append(
+            ConversationEvent(
+                conversation_id=conversation.id,
+                organization_id=conversation.organization_id,
+                seq=seq,
+                type="conversation.updated",
+                payload=changes,
+            )
+        )
     await uow.commit()
 
 
@@ -436,14 +447,21 @@ async def transfer_group_ownership(
 ) -> None:
     await conversation_repository.read(conversation_id, with_lock=True)
     conversation, owner = await require_active_membership(
-        conversation_id=conversation_id, actor=actor,
+        conversation_id=conversation_id,
+        actor=actor,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
     if conversation.type is not ConversationType.GROUP or owner.role is not MemberRole.OWNER:
         raise PermissionDeniedError("Only the group owner can transfer ownership.")
-    target = await membership_repository.get_active(conversation_id=conversation_id, principal_id=principal_id)
-    if target is None or target.role not in {MemberRole.MEMBER, MemberRole.ADMIN} or target.principal_id == owner.principal_id:
+    target = await membership_repository.get_active(
+        conversation_id=conversation_id, principal_id=principal_id
+    )
+    if (
+        target is None
+        or target.role not in {MemberRole.MEMBER, MemberRole.ADMIN}
+        or target.principal_id == owner.principal_id
+    ):
         raise PermissionDeniedError("Select an active member or administrator.")
     owner.role = MemberRole.ADMIN
     target.role = MemberRole.OWNER

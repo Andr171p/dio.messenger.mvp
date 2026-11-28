@@ -21,7 +21,7 @@ from src.infra.realtime.sessions import build_access_revoked_event
 REALTIME_FANOUT_QUEUE = "messenger.realtime.fanout"
 
 
-def to_realtime_event(domain_event: DomainEvent) -> Event[dict[str, Any]] | None:
+def to_realtime_event(domain_event: DomainEvent) -> Event[dict[str, Any]] | None:  # noqa: C901, PLR0911
     """Строит compact WS-событие. Неизвестный тип — None (игнор)."""
 
     if isinstance(domain_event, MessageCreated):

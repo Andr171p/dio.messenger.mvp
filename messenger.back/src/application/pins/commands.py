@@ -5,6 +5,8 @@ from ddf.application.exceptions import UniqueConstraintViolationError
 from ddf.application.outbox import OutboxStore, save_events_to_outbox
 from ddf.application.uow import UnitOfWork
 
+from src.application.audit.repositories import AuditRepository
+from src.application.audit.service import log_audit
 from src.application.auth import AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
@@ -13,8 +15,6 @@ from src.application.messaging.enrich import snapshot_text_from_content
 from src.application.messaging.exceptions import MessageNotFoundError
 from src.application.messaging.formatting import visible_formatted_text
 from src.application.messaging.repositories import ConversationEventStore, MessageRepository
-from src.application.audit.repositories import AuditRepository
-from src.application.audit.service import log_audit
 from src.application.pins.dtos import AddPinDTO, PinDTO
 from src.application.pins.exceptions import PinNotFoundError
 from src.application.pins.repositories import PinRepository
@@ -210,7 +210,8 @@ async def list_pins(
         membership_repository=membership_repository,
     )
     items = await pin_repository.list_for_conversation(
-        conversation_id, history_from_seq=membership.history_from_seq,
+        conversation_id,
+        history_from_seq=membership.history_from_seq,
     )
     return [
         PinDTO(

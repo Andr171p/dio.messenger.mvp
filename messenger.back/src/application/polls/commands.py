@@ -10,8 +10,8 @@ from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.media.repositories import MediaRepository
-from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 from src.application.messaging.commands import _ensure_media_attachable
+from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 from src.application.policies.helpers import assert_attachments_allowed, effective_policy, is_guest_membership
 from src.application.policies.repositories import ConversationPolicyRepository
 from src.application.polls.content import build_poll_message_content, mark_poll_closed_in_content
@@ -20,11 +20,11 @@ from src.application.polls.exceptions import PollClosedError, PollInvalidError, 
 from src.application.polls.repositories import PollRepository
 from src.application.threads.commands import ensure_thread_sendable
 from src.application.threads.repositories import ThreadRepository
+from src.domain.conversations import Conversation
 from src.domain.events import ConversationEvent
 from src.domain.media.types import MediaPresentation
-from src.domain.messages import Message, create_message
-from src.domain.conversations import Conversation
 from src.domain.memberships import ConversationMembership, MemberRole
+from src.domain.messages import Message, create_message
 from src.domain.polls import Poll, PollOption, create_poll
 from src.domain.polls.events import PollOptionAdded
 
@@ -67,7 +67,7 @@ def _to_poll_dto(
     )
 
 
-async def create_poll_message(
+async def create_poll_message(  # noqa: C901, PLR0915
     command: CreatePollDTO,
     *,
     conversation_id: UUID,
@@ -229,19 +229,29 @@ async def create_poll_message(
 
 
 async def _poll_assets(
-    options: list[PollOption], actor: AuthUser, conversation: Conversation,
-    media_repository: MediaRepository, policy_repository: ConversationPolicyRepository | None,
+    options: list[PollOption],
+    actor: AuthUser,
+    conversation: Conversation,
+    media_repository: MediaRepository,
+    policy_repository: ConversationPolicyRepository | None,
 ) -> list[UUID]:
     blocks = [(option.asset_id, MediaPresentation.FILE) for option in options if option.asset_id]
     if not blocks:
         return []
     policy = await policy_repository.get_for_conversation(conversation.id) if policy_repository else None
-    assert_attachments_allowed(effective_policy(
-        policy, conversation_id=conversation.id, organization_id=conversation.organization_id,
-    ))
+    assert_attachments_allowed(
+        effective_policy(
+            policy,
+            conversation_id=conversation.id,
+            organization_id=conversation.organization_id,
+        )
+    )
     return await _ensure_media_attachable(
-        blocks=blocks, actor=actor, organization_id=conversation.organization_id,
-        conversation_id=conversation.id, media_repository=media_repository,
+        blocks=blocks,
+        actor=actor,
+        organization_id=conversation.organization_id,
+        conversation_id=conversation.id,
+        media_repository=media_repository,
     )
 
 
@@ -294,7 +304,11 @@ async def get_visible_poll(
 
 
 async def poll_state(
-    poll: Poll, *, event_seq: int, voter_id: UUID, poll_repository: PollRepository,
+    poll: Poll,
+    *,
+    event_seq: int,
+    voter_id: UUID,
+    poll_repository: PollRepository,
 ) -> PollDTO:
     votes = await poll_repository.list_votes_for_poll(poll.id)
     return _to_poll_dto(
@@ -323,44 +337,74 @@ async def append_poll_option(
     uow: UnitOfWork,
 ) -> PollDTO:
     conversation, _, poll, message = await get_visible_poll(
-        conversation_id=conversation_id, poll_id=poll_id, actor=actor,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
-        poll_repository=poll_repository, message_repository=message_repository, lock=True,
+        conversation_id=conversation_id,
+        poll_id=poll_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
+        poll_repository=poll_repository,
+        message_repository=message_repository,
+        lock=True,
     )
     if poll.created_by != actor.user.id:
         raise PermissionDeniedError("Only the creator can add poll options.")
     if any(option.id == command.option_id for option in poll.options):
         return await poll_state(
-            poll, event_seq=conversation.last_event_seq, voter_id=actor.user.id, poll_repository=poll_repository,
+            poll,
+            event_seq=conversation.last_event_seq,
+            voter_id=actor.user.id,
+            poll_repository=poll_repository,
         )
     poll.ensure_open()
     label = command.label.strip()
     if not label or any(option.label.casefold() == label.casefold() for option in poll.options):
         raise PollInvalidError("Enter a distinct option label.")
-    if len(poll.options) >= 10:
+    max_options = 10
+    if len(poll.options) >= max_options:
         raise PollInvalidError("A poll can contain at most 10 options.")
     option = PollOption(
-        id=command.option_id, poll_id=poll.id, label=label, position=len(poll.options),
-        link=str(command.link) if command.link else None, asset_id=command.asset_id,
+        id=command.option_id,
+        poll_id=poll.id,
+        label=label,
+        position=len(poll.options),
+        link=str(command.link) if command.link else None,
+        asset_id=command.asset_id,
     )
     assets = await _poll_assets([option], actor, conversation, media_repository, policy_repository)
     await poll_repository.add_option(option)
     if assets and not any(existing.asset_id == option.asset_id for existing in poll.options):
         await media_repository.link_to_message(
-            message_id=message.id, asset_ids=assets, start_position=option.position,
+            message_id=message.id,
+            asset_ids=assets,
+            start_position=option.position,
         )
     poll.options.append(option)
     seq = await conversation_repository.allocate_event_seq(conversation.id)
-    poll.register_event(PollOptionAdded(
-        organization_id=conversation.organization_id, conversation_id=conversation.id,
-        poll_id=poll.id, message_id=message.id, message_created_seq=message.created_seq,
-        event_seq=seq, created_by=actor.user.id,
-    ))
-    await event_store.append(ConversationEvent(
-        conversation_id=conversation.id, organization_id=conversation.organization_id,
-        seq=seq, type="poll.option_added",
-        payload={"pollId": str(poll.id), "messageId": str(message.id), "createdSeq": message.created_seq, "eventSeq": seq},
-    ))
+    poll.register_event(
+        PollOptionAdded(
+            organization_id=conversation.organization_id,
+            conversation_id=conversation.id,
+            poll_id=poll.id,
+            message_id=message.id,
+            message_created_seq=message.created_seq,
+            event_seq=seq,
+            created_by=actor.user.id,
+        )
+    )
+    await event_store.append(
+        ConversationEvent(
+            conversation_id=conversation.id,
+            organization_id=conversation.organization_id,
+            seq=seq,
+            type="poll.option_added",
+            payload={
+                "pollId": str(poll.id),
+                "messageId": str(message.id),
+                "createdSeq": message.created_seq,
+                "eventSeq": seq,
+            },
+        )
+    )
     await save_events_to_outbox(outbox_store, poll)
     state = await poll_state(poll, event_seq=seq, voter_id=actor.user.id, poll_repository=poll_repository)
     await uow.commit()
@@ -392,9 +436,14 @@ async def vote_poll(
         lock=True,
     )
     current = await poll_state(
-        poll, event_seq=conversation.last_event_seq, voter_id=actor.user.id, poll_repository=poll_repository,
+        poll,
+        event_seq=conversation.last_event_seq,
+        voter_id=actor.user.id,
+        poll_repository=poll_repository,
     )
-    if command.operation_id and await poll_repository.has_vote_operation(poll.id, actor.user.id, command.operation_id):
+    if command.operation_id and await poll_repository.has_vote_operation(
+        poll.id, actor.user.id, command.operation_id
+    ):
         return current
     if poll.is_closed:
         raise PollClosedError("Poll is closed.")
@@ -471,7 +520,10 @@ async def close_poll(
 
     if poll.is_closed:
         return await poll_state(
-            poll, event_seq=conversation.last_event_seq, voter_id=actor.user.id, poll_repository=poll_repository,
+            poll,
+            event_seq=conversation.last_event_seq,
+            voter_id=actor.user.id,
+            poll_repository=poll_repository,
         )
 
     seq = await conversation_repository.allocate_event_seq(conversation.id)

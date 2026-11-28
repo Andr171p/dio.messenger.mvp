@@ -86,7 +86,5 @@ async def websocket_endpoint(
             session_registry=session_registry,
         ),
         admission=admission,
-        initial_rooms=(
-            user_room(organization_id=claims.organization_id, user_id=claims.user_id),
-        ),
+        initial_rooms=(user_room(organization_id=claims.organization_id, user_id=claims.user_id),),
     )

@@ -2,12 +2,12 @@ from uuid import UUID
 
 from ddf.application.uow import UnitOfWork
 
+from src.application.audit.repositories import AuditRepository
+from src.application.audit.service import log_audit
 from src.application.auth import AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.application.audit.repositories import AuditRepository
-from src.application.audit.service import log_audit
 from src.application.policies.dtos import ConversationPolicyDTO, UpdateConversationPolicyDTO
 from src.application.policies.helpers import effective_policy
 from src.application.policies.repositories import ConversationPolicyRepository
@@ -51,7 +51,7 @@ async def get_conversation_policy(
     return _to_dto(policy)
 
 
-async def update_conversation_policy(
+async def update_conversation_policy(  # noqa: C901
     conversation_id: UUID,
     dto: UpdateConversationPolicyDTO,
     *,

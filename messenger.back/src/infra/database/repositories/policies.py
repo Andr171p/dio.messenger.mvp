@@ -45,9 +45,7 @@ class ConversationPolicyMapper:
         )
 
 
-class SqlAlchemyConversationPolicyRepository(
-    SqlAlchemyRepository[ConversationPolicy, ConversationPolicyOrm]
-):
+class SqlAlchemyConversationPolicyRepository(SqlAlchemyRepository[ConversationPolicy, ConversationPolicyOrm]):
     model = ConversationPolicyOrm
     data_mapper = ConversationPolicyMapper()
 

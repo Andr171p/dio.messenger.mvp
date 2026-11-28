@@ -7,7 +7,6 @@ from ddf.application.uow import UnitOfWork
 
 from src.application.auth import AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
-from src.domain.memberships import MemberRole
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.messaging.exceptions import MessageNotFoundError
@@ -16,6 +15,7 @@ from src.application.threads.dtos import CreateThreadDTO, ThreadDTO
 from src.application.threads.exceptions import ThreadInvalidError, ThreadNotFoundError
 from src.application.threads.repositories import ThreadRepository
 from src.domain.events import ConversationEvent
+from src.domain.memberships import MemberRole
 from src.domain.threads import ConversationThread, create_thread
 
 
@@ -165,6 +165,7 @@ async def ensure_thread_sendable(
     if root is None or root.created_seq < membership_history_from_seq:
         raise ThreadInvalidError("Thread root is outside your history visibility.")
     return thread
+
 
 async def manage_thread(
     conversation_id: UUID,

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from typing import Any
+
 from uuid import UUID, uuid4
 
 from ddf.application.outbox import OutboxStore, save_events_to_outbox
 from ddf.application.uow import UnitOfWork
 
+from src.application.audit.repositories import AuditRepository
+from src.application.audit.service import log_audit
 from src.application.auth import Auth, AuthUser
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
@@ -27,20 +30,17 @@ from src.application.itsm.dtos import (
     ResourceActionResultDTO,
 )
 from src.application.itsm.exceptions import ContextLinkConflictError, UnsupportedResourceError
-from src.application.itsm.priority import is_p1_priority
-from src.application.itsm.ticket_suggestion import build_ticket_suggestion_fields, default_suggestion_priority
 from src.application.itsm.ports import ResourceActionExecutor, TicketCreator
-from src.application.audit.repositories import AuditRepository
-from src.application.audit.service import log_audit
+from src.application.itsm.priority import is_p1_priority
 from src.application.itsm.repositories import ContextLinkRepository
+from src.application.itsm.ticket_suggestion import build_ticket_suggestion_fields, default_suggestion_priority
+from src.application.messaging.exceptions import MessageNotFoundError
+from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 from src.domain.conversations import Conversation, ConversationType
 from src.domain.events import ConversationEvent
 from src.domain.itsm import ContextLink
 from src.domain.memberships import ConversationMembership, MemberRole
 from src.domain.messages.logic import create_message
-
-from src.application.messaging.exceptions import MessageNotFoundError
-from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 
 
 def _validate_ticket_ref(provider: str, resource_type: str, resource_id: str) -> None:

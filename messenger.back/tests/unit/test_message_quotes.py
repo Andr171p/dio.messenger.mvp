@@ -21,7 +21,7 @@ async def test_quote_is_verified_against_visible_original() -> None:
         content={"blocks": [{"type": "text", "text": "Check VPN access first."}]},
     )
     repo = SimpleNamespace(read=AsyncMock(return_value=source))
-    kwargs = dict(conversation_id=conversation_id, reply_to_id=uuid4(), message_repository=repo)
+    kwargs = {"conversation_id": conversation_id, "reply_to_id": uuid4(), "message_repository": repo}
 
     await _ensure_reply_target(**kwargs, quote_text="VPN access", history_from_seq=8)
     with pytest.raises(MessageContentInvalidError):
@@ -36,17 +36,21 @@ async def test_quote_is_verified_against_visible_original() -> None:
     with pytest.raises(MessageNotFoundError):
         await _ensure_reply_target(**kwargs, quote_text="VPN access", history_from_seq=8)
     with pytest.raises(MessageContentInvalidError):
-        await _ensure_reply_target(**{**kwargs, "reply_to_id": None}, quote_text="VPN access", history_from_seq=8)
+        await _ensure_reply_target(
+            **{**kwargs, "reply_to_id": None}, quote_text="VPN access", history_from_seq=8
+        )
 
 
 def test_quote_preserves_snapshot_and_is_part_of_idempotency() -> None:
     body = [{"type": "text", "text": "I checked."}]
-    request = SendMessageDTO.model_validate({
-        "clientMessageId": uuid4(),
-        "replyToId": uuid4(),
-        "quoteText": " VPN access ",
-        "blocks": body,
-    })
+    request = SendMessageDTO.model_validate(
+        {
+            "clientMessageId": uuid4(),
+            "replyToId": uuid4(),
+            "quoteText": " VPN access ",
+            "blocks": body,
+        }
+    )
     content = build_send_content(request, {"blocks": body}, forwarded_snapshot=None)
     assert content == {"blocks": body, "quoteText": "VPN access"}
     assert same_send_fingerprint(content, request)

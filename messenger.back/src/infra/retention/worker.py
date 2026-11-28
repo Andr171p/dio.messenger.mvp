@@ -18,7 +18,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infra.database.connection import create_database
-from src.infra.database.models import ConversationEventOrm, ConversationOrm, MessageOrm
+from src.infra.database.models import ConversationOrm, MessageOrm
 from src.infra.retention.config import RetentionConfig, RetentionWorkerConfig
 
 logger = logging.getLogger(__name__)

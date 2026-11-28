@@ -11,10 +11,14 @@ from src.infra.database.models.threads import ConversationThreadOrm
 
 
 def visible_thread_message():
-    return ~select(ConversationThreadOrm.id).where(
-        ConversationThreadOrm.id == MessageOrm.thread_id,
-        ConversationThreadOrm.deleted_at.is_not(None),
-    ).exists()
+    return (
+        ~select(ConversationThreadOrm.id)
+        .where(
+            ConversationThreadOrm.id == MessageOrm.thread_id,
+            ConversationThreadOrm.deleted_at.is_not(None),
+        )
+        .exists()
+    )
 
 
 class MessageMapper:
@@ -59,11 +63,13 @@ class MessageMapper:
 
 class SqlAlchemyMessageRepository(SqlAlchemyRepository[Message, MessageOrm]):
     async def list_by_ids(self, conversation_id: UUID, ids: list[UUID]) -> list[Message]:
-        rows = await self._session.scalars(select(MessageOrm).where(
-            MessageOrm.conversation_id == conversation_id,
-            MessageOrm.id.in_(ids),
-            MessageOrm.deleted_at.is_(None),
-        ))
+        rows = await self._session.scalars(
+            select(MessageOrm).where(
+                MessageOrm.conversation_id == conversation_id,
+                MessageOrm.id.in_(ids),
+                MessageOrm.deleted_at.is_(None),
+            )
+        )
         return [MessageMapper.from_model(row) for row in rows]
 
     model = MessageOrm

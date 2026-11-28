@@ -124,10 +124,7 @@ def rms_envelope_from_pcm(pcm: bytes, bar_count: int) -> list[int]:
         sums[bar] += value * value
         counts[bar] += 1
 
-    rms = [
-        int(sqrt(sums[i] / counts[i])) if counts[i] else 0
-        for i in range(bar_count)
-    ]
+    rms = [int(sqrt(sums[i] / counts[i])) if counts[i] else 0 for i in range(bar_count)]
     peak = max(rms)
     if peak <= 0:
         return [0] * bar_count

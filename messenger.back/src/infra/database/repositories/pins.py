@@ -1,4 +1,5 @@
 from typing import Any
+
 from uuid import UUID
 
 from ddf.application.exceptions import UniqueConstraintViolationError
@@ -75,7 +76,10 @@ class SqlAlchemyPinRepository:
         return existing
 
     async def list_for_conversation(
-        self, conversation_id: UUID, *, history_from_seq: int,
+        self,
+        conversation_id: UUID,
+        *,
+        history_from_seq: int,
     ) -> list[tuple[MessagePin, dict[str, Any]]]:
         stmt = (
             select(MessagePinOrm, MessageOrm.created_seq, MessageOrm.content)

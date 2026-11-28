@@ -84,7 +84,10 @@ class SqlAlchemyThreadRepository:
             .where(
                 ConversationThreadOrm.conversation_id == conversation_id,
                 ConversationThreadOrm.deleted_at.is_(None),
-                or_(ConversationThreadOrm.root_message_id.is_(None), MessageOrm.created_seq >= history_from_seq),
+                or_(
+                    ConversationThreadOrm.root_message_id.is_(None),
+                    MessageOrm.created_seq >= history_from_seq,
+                ),
             )
             .order_by(ConversationThreadOrm.created_at.desc())
         )

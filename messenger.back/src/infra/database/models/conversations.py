@@ -43,7 +43,9 @@ class ConversationMemberOrm(EntityMixin, Base):
 class ConversationReadAdvanceOrm(Base):
     __tablename__ = "conversation_read_advances"
 
-    membership_id: Mapped[UUID] = mapped_column(ForeignKey("conversation_members.id", ondelete="CASCADE"), primary_key=True)
+    membership_id: Mapped[UUID] = mapped_column(
+        ForeignKey("conversation_members.id", ondelete="CASCADE"), primary_key=True
+    )
     through_seq: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     after_seq: Mapped[int] = mapped_column(BigInteger)
     read_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

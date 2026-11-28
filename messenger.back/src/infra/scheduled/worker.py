@@ -10,19 +10,14 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from ddf.infra.outbox.sqlalchemy import SqlAlchemyOutboxStore
 from ddf.infra.database.sqlalchemy import PostgresConfig
+from ddf.infra.outbox.sqlalchemy import SqlAlchemyOutboxStore
 from pydantic import TypeAdapter
 
+from src.application.audit.repositories import AuditRepository
 from src.application.auth import Auth, AuthType, AuthUser
-from src.application.conversations.repositories import ConversationRepository, MembershipRepository
-from src.application.media.repositories import MediaRepository
 from src.application.messaging.commands import send_message
 from src.application.messaging.dtos import SendMessageDTO
-from src.application.messaging.repositories import ConversationEventStore
-from src.application.policies.repositories import ConversationPolicyRepository
-from src.application.audit.repositories import AuditRepository
-from src.application.threads.repositories import ThreadRepository
 from src.domain.scheduled import ScheduledMessageStatus
 from src.infra.database.connection import create_database
 from src.infra.database.repositories.conversations import (
@@ -30,7 +25,10 @@ from src.infra.database.repositories.conversations import (
     SqlAlchemyMembershipRepository,
 )
 from src.infra.database.repositories.media import SqlAlchemyMediaRepository
-from src.infra.database.repositories.messages import SqlAlchemyConversationEventStore, SqlAlchemyMessageRepository
+from src.infra.database.repositories.messages import (
+    SqlAlchemyConversationEventStore,
+    SqlAlchemyMessageRepository,
+)
 from src.infra.database.repositories.policies import SqlAlchemyConversationPolicyRepository
 from src.infra.database.repositories.scheduled import SqlAlchemyScheduledMessageRepository
 from src.infra.database.repositories.threads import SqlAlchemyThreadRepository
@@ -42,7 +40,7 @@ _SEND_ADAPTER = TypeAdapter(SendMessageDTO)
 
 
 class _NoopAuditRepository(AuditRepository):
-    async def append(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+    async def append(self, *_args, **_kwargs) -> None:
         return
 
 
