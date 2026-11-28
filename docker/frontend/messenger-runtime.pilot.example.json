@@ -1,0 +1,5 @@
+{
+  "messengerApi": "/",
+  "deskApi": "https://desk-api.example.invalid",
+  "deskWeb": "https://desk.example.invalid"
+}

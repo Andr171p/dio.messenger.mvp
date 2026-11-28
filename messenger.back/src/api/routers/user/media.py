@@ -1,4 +1,5 @@
 from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response, status
@@ -8,7 +9,7 @@ from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
 from src.api.dependencies.db import DBSession
 from src.api.dependencies.media import MediaRepositoryDep
-from src.api.dependencies.storage import S3ClientDep
+from src.api.dependencies.storage import S3ClientDep, S3SignerDep
 from src.application.media import commands, queries
 from src.application.media.dtos import (
     CreateUploadDTO,
@@ -34,7 +35,7 @@ async def create_upload(
     media_repository: MediaRepositoryDep,
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
-    storage: S3ClientDep,
+    storage: S3SignerDep,
 ) -> UploadResponseDTO:
     return await commands.initiate_upload(
         dto,
@@ -144,8 +145,12 @@ async def get_media_gallery_position(
     membership_repository: MembershipRepositoryDep,
 ) -> MediaGalleryPositionDTO:
     item = await queries.get_gallery_position(
-        asset_id, message_id, actor=auth, media_repository=media_repository,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        asset_id,
+        message_id,
+        actor=auth,
+        media_repository=media_repository,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
     )
     response.headers["Cache-Control"] = "no-store"
     return item
@@ -161,8 +166,11 @@ async def get_media_content(
     storage: S3ClientDep,
 ) -> StreamingResponse:
     asset, media_object = await commands.require_accessible_object(
-        asset_id, actor=auth, media_repository=media_repository,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        asset_id,
+        actor=auth,
+        media_repository=media_repository,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
     )
     return StreamingResponse(
         storage.download_stream(media_object.key),
@@ -186,7 +194,7 @@ async def create_media_access(
     media_repository: MediaRepositoryDep,
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
-    storage: S3ClientDep,
+    storage: S3SignerDep,
     response: Response,
     dto: MediaAccessRequestDTO | None = None,
 ) -> MediaAccessDTO:

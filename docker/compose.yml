@@ -1,0 +1,153 @@
+name: dio-messenger-pilot
+
+include:
+  - path:
+      - postgres.docker-compose.yml
+      - redis.docker-compose.yml
+      - rabbitmq.docker-compose.yml
+      - rustfs.docker-compose.yml
+      - pilot-infra.yml
+
+x-postgres-env: &postgres-env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_USERNAME: ${POSTGRES_USERNAME:-messenger}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB:-messenger}
+
+x-rabbit-env: &rabbit-env
+  RABBIT_HOST: rabbitmq
+  RABBIT_PORT: 5672
+  RABBIT_USERNAME: ${RABBIT_USERNAME:-messenger}
+  RABBIT_PASSWORD: ${RABBIT_PASSWORD:?Set RABBIT_PASSWORD}
+
+x-storage-env: &storage-env
+  S3_ENDPOINT_URL: http://rustfs:9000
+  S3_BUCKET: messenger-media
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?Set S3_ACCESS_KEY}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?Set S3_SECRET_KEY}
+
+x-backend: &backend
+  image: ${COMPOSE_PROJECT_NAME}-backend:${MESSENGER_RELEASE:-local}
+  pull_policy: never
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: local
+  environment: *postgres-env
+
+x-postgres: &postgres-ready
+  postgres:
+    condition: service_healthy
+
+x-migration: &migration-ready
+  migrate:
+    condition: service_completed_successfully
+
+x-bucket: &bucket-ready
+  storage-init:
+    condition: service_completed_successfully
+
+services:
+  api:
+    <<: *backend
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+      target: backend
+    environment:
+      <<: [*postgres-env, *rabbit-env, *storage-env]
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      S3_PUBLIC_ENDPOINT_URL: ${PILOT_ORIGIN:?Set PILOT_ORIGIN}
+      MESSENGER_CORS_ORIGINS: ${PILOT_ORIGIN:?Set PILOT_ORIGIN}
+      SRV_IAM_BASE_URL: ${SRV_IAM_BASE_URL:?Set SRV_IAM_BASE_URL}
+      DIODESK_BASE_URL: ${DIODESK_BASE_URL:-${SRV_IAM_BASE_URL}}
+      FORWARDED_ALLOW_IPS: '*'
+    depends_on:
+      <<: [*postgres-ready, *migration-ready, *bucket-ready]
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8002/health/ready', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  migrate:
+    <<: *backend
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    depends_on: *postgres-ready
+
+  outbox-relay:
+    <<: *backend
+    environment:
+      <<: [*postgres-env, *rabbit-env]
+    command: ["python", "-m", "src.infra.outbox.relay"]
+    depends_on:
+      <<: [*postgres-ready, *migration-ready]
+      rabbitmq:
+        condition: service_healthy
+
+  media-worker:
+    <<: *backend
+    image: ${COMPOSE_PROJECT_NAME}-media-worker:${MESSENGER_RELEASE:-local}
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+      target: media
+    environment:
+      <<: [*postgres-env, *storage-env]
+    depends_on:
+      <<: [*postgres-ready, *migration-ready, *bucket-ready]
+
+  scheduled-worker:
+    <<: *backend
+    command: ["python", "-m", "src.infra.scheduled.worker"]
+    depends_on:
+      <<: [*postgres-ready, *migration-ready]
+
+  retention-worker:
+    <<: *backend
+    environment:
+      <<: *postgres-env
+      EVENT_RETENTION_DAYS: ${EVENT_RETENTION_DAYS:-90}
+      MIN_RETAINED_EVENTS: ${MIN_RETAINED_EVENTS:-1000}
+      MESSAGE_TOMBSTONE_RETENTION_DAYS: ${MESSAGE_TOMBSTONE_RETENTION_DAYS:-90}
+    command: ["python", "-m", "src.infra.retention.worker"]
+    depends_on:
+      <<: [*postgres-ready, *migration-ready]
+
+  frontend:
+    image: ${COMPOSE_PROJECT_NAME}-frontend:${MESSENGER_RELEASE:-local}
+    pull_policy: never
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        MESSENGER_RELEASE: ${MESSENGER_RELEASE:-local}
+    restart: unless-stopped
+    logging:
+      driver: local
+    ports:
+      - "127.0.0.1:${PILOT_HTTP_PORT:-8080}:8080"
+    configs:
+      - source: messenger-runtime
+        target: /usr/share/nginx/html/messenger-runtime.json
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/messenger-runtime.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+configs:
+  messenger-runtime:
+    file: ${PILOT_RUNTIME_CONFIG:-./frontend/messenger-runtime.pilot.json}

@@ -15,6 +15,7 @@ from src.api.dependencies.auth import iam_client
 from src.api.dependencies.db import engine
 from src.api.dependencies.itsm import get_diodesk_tickets_client
 from src.api.dependencies.links import link_preview_fetcher
+from src.api.dependencies.storage import s3_client, s3_signer
 from src.api.realtime_runtime import connection_manager, redis
 from src.application.auth import Auth
 
@@ -87,4 +88,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_diodesk_tickets_client().close()
         await link_preview_fetcher.close()
         await iam_client.close()
+        await s3_client.close()
+        if s3_signer is not s3_client:
+            await s3_signer.close()
         await engine.dispose()
