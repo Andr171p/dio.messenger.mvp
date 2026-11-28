@@ -1,4 +1,5 @@
-from typing import Any, Protocol
+from typing import Protocol
+
 from uuid import UUID
 
 from src.domain.audit import AuditEvent

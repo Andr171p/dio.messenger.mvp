@@ -1,4 +1,5 @@
 from typing import Any, Protocol
+
 from uuid import UUID
 
 from src.application.itsm.dtos import ResourceActionResultDTO, ResourcePreviewDTO, ResourceReference

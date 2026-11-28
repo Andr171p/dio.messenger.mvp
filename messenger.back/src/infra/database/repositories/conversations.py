@@ -1,6 +1,6 @@
 from typing import override
-from datetime import datetime
 
+from datetime import datetime
 from uuid import UUID
 
 from ddf.infra.database.sqlalchemy import SqlAlchemyRepository
@@ -192,10 +192,12 @@ class SqlAlchemyMembershipRepository(SqlAlchemyRepository[ConversationMembership
         return None if model is None else self.data_mapper.from_model(model)
 
     async def find_member(self, conversation_id: UUID, principal_id: UUID) -> ConversationMembership | None:
-        model = await self._session.scalar(select(ConversationMemberOrm).where(
-            ConversationMemberOrm.conversation_id == conversation_id,
-            ConversationMemberOrm.principal_id == principal_id,
-        ))
+        model = await self._session.scalar(
+            select(ConversationMemberOrm).where(
+                ConversationMemberOrm.conversation_id == conversation_id,
+                ConversationMemberOrm.principal_id == principal_id,
+            )
+        )
         return None if model is None else self.data_mapper.from_model(model)
 
     async def list_active(self, conversation_id: UUID) -> list[ConversationMembership]:
@@ -246,19 +248,27 @@ class SqlAlchemyMembershipRepository(SqlAlchemyRepository[ConversationMembership
         previous = member.last_read_message_seq
         if last_read_message_seq > previous:
             member.last_read_message_seq = last_read_message_seq
-            self._session.add(ConversationReadAdvanceOrm(
-                membership_id=member.id, after_seq=previous, through_seq=last_read_message_seq,
-            ))
+            self._session.add(
+                ConversationReadAdvanceOrm(
+                    membership_id=member.id,
+                    after_seq=previous,
+                    through_seq=last_read_message_seq,
+                )
+            )
         return member.last_read_message_seq
 
     async def read_times(self, membership_ids: list[UUID], message_seq: int) -> dict[UUID, datetime]:
         advance = ConversationReadAdvanceOrm
-        rows = await self._session.execute(select(advance.membership_id, func.min(advance.read_at)).where(
-            advance.membership_id.in_(membership_ids),
-            advance.after_seq < message_seq,
-            advance.through_seq >= message_seq,
-        ).group_by(advance.membership_id))
-        return {membership_id: read_at for membership_id, read_at in rows}
+        rows = await self._session.execute(
+            select(advance.membership_id, func.min(advance.read_at))
+            .where(
+                advance.membership_id.in_(membership_ids),
+                advance.after_seq < message_seq,
+                advance.through_seq >= message_seq,
+            )
+            .group_by(advance.membership_id)
+        )
+        return dict(rows.all())
 
     async def update_delivery_cursor(
         self,

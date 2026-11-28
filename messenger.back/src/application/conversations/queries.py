@@ -40,7 +40,9 @@ async def get_conversation(
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
     )
-    return await conversation_dto(conversation, principal_id=actor.user.id, membership_repository=membership_repository)
+    return await conversation_dto(
+        conversation, principal_id=actor.user.id, membership_repository=membership_repository
+    )
 
 
 async def list_members(

@@ -63,7 +63,9 @@ async def create_scheduled_message(
         await uow.commit()
     except UniqueConstraintViolationError:
         await uow.rollback()
-        raise ScheduledMessageInvalidError("client_message_id already scheduled in this conversation.") from None
+        raise ScheduledMessageInvalidError(
+            "client_message_id already scheduled in this conversation."
+        ) from None
 
     return _to_dto(entity)
 

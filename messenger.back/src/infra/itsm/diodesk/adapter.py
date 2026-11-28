@@ -1,11 +1,12 @@
 from typing import Any
+
 from uuid import UUID
 
 from src.application.itsm.constants import DIODESK_PROVIDER, TICKET_RESOURCE_TYPE
 from src.application.itsm.dtos import (
     ResourceActionResultDTO,
-    ResourceAttachmentAccessDTO,
     ResourceActivityDTO,
+    ResourceAttachmentAccessDTO,
     ResourceAttachmentDTO,
     ResourcePreviewDTO,
     ResourceReference,
@@ -57,11 +58,15 @@ def _map_preview(ref: ResourceReference, raw: dict[str, Any], *, guest: bool) ->
         updated_at=raw.get("updated_at"),
         attachments=[
             ResourceAttachmentDTO(
-                id=item.get("id"), filename=item["original_filename"],
-                content_type=item["mime_type"], size=item["size_bytes"],
+                id=item.get("id"),
+                filename=item["original_filename"],
+                content_type=item["mime_type"],
+                size=item["size_bytes"],
             )
             for item in raw["attachments"]
-        ] if "attachments" in raw else None,
+        ]
+        if "attachments" in raw
+        else None,
     )
     return apply_preview_visibility(preview, guest=guest)
 
@@ -87,25 +92,32 @@ class DioDeskItsmAdapter:
             return preview
         try:
             rows = await self._client.ticket_activity(ticket_id, access_token=access_token)
-        except (ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError):
+        except ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError:
             return preview
-        activity = [
-            ResourceActivityDTO(action=row["action"], occurred_at=row["occurred_on"])
-            for row in rows
-        ]
+        activity = [ResourceActivityDTO(action=row["action"], occurred_at=row["occurred_on"]) for row in rows]
         return preview.model_copy(update={"activity": activity})
 
     async def search(self, query: str, *, access_token: str) -> list[ResourcePreviewDTO]:
         results = await self._client.search_tickets(query, access_token=access_token)
         return [
-            _map_preview(ResourceReference(
-                provider=DIODESK_PROVIDER, resource_type=TICKET_RESOURCE_TYPE, resource_id=item["id"],
-            ), item, guest=True)
+            _map_preview(
+                ResourceReference(
+                    provider=DIODESK_PROVIDER,
+                    resource_type=TICKET_RESOURCE_TYPE,
+                    resource_id=item["id"],
+                ),
+                item,
+                guest=True,
+            )
             for item in results
         ]
 
     async def attachment_access(
-        self, ticket_id: UUID, attachment_id: UUID, *, access_token: str,
+        self,
+        ticket_id: UUID,
+        attachment_id: UUID,
+        *,
+        access_token: str,
     ) -> ResourceAttachmentAccessDTO:
         raw = await self._client.get_ticket(ticket_id, access_token=access_token)
         if not any(item.get("id") == str(attachment_id) for item in raw.get("attachments", [])):

@@ -1,0 +1,2 @@
+docker/rustfs/init.sh text eol=lf
+messenger.back/**/*.py text eol=lf

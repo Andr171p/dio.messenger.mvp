@@ -17,7 +17,11 @@ from src.application.media.dtos import (
     MediaAssetDTO,
     UploadResponseDTO,
 )
-from src.application.media.exceptions import MediaAccessDeniedError, MediaNotFoundError, MediaPolicyViolationError
+from src.application.media.exceptions import (
+    MediaAccessDeniedError,
+    MediaNotFoundError,
+    MediaPolicyViolationError,
+)
 from src.application.media.metadata import parse_media_meta
 from src.application.media.policies import validate_upload_request
 from src.application.media.repositories import MediaRepository
@@ -263,8 +267,11 @@ async def create_access_url(
     settings = config or MediaConfig()
     request = dto or MediaAccessRequestDTO()
     asset, media_object = await require_accessible_object(
-        asset_id, actor=actor, media_repository=media_repository,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        asset_id,
+        actor=actor,
+        media_repository=media_repository,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
         role=MediaObjectRole(request.role),
     )
     expires_in = settings.download_url_expires_in

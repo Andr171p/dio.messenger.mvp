@@ -8,11 +8,17 @@ from src.application.auth.exceptions import PermissionDeniedError
 from src.application.messaging.queries import get_message_readers
 from src.application.polls.commands import append_poll_option, create_poll_message, vote_poll
 from src.application.polls.dtos import AddPollOptionDTO, CreatePollDTO, VotePollDTO
-from src.infra.database.repositories.conversations import SqlAlchemyConversationRepository, SqlAlchemyMembershipRepository
+from src.infra.database.repositories.conversations import (
+    SqlAlchemyConversationRepository,
+    SqlAlchemyMembershipRepository,
+)
 from src.infra.database.repositories.media import SqlAlchemyMediaRepository
-from src.infra.database.repositories.messages import SqlAlchemyConversationEventStore, SqlAlchemyMessageRepository
-from src.infra.database.repositories.polls import SqlAlchemyPollRepository
+from src.infra.database.repositories.messages import (
+    SqlAlchemyConversationEventStore,
+    SqlAlchemyMessageRepository,
+)
 from src.infra.database.repositories.policies import SqlAlchemyConversationPolicyRepository
+from src.infra.database.repositories.polls import SqlAlchemyPollRepository
 
 from .helpers import seed_conversation, seed_membership
 
@@ -26,17 +32,20 @@ async def test_poll_vote_replay_and_reader_permissions(db_session) -> None:
 
     def actor(user_id):
         return AuthUser(
-            id=user_id, type=AuthType.USER,
-            user=Auth.User(id=user_id, email="demo@example.org", organization_id=conversation.organization_id),
+            id=user_id,
+            type=AuthType.USER,
+            user=Auth.User(
+                id=user_id, email="demo@example.org", organization_id=conversation.organization_id
+            ),
         )
 
     memberships = SqlAlchemyMembershipRepository(db_session)
     messages = SqlAlchemyMessageRepository(db_session)
-    repositories = dict(
-        conversation_repository=SqlAlchemyConversationRepository(db_session),
-        membership_repository=memberships,
-        message_repository=messages,
-    )
+    repositories = {
+        "conversation_repository": SqlAlchemyConversationRepository(db_session),
+        "membership_repository": memberships,
+        "message_repository": messages,
+    }
     writes = dict(
         **repositories,
         conversation_id=conversation.id,
@@ -46,10 +55,17 @@ async def test_poll_vote_replay_and_reader_permissions(db_session) -> None:
         uow=db_session,
     )
     poll = await create_poll_message(
-        CreatePollDTO(client_message_id=uuid4(), question="When?", options=["A", "B"],
-                      allows_multiple=True, show_voters=False),
-        actor=actor(author_id), media_repository=SqlAlchemyMediaRepository(db_session),
-        thread_repository=None, **writes,
+        CreatePollDTO(
+            client_message_id=uuid4(),
+            question="When?",
+            options=["A", "B"],
+            allows_multiple=True,
+            show_voters=False,
+        ),
+        actor=actor(author_id),
+        media_repository=SqlAlchemyMediaRepository(db_session),
+        thread_repository=None,
+        **writes,
     )
     option_a, option_b = [option.id for option in poll.options]
     original = VotePollDTO(option_ids=[option_a, option_b], operation_id=uuid4())
@@ -64,7 +80,9 @@ async def test_poll_vote_replay_and_reader_permissions(db_session) -> None:
 
     added = AddPollOptionDTO(option_id=uuid4(), label="C ✨", link="https://example.org/details")
     append_dependencies = dict(
-        **writes, poll_id=poll.id, media_repository=SqlAlchemyMediaRepository(db_session),
+        **writes,
+        poll_id=poll.id,
+        media_repository=SqlAlchemyMediaRepository(db_session),
         policy_repository=SqlAlchemyConversationPolicyRepository(db_session),
     )
     with pytest.raises(PermissionDeniedError):
@@ -78,16 +96,28 @@ async def test_poll_vote_replay_and_reader_permissions(db_session) -> None:
     message = await messages.read(poll.message_id)
     assert message is not None
     await memberships.update_read_cursor(
-        conversation_id=conversation.id, principal_id=reader_id, last_read_message_seq=message.created_seq,
+        conversation_id=conversation.id,
+        principal_id=reader_id,
+        last_read_message_seq=message.created_seq,
     )
     await db_session.commit()
     readers = await get_message_readers(
-        conversation.id, message.id, actor=actor(author_id), offset=0, limit=10, **repositories,
+        conversation.id,
+        message.id,
+        actor=actor(author_id),
+        offset=0,
+        limit=10,
+        **repositories,
     )
     assert readers.eligible_count == readers.read_count == 1
     assert readers.readers[0].user_id == reader_id
     assert readers.readers[0].read_at is not None
     with pytest.raises(PermissionDeniedError):
         await get_message_readers(
-            conversation.id, message.id, actor=actor(reader_id), offset=0, limit=10, **repositories,
+            conversation.id,
+            message.id,
+            actor=actor(reader_id),
+            offset=0,
+            limit=10,
+            **repositories,
         )

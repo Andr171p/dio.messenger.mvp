@@ -66,10 +66,16 @@ class SqlAlchemyPollRepository:
         return entity
 
     async def add_option(self, option: PollOption) -> None:
-        self._session.add(PollOptionOrm(
-            id=option.id, poll_id=option.poll_id, position=option.position,
-            label=option.label, link=option.link, asset_id=option.asset_id,
-        ))
+        self._session.add(
+            PollOptionOrm(
+                id=option.id,
+                poll_id=option.poll_id,
+                position=option.position,
+                label=option.label,
+                link=option.link,
+                asset_id=option.asset_id,
+            )
+        )
         await self._session.flush()
 
     async def read(self, poll_id: UUID, *, lock: bool = False) -> Poll | None:
@@ -119,9 +125,13 @@ class SqlAlchemyPollRepository:
         await self._session.execute(stmt)
 
     async def count_votes_for_option(self, *, poll_id: UUID, option_id: UUID) -> int:
-        stmt = select(func.count()).select_from(PollVoteOrm).where(
-            PollVoteOrm.poll_id == poll_id,
-            PollVoteOrm.option_id == option_id,
+        stmt = (
+            select(func.count())
+            .select_from(PollVoteOrm)
+            .where(
+                PollVoteOrm.poll_id == poll_id,
+                PollVoteOrm.option_id == option_id,
+            )
         )
         return int(await self._session.scalar(stmt) or 0)
 

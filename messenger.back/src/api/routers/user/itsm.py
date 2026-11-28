@@ -1,18 +1,18 @@
 from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
 
+from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.auth import BearerToken, CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
-from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.itsm import ContextLinkRepositoryDep, ItsmAdapterDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
-from src.application.itsm import commands, queries
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
-from src.application.itsm.policies import is_guest_role
+from src.application.itsm import commands, queries
 from src.application.itsm.dtos import (
     ConfirmTicketSuggestionDTO,
     ContextLinkDTO,
@@ -26,6 +26,7 @@ from src.application.itsm.dtos import (
     ResourceReference,
     TicketSuggestionDTO,
 )
+from src.application.itsm.policies import is_guest_role
 
 router = APIRouter(tags=["itsm"])
 
@@ -48,7 +49,8 @@ async def search_tickets(
     )
     if is_guest_role(membership.role):
         raise PermissionDeniedError("Ticket search is available to staff members.")
-    if 0 < len(q.strip()) < 3:
+    min_query_length = 3
+    if 0 < len(q.strip()) < min_query_length:
         return []
     return await itsm.search(q.strip(), access_token=token)
 

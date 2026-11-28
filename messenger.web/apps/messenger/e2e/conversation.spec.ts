@@ -117,6 +117,11 @@ test.beforeEach(async ({ context }) => {
     if (url.pathname.endsWith("/read-cursor")) {
       return route.fulfill({ json: { lastReadMessageSeq: 2 } });
     }
+    if (url.pathname.endsWith("/readers")) {
+      return route.fulfill({
+        json: { readCount: 0, eligibleCount: 1, readers: [], nextOffset: null },
+      });
+    }
     return route.fulfill({ json: [] });
   });
 });
@@ -427,6 +432,7 @@ test("запрашивает подтверждение пересылки вн�
     }),
   );
   await page.route(`**/v1/conversations/${otherChatId}/messages`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
     sends += 1;
     const body = route.request().postDataJSON();
     return route.fulfill({
@@ -655,9 +661,10 @@ test("владелец сохраняет правила и открывает �
     page.getByText("Изменены настройки беседы", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Вложения запрещены правилами беседы" }),
-  ).toBeDisabled();
+  await page.getByRole("button", { name: "Вложение", exact: true }).click();
+  const attachmentTypes = page.getByRole("group", { name: "Тип вложения" });
+  await expect(attachmentTypes.getByRole("button", { name: "Опрос" })).toBeVisible();
+  await expect(attachmentTypes.getByRole("button")).toHaveText(["Опрос"]);
 });
 
 test("проверяет доступ и запрашивает новую ссылку при каждом открытии файла", async ({
@@ -1466,17 +1473,16 @@ test("сохраняет настройки группы и удаляет её 
     route.fulfill({ json: { id: userId, full_name: "Владелец" } }),
   );
   await page.goto("/");
-  await page
+  const chatRow = page
     .locator("li")
-    .getByRole("button", { name: /Дежурная смена/ })
-    .click();
+    .getByRole("button", { name: /Дежурная смена.*Уже есть заявка/ });
+  await chatRow.click();
+  await expect(chatRow).toHaveAttribute("aria-current", "true");
   await page.getByRole("button", { name: /Информация о беседе/ }).click();
   const group = page.getByRole("dialog", { name: "Информация о группе" });
   await group.getByRole("button", { name: "Управление", exact: true }).click();
   const manage = page.getByRole("dialog", { name: "Управление группой" });
-  const chooser = page.waitForEvent("filechooser");
-  await manage.getByRole("button", { name: "Сменить аватар" }).click();
-  await (await chooser).setFiles(transparentPng);
+  await manage.locator('input[type="file"]').setInputFiles(transparentPng);
   await expect(manage.locator("img")).toHaveCount(1);
   await manage.getByLabel("Название группы").fill("Новая смена");
   await manage.getByLabel("Описание группы").fill("График дежурств");

@@ -252,18 +252,11 @@
 }
 
 .visualMedia {
+  inline-size: var(--visual-width);
   max-inline-size: 100%;
   max-block-size: min(480px, 55dvh);
   display: grid;
   min-width: 0;
-}
-
-.visualMedia::before {
-  content: "";
-  grid-area: 1 / 1;
-  inline-size: var(--visual-width);
-  max-inline-size: 100%;
-  pointer-events: none;
 }
 
 .visualLink {

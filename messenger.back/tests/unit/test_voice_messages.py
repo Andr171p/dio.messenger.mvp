@@ -61,7 +61,10 @@ def test_declared_wav_is_allowed_for_trimmed_voice() -> None:
     sniffed = sniff_content_type(b"RIFF\x24\x00\x00\x00WAVEfmt ")
     assert sniffed.detected_content_type == "audio/wav"
     assert validate_declared_vs_sniffed(declared_content_type="audio/wav", sniffed=sniffed) is None
-    assert validate_declared_vs_sniffed(declared_content_type="application/octet-stream", sniffed=sniffed) is None
+    assert (
+        validate_declared_vs_sniffed(declared_content_type="application/octet-stream", sniffed=sniffed)
+        is None
+    )
     assert presentation_matches_content_type(MediaPresentation.VOICE, "audio/wav")
 
 
@@ -77,9 +80,7 @@ def test_build_content_omits_default_file_presentation() -> None:
     asset_id = uuid4()
     content = build_message_content([MediaBlock(asset_id=asset_id)])
     assert content == {"blocks": [{"type": "media", "assetId": str(asset_id)}]}
-    explicit = build_message_content(
-        [MediaBlock(asset_id=asset_id, presentation=MediaPresentation.FILE)]
-    )
+    explicit = build_message_content([MediaBlock(asset_id=asset_id, presentation=MediaPresentation.FILE)])
     assert explicit == {
         "blocks": [{"type": "media", "assetId": str(asset_id), "presentation": "file"}],
     }

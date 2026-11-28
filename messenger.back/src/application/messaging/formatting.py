@@ -2,14 +2,18 @@
 
 import re
 
+_MAX_INLINE_DEPTH = 6
 _DELIMITERS = ("**", "__", "~~", "||", "*", "_", chr(96))
 _SPECIAL = re.compile(r"\\[\\#*_~|()[\]\x60]|[\[*_~|\x60]")
 _LINK = re.compile(r"""\[([^\]\n]+)\]\((https?://[^\s()<>"']+)\)""", re.IGNORECASE)
 _FENCE = re.compile(r"(?:^|\n)\x60{3}[\w+-]*[ \t]*\r?\n([\s\S]*?)\r?\n\x60{3}(?=\r?\n|$)")
 
 
-def _inline_text(text: str, depth: int = 0, *, links: bool = True, hide_spoilers: bool = False) -> str:
-    if depth >= 6:
+# Parse the same inline delimiters and nesting rules as the web client.
+def _inline_text(  # noqa: C901
+    text: str, depth: int = 0, *, links: bool = True, hide_spoilers: bool = False
+) -> str:
+    if depth >= _MAX_INLINE_DEPTH:
         return text
     parts: list[str] = []
     cursor = position = 0
@@ -24,7 +28,10 @@ def _inline_text(text: str, depth: int = 0, *, links: bool = True, hide_spoilers
         elif marker == "[" and links:
             link = _LINK.match(text, start)
             if link:
-                output, end = _inline_text(link[1], depth + 1, links=False, hide_spoilers=hide_spoilers), link.end()
+                output, end = (
+                    _inline_text(link[1], depth + 1, links=False, hide_spoilers=hide_spoilers),
+                    link.end(),
+                )
         else:
             delimiter = next((mark for mark in _DELIMITERS if text.startswith(mark, start)), None)
             if delimiter:
@@ -34,7 +41,9 @@ def _inline_text(text: str, depth: int = 0, *, links: bool = True, hide_spoilers
                     close = text.find(delimiter, close + len(delimiter))
                 body = text[position:close]
                 if (
-                    close > position and body.strip() and "\n" not in body
+                    close > position
+                    and body.strip()
+                    and "\n" not in body
                     and (delimiter != "_" or not start or not text[start - 1].isalnum())
                 ):
                     if delimiter == "||" and (hide_spoilers or not links):
@@ -55,9 +64,12 @@ def visible_formatted_text(text: str, *, hide_spoilers: bool = False) -> str:
     parts: list[str] = []
     cursor = 0
     for fence in _FENCE.finditer(text):
-        parts.append(_inline_text(
-            re.sub(r"^> ", "", text[cursor:fence.start()], flags=re.M), hide_spoilers=hide_spoilers,
-        ))
+        parts.append(
+            _inline_text(
+                re.sub(r"^> ", "", text[cursor : fence.start()], flags=re.M),
+                hide_spoilers=hide_spoilers,
+            )
+        )
         parts.append("\n" + fence[1])
         cursor = fence.end()
     parts.append(_inline_text(re.sub(r"^> ", "", text[cursor:], flags=re.M), hide_spoilers=hide_spoilers))

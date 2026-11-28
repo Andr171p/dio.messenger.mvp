@@ -19,6 +19,9 @@ _MAGIC: list[tuple[bytes, str]] = [
     (b"\xff\xf2", "audio/mpeg"),
 ]
 
+_CHUNK_HEADER_BYTES = 12
+_MAX_FTYP_OFFSET = 8
+
 _OCTET_STREAM = "application/octet-stream"
 
 # ISO-BMFF контейнер: audio-only и video MP4 различаются только потоками внутри.
@@ -35,13 +38,13 @@ class SniffResult:
 def sniff_content_type(header: bytes) -> SniffResult:
     if header.startswith(b"\x1a\x45\xdf\xa3") and b"\x42\x82\x84webm" in header[:64]:
         return SniffResult(detected_content_type="audio/webm", matched=True)
-    if len(header) >= 12 and header[:4] == b"RIFF":
+    if len(header) >= _CHUNK_HEADER_BYTES and header[:4] == b"RIFF":
         riff_type = {b"WEBP": "image/webp", b"WAVE": "audio/wav"}.get(header[8:12])
         if riff_type:
             return SniffResult(detected_content_type=riff_type, matched=True)
-    if len(header) >= 12:
+    if len(header) >= _CHUNK_HEADER_BYTES:
         offset = header.find(b"ftyp")
-        if offset != -1 and offset <= 8:
+        if offset != -1 and offset <= _MAX_FTYP_OFFSET:
             brand = header[offset + 4 : offset + 8]
             if brand in {b"M4A ", b"M4B ", b"M4P "}:
                 return SniffResult(detected_content_type="audio/mp4", matched=True)
@@ -75,10 +78,7 @@ def validate_declared_vs_sniffed(
         if sniffed.detected_content_type not in settings.allowed_content_types:
             return f"Detected content type {sniffed.detected_content_type!r} is not allowed."
         return None
-    if (
-        declared_content_type in _MP4_FAMILY
-        and sniffed.detected_content_type in _MP4_FAMILY
-    ):
+    if declared_content_type in _MP4_FAMILY and sniffed.detected_content_type in _MP4_FAMILY:
         return None
     if declared_content_type != sniffed.detected_content_type:
         return (

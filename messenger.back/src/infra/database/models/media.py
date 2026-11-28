@@ -32,9 +32,7 @@ class MediaObjectOrm(Base):
     content_type: Mapped[str] = mapped_column(String(255))
     size: Mapped[int] = mapped_column(BigInteger)
 
-    __table_args__ = (
-        UniqueConstraint("asset_id", "role", name="uq_media_objects_asset_role"),
-    )
+    __table_args__ = (UniqueConstraint("asset_id", "role", name="uq_media_objects_asset_role"),)
 
 
 class MessageMediaOrm(Base):
@@ -44,6 +42,4 @@ class MessageMediaOrm(Base):
     asset_id: Mapped[UUID] = mapped_column(ForeignKey("media_assets.id"), primary_key=True)
     position: Mapped[int] = mapped_column(Integer)
 
-    __table_args__ = (
-        UniqueConstraint("message_id", "position", name="uq_message_media_message_position"),
-    )
+    __table_args__ = (UniqueConstraint("message_id", "position", name="uq_message_media_message_position"),)

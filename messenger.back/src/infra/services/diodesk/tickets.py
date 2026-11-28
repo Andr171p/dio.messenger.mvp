@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
+
+import re
+from http import HTTPStatus
 from uuid import UUID
 
 import aiohttp
-from http import HTTPStatus
 
 from src.application.itsm.exceptions import ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError
 from src.infra.services.diodesk.config import DioDeskConfig
@@ -58,7 +59,9 @@ class DioDeskTicketsClient:
 
     async def attachment_download(self, attachment_id: UUID, *, access_token: str) -> str:
         result = await self._request(
-            "GET", f"/api/v1/attachments/{attachment_id}/presigned-download", access_token=access_token,
+            "GET",
+            f"/api/v1/attachments/{attachment_id}/presigned-download",
+            access_token=access_token,
         )
         url = result.get("download_url")
         if not isinstance(url, str):
@@ -69,18 +72,25 @@ class DioDeskTicketsClient:
         if query and _TICKET_NUMBER.fullmatch(query):
             return await self._find_ticket_number(query, access_token=access_token)
         response = await self._request(
-            "POST", "/api/v1/tickets/search?size=10", access_token=access_token,
+            "POST",
+            "/api/v1/tickets/search?size=10",
+            access_token=access_token,
             json_body={"search_query": query} if query else {},
         )
         return [item for item in response.get("items", []) if isinstance(item, dict)]
 
     async def _find_ticket_number(self, query: str, *, access_token: str) -> list[dict[str, Any]]:
         # Desktop search indexes title and description. Limit the number of Desk pages read per lookup.
+        max_matches = 10
+        page_size = 50
         matches: list[dict[str, Any]] = []
         needle = query.casefold()
         for page in range(1, _NUMBER_LOOKUP_PAGES + 1):
             response = await self._request(
-                "POST", f"/api/v1/tickets/search?page={page}&size=50", access_token=access_token, json_body={},
+                "POST",
+                f"/api/v1/tickets/search?page={page}&size={page_size}",
+                access_token=access_token,
+                json_body={},
             )
             items = response.get("items", [])
             for item in items:
@@ -89,15 +99,17 @@ class DioDeskTicketsClient:
                 number = str(item.get("number", "")).casefold()
                 if number == needle:
                     return [item]
-                if number.startswith(needle) and len(matches) < 10:
+                if number.startswith(needle) and len(matches) < max_matches:
                     matches.append(item)
-            if len(items) < 50:
+            if len(items) < page_size:
                 break
         return matches
 
     async def ticket_activity(self, ticket_id: UUID, *, access_token: str) -> list[dict[str, Any]]:
         response = await self._request(
-            "GET", f"/api/v1/tickets/{ticket_id}/history?size=5", access_token=access_token,
+            "GET",
+            f"/api/v1/tickets/{ticket_id}/history?size=5",
+            access_token=access_token,
         )
         return [item for item in response.get("items", []) if isinstance(item, dict)]
 
@@ -145,7 +157,7 @@ class DioDeskTicketsClient:
                 body: Any
                 try:
                     body = await response.json(content_type=None)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     body = await response.text()
 
                 if response.status == HTTPStatus.FORBIDDEN:
@@ -162,7 +174,7 @@ class DioDeskTicketsClient:
                 if not isinstance(body, dict):
                     raise ItsmProviderError("DioDesk returned non-object JSON.")
                 return body
-        except (ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError):
+        except ItsmForbiddenError, ItsmNotFoundError, ItsmProviderError:
             raise
         except aiohttp.ClientError as exc:
             raise ItsmProviderError("DioDesk tickets API unreachable.") from exc

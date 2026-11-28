@@ -1,4 +1,9 @@
-from src.infra.observability.metrics import METRICS, inc_sync_gap, observe_send_ack_latency, set_outbox_lag_seconds
+from src.infra.observability.metrics import (
+    METRICS,
+    inc_sync_gap,
+    observe_send_ack_latency,
+    set_outbox_lag_seconds,
+)
 
 
 def test_metrics_prometheus_exposition() -> None:

@@ -29,7 +29,7 @@ _DEFAULT_BUCKETS = (
 
 
 class Counter:
-    __slots__ = ("_name", "_help", "_value", "_lock")
+    __slots__ = ("_help", "_lock", "_name", "_value")
 
     def __init__(self, name: str, help_text: str) -> None:
         self._name = name
@@ -53,7 +53,7 @@ class Counter:
 
 
 class Gauge:
-    __slots__ = ("_name", "_help", "_value", "_lock")
+    __slots__ = ("_help", "_lock", "_name", "_value")
 
     def __init__(self, name: str, help_text: str) -> None:
         self._name = name
@@ -75,7 +75,7 @@ class Gauge:
 
 
 class Histogram:
-    __slots__ = ("_name", "_help", "_buckets", "_counts", "_sum", "_count", "_lock")
+    __slots__ = ("_buckets", "_count", "_counts", "_help", "_lock", "_name", "_sum")
 
     def __init__(
         self,
@@ -195,10 +195,10 @@ def inc_upload_scan_failure() -> None:
     METRICS.upload_scan_failures_total.inc()
 
 
-class send_ack_timer:
+class SendAckTimer:
     """Context manager / decorator-style timer for send ack latency."""
 
-    def __enter__(self) -> send_ack_timer:
+    def __enter__(self) -> SendAckTimer:
         self._start = time.perf_counter()
         return self
 

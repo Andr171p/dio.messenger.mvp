@@ -30,11 +30,11 @@ class PollOptionOrm(EntityMixin, Base):
     position: Mapped[int] = mapped_column(Integer)
     label: Mapped[str] = mapped_column(String(256))
     link: Mapped[str | None] = mapped_column(String(2083))
-    asset_id: Mapped[UUID | None] = mapped_column(ForeignKey("media_assets.id", ondelete="SET NULL", name="fk_poll_options_asset"))
-
-    __table_args__ = (
-        UniqueConstraint("poll_id", "position", name="uq_poll_options_poll_position"),
+    asset_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="SET NULL", name="fk_poll_options_asset")
     )
+
+    __table_args__ = (UniqueConstraint("poll_id", "position", name="uq_poll_options_poll_position"),)
 
 
 class PollVoteOrm(EntityMixin, Base):

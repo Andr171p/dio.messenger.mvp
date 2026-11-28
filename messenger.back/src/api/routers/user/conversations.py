@@ -1,16 +1,17 @@
 from typing import Annotated
+
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
 
+from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.auth import BearerToken, CurrentUser, iam_client
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
-from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.policies import ConversationPolicyRepositoryDep
-from src.api.dependencies.realtime import EphemeralStoreDep
 from src.api.dependencies.reactions import ReactionRepositoryDep
+from src.api.dependencies.realtime import EphemeralStoreDep
 from src.application.conversations import commands, queries
 from src.application.conversations.dtos import (
     AddMemberDTO,
@@ -20,9 +21,9 @@ from src.application.conversations.dtos import (
     CreateDirectConversationDTO,
     CreateGroupConversationDTO,
     InviteCatalogUserDTO,
+    TransferOwnershipDTO,
     UpdateGroupAvatarDTO,
     UpdateGroupDTO,
-    TransferOwnershipDTO,
 )
 from src.application.policies import commands as policy_commands
 from src.application.policies.dtos import ConversationPolicyDTO, UpdateConversationPolicyDTO
@@ -83,31 +84,43 @@ async def list_conversations(
 
 @router.put("/{conversation_id}/settings", status_code=status.HTTP_204_NO_CONTENT)
 async def update_group(
-    conversation_id: UUID, dto: UpdateGroupDTO, auth: CurrentUser,
+    conversation_id: UUID,
+    dto: UpdateGroupDTO,
+    auth: CurrentUser,
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
     event_store: ConversationEventStoreDep,
     session: DBSession,
 ) -> None:
     await commands.update_group_avatar(
-        conversation_id, dto.avatar_url, title=dto.title, description=dto.description, actor=auth,
+        conversation_id,
+        dto.avatar_url,
+        title=dto.title,
+        description=dto.description,
+        actor=auth,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
-        event_store=event_store, uow=session,
+        event_store=event_store,
+        uow=session,
     )
 
 
 @router.put("/{conversation_id}/owner", status_code=status.HTTP_204_NO_CONTENT)
 async def transfer_group_owner(
-    conversation_id: UUID, dto: TransferOwnershipDTO, auth: CurrentUser,
+    conversation_id: UUID,
+    dto: TransferOwnershipDTO,
+    auth: CurrentUser,
     conversation_repository: ConversationRepositoryDep,
     membership_repository: MembershipRepositoryDep,
     session: DBSession,
 ) -> None:
     await commands.transfer_group_ownership(
-        conversation_id, dto.principal_id, actor=auth,
+        conversation_id,
+        dto.principal_id,
+        actor=auth,
         conversation_repository=conversation_repository,
-        membership_repository=membership_repository, uow=session,
+        membership_repository=membership_repository,
+        uow=session,
     )
 
 
@@ -122,10 +135,13 @@ async def update_group_avatar(
     session: DBSession,
 ) -> None:
     await commands.update_group_avatar(
-        conversation_id, dto.avatar_url, actor=auth,
+        conversation_id,
+        dto.avatar_url,
+        actor=auth,
         conversation_repository=conversation_repository,
         membership_repository=membership_repository,
-        event_store=event_store, uow=session,
+        event_store=event_store,
+        uow=session,
     )
 
 

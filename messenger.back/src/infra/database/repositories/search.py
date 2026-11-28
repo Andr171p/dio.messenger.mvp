@@ -12,7 +12,6 @@ from .messages import visible_thread_message
 _SNIPPET_OPTIONS = "MaxFragments=1,MaxWords=24,MinWords=8,ShortWord=3"
 
 
-
 def _message_has_resource_block(criteria: MessageSearchCriteria) -> text:
     return text(
         """
@@ -64,15 +63,19 @@ class SqlAlchemyMessageSearchRepository:
     def _base_select(self, criteria: MessageSearchCriteria) -> Select:
         rank_expr = self._rank_expr(criteria)
         snippet_expr = self._snippet_expr(criteria)
-        return select(
-            MessageOrm.id,
-            MessageOrm.conversation_id,
-            MessageOrm.sender_id,
-            MessageOrm.created_seq,
-            MessageOrm.created_at,
-            snippet_expr.label("snippet"),
-            rank_expr.label("rank"),
-        ).select_from(MessageOrm).where(MessageOrm.deleted_at.is_(None), visible_thread_message())
+        return (
+            select(
+                MessageOrm.id,
+                MessageOrm.conversation_id,
+                MessageOrm.sender_id,
+                MessageOrm.created_seq,
+                MessageOrm.created_at,
+                snippet_expr.label("snippet"),
+                rank_expr.label("rank"),
+            )
+            .select_from(MessageOrm)
+            .where(MessageOrm.deleted_at.is_(None), visible_thread_message())
+        )
 
     @staticmethod
     def _apply_acl(
@@ -121,11 +124,7 @@ class SqlAlchemyMessageSearchRepository:
     @staticmethod
     def _has_attachment_clause():
         return or_(
-            exists(
-                select(1)
-                .select_from(MessageMediaOrm)
-                .where(MessageMediaOrm.message_id == MessageOrm.id)
-            ),
+            exists(select(1).select_from(MessageMediaOrm).where(MessageMediaOrm.message_id == MessageOrm.id)),
             text(
                 """
                 EXISTS (

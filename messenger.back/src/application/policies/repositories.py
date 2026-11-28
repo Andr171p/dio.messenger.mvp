@@ -1,4 +1,5 @@
 from typing import Protocol
+
 from uuid import UUID
 
 from src.domain.policies import ConversationPolicy

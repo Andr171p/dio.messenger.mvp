@@ -5,23 +5,30 @@ from src.application.auth.exceptions import PermissionDeniedError
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.messaging.builders import build_conversation_event_dto, build_history_message_dtos
-from src.application.reactions.repositories import ReactionRepository
 from src.application.messaging.dtos import (
-    ConversationEventDTO, MessageDTO, MessageReaderDTO, MessageReadersDTO, MessageReceiptSummaryDTO,
+    ConversationEventDTO,
+    MessageDTO,
+    MessageReaderDTO,
+    MessageReadersDTO,
+    MessageReceiptSummaryDTO,
 )
+from src.application.messaging.exceptions import MessageNotFoundError, SnapshotRequiredError
+from src.application.messaging.repositories import ConversationEventStore, MessageRepository
+from src.application.reactions.repositories import ReactionRepository
 from src.domain.memberships import ConversationMembership
 from src.domain.messages import Message
-from src.application.messaging.exceptions import MessageNotFoundError, SnapshotRequiredError
 from src.infra.observability.metrics import inc_sync_gap
-from src.application.messaging.repositories import ConversationEventStore, MessageRepository
 
 DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 100
 
 
-def _eligible_recipients(message: Message, members: list[ConversationMembership]) -> list[ConversationMembership]:
+def _eligible_recipients(
+    message: Message, members: list[ConversationMembership]
+) -> list[ConversationMembership]:
     return [
-        member for member in members
+        member
+        for member in members
         if member.principal_id != message.sender_id
         and member.joined_at <= message.created_at
         and member.history_from_seq <= message.created_seq
@@ -29,13 +36,19 @@ def _eligible_recipients(message: Message, members: list[ConversationMembership]
 
 
 async def get_receipt_summaries(
-    conversation_id: UUID, message_ids: list[UUID], *, actor: AuthUser,
-    conversation_repository: ConversationRepository, membership_repository: MembershipRepository,
+    conversation_id: UUID,
+    message_ids: list[UUID],
+    *,
+    actor: AuthUser,
+    conversation_repository: ConversationRepository,
+    membership_repository: MembershipRepository,
     message_repository: MessageRepository,
 ) -> dict[UUID, MessageReceiptSummaryDTO]:
     _, membership = await require_active_membership(
-        conversation_id=conversation_id, actor=actor,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        conversation_id=conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
     )
     members = await membership_repository.list_active(conversation_id)
     result = {}
@@ -63,12 +76,18 @@ async def get_message_readers(
     limit: int,
 ) -> MessageReadersDTO:
     _, membership = await require_active_membership(
-        conversation_id=conversation_id, actor=actor,
-        conversation_repository=conversation_repository, membership_repository=membership_repository,
+        conversation_id=conversation_id,
+        actor=actor,
+        conversation_repository=conversation_repository,
+        membership_repository=membership_repository,
     )
     message = await message_repository.read(message_id)
-    if (message is None or message.conversation_id != conversation_id
-            or message.deleted_at is not None or message.created_seq < membership.history_from_seq):
+    if (
+        message is None
+        or message.conversation_id != conversation_id
+        or message.deleted_at is not None
+        or message.created_seq < membership.history_from_seq
+    ):
         raise MessageNotFoundError("Message not found.")
     if message.sender_id != actor.user.id:
         raise PermissionDeniedError("Only the message author can view readers.")
@@ -77,11 +96,14 @@ async def get_message_readers(
         (member for member in eligible if member.last_read_message_seq >= message.created_seq),
         key=lambda member: member.principal_id,
     )
-    page = readers[offset:offset + limit]
+    page = readers[offset : offset + limit]
     times = await membership_repository.read_times([member.id for member in page], message.created_seq)
     return MessageReadersDTO(
-        read_count=len(readers), eligible_count=len(eligible),
-        readers=[MessageReaderDTO(user_id=member.principal_id, read_at=times.get(member.id)) for member in page],
+        read_count=len(readers),
+        eligible_count=len(eligible),
+        readers=[
+            MessageReaderDTO(user_id=member.principal_id, read_at=times.get(member.id)) for member in page
+        ],
         next_offset=offset + limit if offset + limit < len(readers) else None,
     )
 

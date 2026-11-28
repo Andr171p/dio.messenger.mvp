@@ -1,10 +1,10 @@
 """Локальный реестр WS-сессий для access revoke при kick."""
 
+from typing import Any
+
 from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
-
-from typing import Any
 
 from ddf.application.realtime import Connection, ConnectionManager, Event, Room, Subscription
 
@@ -105,7 +105,7 @@ class MessengerConnectionManager(ConnectionManager):
             organization_id = UUID(str(payload["organizationId"]))
             conversation_id = UUID(str(payload["conversationId"]))
             principal_id = UUID(str(payload["principalId"]))
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return
         drop_conversation_access(
             manager=self,

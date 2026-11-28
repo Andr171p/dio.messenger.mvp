@@ -2,9 +2,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, status
 
+from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.auth import CurrentUser
 from src.api.dependencies.conversations import ConversationRepositoryDep, MembershipRepositoryDep
-from src.api.dependencies.audit import AuditRepositoryDep
 from src.api.dependencies.db import DBSession, OutboxDep
 from src.api.dependencies.messaging import ConversationEventStoreDep, MessageRepositoryDep
 from src.api.dependencies.pins import PinRepositoryDep

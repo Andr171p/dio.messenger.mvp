@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from src.domain.conversations import Conversation
-from src.domain.memberships import ConversationMembership
+from src.domain.memberships import ConversationMembership, MemberRole
 
 
 class ConversationRepository(Protocol):
@@ -42,7 +42,9 @@ class MembershipRepository(Protocol):
         principal_id: UUID,
     ) -> ConversationMembership | None: ...
 
-    async def find_member(self, conversation_id: UUID, principal_id: UUID) -> ConversationMembership | None: ...
+    async def find_member(
+        self, conversation_id: UUID, principal_id: UUID
+    ) -> ConversationMembership | None: ...
 
     async def list_active(self, conversation_id: UUID) -> list[ConversationMembership]: ...
 

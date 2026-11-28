@@ -4,9 +4,9 @@ from src.application.auth import AuthUser
 from src.application.conversations.commands import require_active_membership
 from src.application.conversations.repositories import ConversationRepository, MembershipRepository
 from src.application.messaging.builders import build_history_message_dtos
-from src.application.reactions.repositories import ReactionRepository
 from src.application.messaging.queries import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
 from src.application.messaging.repositories import MessageRepository
+from src.application.reactions.repositories import ReactionRepository
 from src.application.sync.dtos import (
     ConversationSnapshotDTO,
     SnapshotConversationDTO,

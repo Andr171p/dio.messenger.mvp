@@ -50,9 +50,9 @@ async def test_retention_keeps_min_events_and_audit_row(db_session) -> None:
     await db_session.flush()
 
     remaining = await db_session.scalar(
-        select(func.count()).select_from(ConversationEventOrm).where(
-            ConversationEventOrm.conversation_id == conversation.id
-        )
+        select(func.count())
+        .select_from(ConversationEventOrm)
+        .where(ConversationEventOrm.conversation_id == conversation.id)
     )
     assert remaining == min_retained
 
@@ -77,8 +77,8 @@ async def test_retention_keeps_min_events_and_audit_row(db_session) -> None:
     )
     await db_session.flush()
     count = await db_session.scalar(
-        select(func.count()).select_from(AuditEventOrm).where(
-            AuditEventOrm.conversation_id == conversation.id
-        )
+        select(func.count())
+        .select_from(AuditEventOrm)
+        .where(AuditEventOrm.conversation_id == conversation.id)
     )
     assert int(count) >= 1

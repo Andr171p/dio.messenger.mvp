@@ -56,6 +56,7 @@ export default defineConfig(({ command, mode }) => {
           navigateFallbackDenylist: [
             /^\/api(?:\/|$)/,
             /^\/v1(?:\/|$)/,
+            /^\/messenger-media(?:\/|$)/,
             /\/messenger-runtime\.json$/,
           ],
         },

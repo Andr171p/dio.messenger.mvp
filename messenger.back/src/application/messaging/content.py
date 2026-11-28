@@ -149,7 +149,7 @@ def content_fingerprint(content: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
 def same_send_fingerprint(existing_content: dict[str, Any], command: SendMessageDTO) -> bool:
     try:
         expected_base = build_message_content(list(command.blocks))
-    except (EmptyMessageError, MessageContentInvalidError):
+    except EmptyMessageError, MessageContentInvalidError:
         return False
     if content_fingerprint(existing_content) != content_fingerprint(expected_base):
         return False

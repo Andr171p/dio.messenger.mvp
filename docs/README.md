@@ -5,6 +5,8 @@
 
 ## С чего начать
 
+- [Деплой пилота и проверка запуска](operations/PILOT_DEPLOYMENT.md).
+
 1. [**architecture/ARCHITECTURE.md**](architecture/ARCHITECTURE.md) — единый полный документ: идея продукта, scope, стек, схема данных, DDD, realtime, sync, offline-first, outbox, безопасность, ITSM, масштабирование и открытые вопросы.
 2. [**development/IMPLEMENTATION_PLAN.md**](development/IMPLEMENTATION_PLAN.md) — порядок работ, контрактные вехи и критерии готовности.
 3. [**development/TEST_PLAN.md**](development/TEST_PLAN.md) — integration/e2e/load/security и показатели SLO.
@@ -36,6 +38,8 @@ docs/
 ├── status/                   # статус реализации по итерациям
 │   ├── README.md
 │   └── STATUS-*.md
+├── operations/               # инструкции эксплуатации
+│   └── PILOT_DEPLOYMENT.md
 ├── adr/                      # Architecture Decision Records
 │   └── ADR-NNNN-*.md
 └── decisions/                # рабочие решения итераций
@@ -50,7 +54,6 @@ docs/
   contracts/      # OpenAPI, WS/event schemas
   backend/        # data-model, deployment specifics
   frontend/       # IndexedDB, sync-engine
-  operations/     # runbooks, dashboards
 ```
 
 ## Архитектурные решения

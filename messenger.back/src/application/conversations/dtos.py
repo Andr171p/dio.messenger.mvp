@@ -1,5 +1,6 @@
-from uuid import UUID
 from typing import Annotated, Literal
+
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt
 from pydantic.alias_generators import to_camel
@@ -7,8 +8,9 @@ from pydantic.alias_generators import to_camel
 from src.domain.conversations import ConversationType
 from src.domain.memberships import MemberRole
 
-
-GroupAvatar = Annotated[str, Field(max_length=65536, pattern=r"^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+=*$")] | None
+GroupAvatar = (
+    Annotated[str, Field(max_length=65536, pattern=r"^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]+=*$")] | None
+)
 
 
 class UpdateGroupAvatarDTO(BaseModel):
@@ -29,7 +31,9 @@ class TransferOwnershipDTO(BaseModel):
 
 
 class CreateGroupConversationDTO(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, frozen=True, str_strip_whitespace=True
+    )
 
     description: str | None = Field(default=None, max_length=1024)
     avatar_url: GroupAvatar = None

@@ -23,5 +23,8 @@ class PinRepository(Protocol):
     ) -> MessagePin | None: ...
 
     async def list_for_conversation(
-        self, conversation_id: UUID, *, history_from_seq: int,
+        self,
+        conversation_id: UUID,
+        *,
+        history_from_seq: int,
     ) -> list[tuple[MessagePin, dict[str, Any]]]: ...

@@ -8,10 +8,9 @@ import pytest
 from src.application.auth.exceptions import PermissionDeniedError
 from src.application.threads.commands import manage_thread
 from src.domain.memberships import MemberRole
-
 from src.domain.polls import Poll, create_poll
-from src.domain.polls.exceptions import PollClosedError, PollInvalidError
 from src.domain.polls.events import PollClosed, PollCreated, PollVoted
+from src.domain.polls.exceptions import PollClosedError, PollInvalidError
 from src.domain.scheduled import ScheduledMessage, ScheduledMessageStatus
 from src.domain.threads import ConversationThread, create_thread
 from src.domain.threads.events import ThreadCreated
@@ -107,24 +106,31 @@ def test_fanout_maps_poll_created() -> None:
         created_by=uuid4(),
     )
     thread.mark_created(event_seq=2)
-    evt = list(thread.collect_events())[0]
+    evt = next(iter(thread.collect_events()))
     mapped = to_realtime_event(evt)
     assert mapped is not None
     assert mapped.type == "thread.created"
     assert "threadId" in mapped.payload
 
-@pytest.mark.parametrize(("role", "author", "title", "allowed"), [
-    (MemberRole.MEMBER, True, "Renamed", True),
-    (MemberRole.MEMBER, True, None, False),
-    (MemberRole.ADMIN, False, None, False),
-    (MemberRole.OWNER, False, None, True),
-])
+
+@pytest.mark.parametrize(
+    ("role", "author", "title", "allowed"),
+    [
+        (MemberRole.MEMBER, True, "Renamed", True),
+        (MemberRole.MEMBER, True, None, False),
+        (MemberRole.ADMIN, False, None, False),
+        (MemberRole.OWNER, False, None, True),
+    ],
+)
 async def test_manage_thread_permissions(monkeypatch, role, author, title, allowed):
     actor = SimpleNamespace(user=SimpleNamespace(id=uuid4()))
     thread = create_thread(
-        conversation_id=uuid4(), organization_id=uuid4(), root_message_id=None,
+        conversation_id=uuid4(),
+        organization_id=uuid4(),
+        root_message_id=None,
         created_by=actor.user.id if author else uuid4(),
-        root_message_created_seq=1, title="Original",
+        root_message_created_seq=1,
+        title="Original",
     )
     monkeypatch.setattr(
         "src.application.threads.commands.require_active_membership",
@@ -133,9 +139,14 @@ async def test_manage_thread_permissions(monkeypatch, role, author, title, allow
     repository = SimpleNamespace(read=AsyncMock(return_value=thread), update=AsyncMock(return_value=True))
     uow = SimpleNamespace(commit=AsyncMock())
     operation = manage_thread(
-        thread.conversation_id, thread.id, title=title, actor=actor,
-        conversation_repository=None, membership_repository=None,
-        thread_repository=repository, uow=uow,
+        thread.conversation_id,
+        thread.id,
+        title=title,
+        actor=actor,
+        conversation_repository=None,
+        membership_repository=None,
+        thread_repository=repository,
+        uow=uow,
     )
     if allowed:
         await operation

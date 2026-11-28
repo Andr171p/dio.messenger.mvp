@@ -1,4 +1,5 @@
-from typing import Any, Protocol
+from typing import Protocol
+
 from datetime import datetime
 from uuid import UUID
 
