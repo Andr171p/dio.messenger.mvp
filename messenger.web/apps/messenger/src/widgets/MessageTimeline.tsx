@@ -211,12 +211,12 @@ export function MessageTimeline() {
         ? items.findIndex((message) => message.localId === saved.id)
         : -1;
       const restore = () => {
-        const root = parentRef.current;
-        if (!root) return;
         if (!nearBottom.current && index >= 0) {
           const offset = virtualizer.getOffsetForIndex(index, "start");
           if (offset) virtualizer.scrollToOffset(offset[0] + (saved?.offset ?? 0));
-        } else root.scrollTop = root.scrollHeight - root.clientHeight;
+        } else {
+          virtualizer.scrollToIndex(items.length - 1, { align: "end" });
+        }
       };
       restore();
       initialPositionFrame.current = requestAnimationFrame(() => {
